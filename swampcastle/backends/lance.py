@@ -1,26 +1,13 @@
-"""
-db.py — Database abstraction layer for MemPalace.
-
-Provides a Collection-compatible interface that works with both
-LanceDB (new default) and ChromaDB (legacy).
-
-All callers use the same API regardless of backend:
-    col.upsert(documents=[...], ids=[...], metadatas=[...])
-    col.get(where={"wing": "x"}, limit=10, offset=0)
-    col.query(query_texts=["search term"], n_results=5, where={"wing": "x"})
-    col.delete(ids=["id1"])
-    col.count()
-"""
+"""LanceDB-backed SwampCastle collection adapter."""
 
 import json
 import logging
 import os
-from typing import Optional
+from typing import Any, Dict, List, Optional
 
-logger = logging.getLogger("mempalace")
+from .base import BaseCollection
 
-
-# ── Where clause translation ─────────────────────────────────────────────────
+logger = logging.getLogger("swampcastle")
 
 
 def _chroma_where_to_sql(where: dict) -> Optional[str]:
@@ -83,10 +70,7 @@ def _chroma_where_to_sql(where: dict) -> Optional[str]:
     return " AND ".join(conditions) if conditions else None
 
 
-# ── LanceDB backend ──────────────────────────────────────────────────────────
-
-
-class LanceCollection:
+class LanceCollection(BaseCollection):
     """LanceDB-backed collection with ChromaDB-compatible interface.
 
     Schema:
@@ -96,17 +80,16 @@ class LanceCollection:
         wing: string (indexed filter column)
         room: string (indexed filter column)
         source_file: string (indexed filter column)
+        node_id: string (indexed filter column)
+        seq: int (indexed filter column)
         metadata_json: string (JSON of full metadata dict)
     """
 
-    # Columns stored as real columns for filtering; everything else goes in metadata_json.
     FILTER_COLUMNS = {"wing", "room", "source_file", "node_id", "seq"}
-    # Columns that are part of the schema but not user metadata.
     SCHEMA_COLUMNS = {
         "id", "document", "vector", "wing", "room", "source_file",
         "node_id", "seq", "metadata_json",
     }
-    # Fields that are internal bookkeeping (not returned in metadata unless stored in metadata_json).
     INTERNAL_FIELDS = {"_distance", "_relevance_score"}
 
     def __init__(self, db, table_name: str, embedder, sync_identity=None):
@@ -120,14 +103,12 @@ class LanceCollection:
             self._check_dimension()
 
     def _list_table_names(self) -> list:
-        """Get table names as a plain list (handles lancedb API variations)."""
         result = self._db.list_tables()
         if hasattr(result, "tables"):
-            return result.tables  # ListTablesResponse object
-        return list(result)  # plain list or iterable
+            return result.tables
+        return list(result)
 
     def _check_dimension(self):
-        """Verify the embedder dimension matches the existing table's vector column."""
         import pyarrow as pa
 
         schema = self._table.schema
@@ -145,13 +126,11 @@ class LanceCollection:
             )
 
     def _to_records(self, documents, ids, metadatas, embeddings=None):
-        """Convert to LanceDB record format, computing embeddings if needed."""
         if embeddings is None:
             embeddings = self._embedder.embed(documents)
 
         records = []
         for doc, id_, meta, vec in zip(documents, ids, metadatas, embeddings):
-            # Inject the embedding model name so we can detect mismatches later
             meta_with_model = dict(meta)
             meta_with_model.setdefault("embedding_model", self._embedder.model_name)
             record = {
@@ -169,7 +148,6 @@ class LanceCollection:
         return records
 
     def _create_table(self, records):
-        """Create the table with initial data."""
         if self._table_name in self._list_table_names():
             self._table = self._db.open_table(self._table_name)
             self._table.add(records)
@@ -177,21 +155,21 @@ class LanceCollection:
             self._table = self._db.create_table(self._table_name, data=records)
 
     def _inject_sync(self, metadatas: list) -> list:
-        """Inject sync metadata (node_id, seq, updated_at) into a write batch."""
         if self._sync_identity is None:
-            from .sync_meta import get_identity
-
+            from ..sync_meta import get_identity  # Circular import: sync_meta imports config
             self._sync_identity = get_identity()
-        from .sync_meta import inject_sync_meta
-
+        from ..sync_meta import inject_sync_meta  # Circular import: sync_meta imports config
         return inject_sync_meta(metadatas, self._sync_identity)
 
-    def upsert(self, documents, ids, metadatas, embeddings=None, _raw=False):
+    def add(self, *, documents, ids, metadatas=None, embeddings=None):
+        self.upsert(documents=documents, ids=ids, metadatas=metadatas, embeddings=embeddings)
+
+    def upsert(self, *, documents, ids, metadatas=None, embeddings=None, _raw=False):
         """Insert or update records. Computes embeddings automatically.
 
-        Args:
-            _raw: If True, skip sync metadata injection (used by sync apply).
+        _raw: skip sync metadata injection (used by sync apply).
         """
+        metadatas = metadatas or [{} for _ in ids]
         if not _raw:
             metadatas = self._inject_sync(metadatas)
         records = self._to_records(documents, ids, metadatas, embeddings)
@@ -217,31 +195,20 @@ class LanceCollection:
                     pass
             self._table.add(records)
 
-    def add(self, documents, ids, metadatas, embeddings=None):
-        """Add records. Uses upsert semantics (safe for duplicate IDs)."""
-        self.upsert(documents, ids, metadatas, embeddings)
-
     def _refresh(self):
-        """Refresh the table to see latest changes from other connections."""
         if self._table is not None:
             try:
                 self._table.checkout_latest()
             except Exception:
                 pass
 
-    def get(self, ids=None, where=None, limit=None, offset=None, include=None):
-        """Retrieve records by ID or metadata filter.
-
-        Returns ChromaDB-compatible dict:
-            {"ids": [...], "documents": [...], "metadatas": [...]}
-        """
+    def get(self, *, ids=None, where=None, limit=None, offset=None, include=None):
         if self._table is None:
             return {"ids": [], "documents": [], "metadatas": []}
 
         self._refresh()
         include = include or ["documents", "metadatas"]
 
-        # Build filter
         if ids is not None:
             escaped = [id_.replace("'", "''") for id_ in ids]
             filter_str = "id IN ('" + "','".join(escaped) + "')"
@@ -258,7 +225,6 @@ class LanceCollection:
                 else:
                     query = query.limit(limit)
             elif offset and offset > 0:
-                # offset without limit — use a large limit
                 query = query.limit(100_000).offset(offset)
             results = query.to_list()
         except Exception as e:
@@ -267,12 +233,7 @@ class LanceCollection:
 
         return self._format_get_results(results, include)
 
-    def query(self, query_texts, n_results=5, where=None, include=None):
-        """Semantic vector search.
-
-        Returns ChromaDB-compatible nested dict:
-            {"ids": [[...]], "documents": [[...]], "metadatas": [[...]], "distances": [[...]]}
-        """
+    def query(self, *, query_texts, n_results=5, where=None, include=None):
         if self._table is None:
             return {"ids": [[]], "documents": [[]], "metadatas": [[]], "distances": [[]]}
 
@@ -309,32 +270,35 @@ class LanceCollection:
             "distances": [result_dists],
         }
 
-    def delete(self, ids):
-        """Delete records by ID.
-
-        Performs a hard delete.  The sync layer (Phase 4) will convert
-        these into tombstoned upserts when sync is active.
-        """
+    def delete(self, *, ids):
         if self._table is None:
             return
         escaped = [id_.replace("'", "''") for id_ in ids]
         filter_str = "id IN ('" + "','".join(escaped) + "')"
         self._table.delete(filter_str)
 
+    def update(self, *, ids, documents=None, metadatas=None):
+        """Update existing records by ID. Re-embeds if documents change."""
+        if not ids:
+            return
+        existing = self.get(ids=ids, include=["documents", "metadatas"])
+        if not existing["ids"]:
+            return
+        docs = documents if documents is not None else existing.get("documents", [""] * len(ids))
+        metas = metadatas if metadatas is not None else existing.get("metadatas", [{}] * len(ids))
+        self.upsert(documents=docs, ids=ids, metadatas=metas)
+
     def count(self) -> int:
-        """Count total records."""
         if self._table is None:
             return 0
         self._refresh()
         return self._table.count_rows()
 
     def _extract_metadata(self, record: dict) -> dict:
-        """Extract metadata dict from a LanceDB record."""
         meta_json = record.get("metadata_json", "{}")
         try:
             return json.loads(meta_json)
         except (json.JSONDecodeError, TypeError):
-            # Fallback: reconstruct from known columns
             return {
                 k: v
                 for k, v in record.items()
@@ -342,8 +306,7 @@ class LanceCollection:
             }
 
     def _format_get_results(self, results: list, include: list) -> dict:
-        """Format LanceDB results into ChromaDB-compatible dict."""
-        out = {"ids": []}
+        out: Dict[str, List] = {"ids": []}
         if "documents" in include:
             out["documents"] = []
         if "metadatas" in include:
@@ -359,148 +322,29 @@ class LanceCollection:
         return out
 
 
-# ── ChromaDB backend (legacy) ────────────────────────────────────────────────
+class LanceBackend:
+    """Factory for LanceDB backend."""
 
+    def get_collection(
+        self, palace_path: str, collection_name: str, create: bool = True,
+        embedder=None, sync_identity=None,
+    ):
+        import lancedb
 
-class ChromaCollection:
-    """Thin wrapper around ChromaDB collection for API compatibility."""
+        if not create and not os.path.isdir(palace_path):
+            raise FileNotFoundError(palace_path)
 
-    def __init__(self, collection):
-        self._col = collection
-
-    def upsert(self, documents, ids, metadatas, embeddings=None):
-        kwargs = {"documents": documents, "ids": ids, "metadatas": metadatas}
-        if embeddings is not None:
-            kwargs["embeddings"] = embeddings
-        return self._col.upsert(**kwargs)
-
-    def add(self, documents, ids, metadatas, embeddings=None):
-        kwargs = {"documents": documents, "ids": ids, "metadatas": metadatas}
-        if embeddings is not None:
-            kwargs["embeddings"] = embeddings
-        return self._col.add(**kwargs)
-
-    def get(self, ids=None, where=None, limit=None, offset=None, include=None):
-        kwargs = {}
-        if ids is not None:
-            kwargs["ids"] = ids
-        if where is not None:
-            kwargs["where"] = where
-        if limit is not None:
-            kwargs["limit"] = limit
-        if offset is not None:
-            kwargs["offset"] = offset
-        if include is not None:
-            kwargs["include"] = include
-        return self._col.get(**kwargs)
-
-    def query(self, query_texts, n_results=5, where=None, include=None):
-        kwargs = {"query_texts": query_texts, "n_results": n_results}
-        if where:
-            kwargs["where"] = where
-        if include:
-            kwargs["include"] = include
-        return self._col.query(**kwargs)
-
-    def delete(self, ids):
-        return self._col.delete(ids=ids)
-
-    def count(self):
-        return self._col.count()
-
-
-# ── Backend detection & factory ───────────────────────────────────────────────
-
-
-def detect_backend(palace_path: str) -> str:
-    """Auto-detect the storage backend for an existing palace.
-
-    Returns "lance", "chroma", or "lance" (default for new palaces).
-    """
-    if not os.path.isdir(palace_path):
-        return "lance"
-
-    # LanceDB creates {table_name}.lance/ directories
-    for entry in os.listdir(palace_path):
-        if entry.endswith(".lance"):
-            return "lance"
-
-    # ChromaDB creates chroma.sqlite3
-    if os.path.exists(os.path.join(palace_path, "chroma.sqlite3")):
-        return "chroma"
-
-    return "lance"
-
-
-def open_collection(
-    palace_path: str,
-    collection_name: str = "swampcastle_chests",
-    backend: str = None,
-    embedder=None,
-    create: bool = True,
-    sync_identity=None,
-):
-    """Open or create a palace collection.
-
-    Args:
-        palace_path: Path to the palace data directory.
-        collection_name: Table/collection name.
-        backend: "lance" or "chroma". Auto-detected if None.
-        embedder: Embedder instance (required for lance, ignored for chroma).
-        create: If True, create the collection if it doesn't exist.
-        sync_identity: NodeIdentity for sync metadata injection (auto-created if None).
-
-    Returns:
-        A LanceCollection or ChromaCollection instance.
-    """
-    if backend is None:
-        backend = detect_backend(palace_path)
-
-    os.makedirs(palace_path, exist_ok=True)
-    try:
-        os.chmod(palace_path, 0o700)
-    except (OSError, NotImplementedError):
-        pass
-
-    if backend == "lance":
-        return _open_lance(palace_path, collection_name, embedder, sync_identity)
-    elif backend == "chroma":
-        return _open_chroma(palace_path, collection_name, create)
-    else:
-        raise ValueError(f"Unknown backend: {backend}")
-
-
-def _open_lance(palace_path, collection_name, embedder, sync_identity=None):
-    """Open a LanceDB-backed collection."""
-    import lancedb
-
-    if embedder is None:
-        from .embeddings import get_embedder
-        from .config import CastleConfig
-
-        embedder = get_embedder(CastleConfig().embedder_config)
-
-    db = lancedb.connect(palace_path)
-    return LanceCollection(db, collection_name, embedder, sync_identity=sync_identity)
-
-
-def _open_chroma(palace_path, collection_name, create):
-    """Open a ChromaDB-backed collection."""
-    try:
-        import chromadb
-    except ImportError:
-        raise ImportError(
-            "This palace uses the ChromaDB backend but 'chromadb' is not installed. "
-            "Install with: pip install 'mempalace[chroma]'  "
-            "Or migrate to LanceDB with: mempalace migrate"
-        )
-
-    client = chromadb.PersistentClient(path=palace_path)
-    try:
-        col = client.get_collection(collection_name)
-    except Exception:
         if create:
-            col = client.create_collection(collection_name)
-        else:
-            raise
-    return ChromaCollection(col)
+            os.makedirs(palace_path, exist_ok=True)
+            try:
+                os.chmod(palace_path, 0o700)
+            except (OSError, NotImplementedError):
+                pass
+
+        if embedder is None:
+            from ..embeddings import get_embedder
+            from ..config import CastleConfig
+            embedder = get_embedder(CastleConfig().embedder_config)
+
+        db = lancedb.connect(palace_path)
+        return LanceCollection(db, collection_name, embedder, sync_identity=sync_identity)

@@ -5,7 +5,7 @@ import os
 
 import pytest
 
-from swampcastle.db import open_collection, LanceCollection
+from swampcastle.backends import open_collection, LanceCollection
 from swampcastle.sync import SyncEngine, ChangeSet, SyncRecord, VersionVector
 from swampcastle.sync_meta import NodeIdentity
 

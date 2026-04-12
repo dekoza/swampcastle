@@ -161,7 +161,7 @@ def cmd_status(args):
 def cmd_repair(args):
     """Rebuild palace vector index from stored data."""
     import shutil
-    from .db import detect_backend
+    from .backends import detect_backend
 
     palace_path = os.path.expanduser(args.palace) if args.palace else CastleConfig().palace_path
 
@@ -273,7 +273,7 @@ def cmd_reindex(args):
     print(f"  Dimension: {embedder.dimension}")
 
     # Read all existing records
-    from .db import open_collection
+    from .backends import open_collection
 
     col = open_collection(palace_path, embedder=embedder)
     total = col.count()
@@ -401,7 +401,7 @@ def cmd_sync(args):
     from .sync import SyncEngine
     from .sync_client import SyncClient
     from .sync_meta import NodeIdentity
-    from .db import open_collection, detect_backend
+    from .backends import open_collection, detect_backend
 
     palace_path = os.path.expanduser(args.palace) if args.palace else CastleConfig().palace_path
     server_url = args.server
@@ -473,7 +473,7 @@ def cmd_migrate(args):
         print(f"\n  No palace found at {palace_path}")
         return
 
-    from .db import detect_backend
+    from .backends import detect_backend
 
     current = detect_backend(palace_path)
 
@@ -531,7 +531,7 @@ def cmd_migrate(args):
     # Remove ChromaDB files, create fresh LanceDB palace
     shutil.rmtree(palace_path)
 
-    from .db import open_collection
+    from .backends import open_collection
 
     if has_embeddings:
         print("  Transferring with original embeddings (no re-embedding needed)...")

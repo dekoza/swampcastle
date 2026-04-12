@@ -31,7 +31,7 @@ def _get_engine() -> SyncEngine:
         _config = CastleConfig()
         palace_path = _config.palace_path
 
-        from .db import open_collection, detect_backend
+        from .backends import open_collection, detect_backend
 
         if detect_backend(palace_path) == "chroma":
             raise RuntimeError(

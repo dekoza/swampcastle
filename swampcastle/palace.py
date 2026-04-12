@@ -7,7 +7,7 @@ Backend-agnostic: works with LanceDB (default) or ChromaDB (legacy).
 
 import os
 
-from .db import open_collection
+from .backends import open_collection, detect_backend
 
 SKIP_DIRS = {
     ".git",

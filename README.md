@@ -1,6 +1,6 @@
 <div align="center">
 
-<img src="assets/mempalace_logo.png" alt="SwampCastle" width="280">
+<img src="assets/Swamp.webp" alt="SwampCastle" width="420">
 
 # SwampCastle
 

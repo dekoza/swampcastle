@@ -3,11 +3,11 @@ import shutil
 import tempfile
 from pathlib import Path
 
-from mempalace.palace import get_collection as _get_test_collection
+from swampcastle.palace import get_collection as _get_test_collection
 import yaml
 
-from mempalace.miner import mine, scan_project
-from mempalace.palace import file_already_mined
+from swampcastle.miner import mine, scan_project
+from swampcastle.palace import file_already_mined
 
 
 def write_file(path: Path, content: str):
@@ -29,7 +29,7 @@ def test_project_mining():
         write_file(
             project_root / "backend" / "app.py", "def main():\n    print('hello world')\n" * 20
         )
-        with open(project_root / "mempalace.yaml", "w") as f:
+        with open(project_root / "swampcastle.yaml", "w") as f:
             yaml.dump(
                 {
                     "wing": "test_project",

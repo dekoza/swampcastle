@@ -141,7 +141,7 @@ class LanceCollection:
                 f"Embedder dimension mismatch: table '{self._table_name}' has "
                 f"{stored_dim}d vectors but the active embedder "
                 f"('{self._embedder.model_name}') produces {expected_dim}d. "
-                f"Run 'mempalace reindex' to re-embed with the new model."
+                f"Run 'swampcastle reforge' to re-embed with the new model."
             )
 
     def _to_records(self, documents, ids, metadatas, embeddings=None):
@@ -434,7 +434,7 @@ def detect_backend(palace_path: str) -> str:
 
 def open_collection(
     palace_path: str,
-    collection_name: str = "mempalace_drawers",
+    collection_name: str = "swampcastle_chests",
     backend: str = None,
     embedder=None,
     create: bool = True,
@@ -476,9 +476,9 @@ def _open_lance(palace_path, collection_name, embedder, sync_identity=None):
 
     if embedder is None:
         from .embeddings import get_embedder
-        from .config import MempalaceConfig
+        from .config import CastleConfig
 
-        embedder = get_embedder(MempalaceConfig().embedder_config)
+        embedder = get_embedder(CastleConfig().embedder_config)
 
     db = lancedb.connect(palace_path)
     return LanceCollection(db, collection_name, embedder, sync_identity=sync_identity)

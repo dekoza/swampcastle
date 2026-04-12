@@ -2,7 +2,7 @@
 
 import pytest
 
-from mempalace.knowledge_graph import KnowledgeGraph
+from swampcastle.knowledge_graph import KnowledgeGraph
 
 
 @pytest.fixture

@@ -9,7 +9,7 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
-from mempalace.searcher import SearchError, search, search_memories
+from swampcastle.searcher import SearchError, search, search_memories
 
 
 # ── search_memories (API) ──────────────────────────────────────────────
@@ -58,7 +58,7 @@ class TestSearchMemories:
         mock_col.count.return_value = 1
         mock_col.query.side_effect = RuntimeError("query failed")
 
-        with patch("mempalace.searcher.get_collection", return_value=mock_col):
+        with patch("swampcastle.searcher.get_collection", return_value=mock_col):
             result = search_memories("test", "/fake/path")
         assert "error" in result
         assert "query failed" in result["error"]
@@ -109,7 +109,7 @@ class TestSearchCLI:
         mock_col.count.return_value = 1
         mock_col.query.side_effect = RuntimeError("boom")
 
-        with patch("mempalace.searcher.get_collection", return_value=mock_col):
+        with patch("swampcastle.searcher.get_collection", return_value=mock_col):
             with pytest.raises(SearchError, match="Search error"):
                 search("test", "/fake/path")
 

@@ -264,13 +264,13 @@ def save_config(project_dir: str, project_name: str, rooms: list):
             for r in rooms
         ],
     }
-    config_path = Path(project_dir).expanduser().resolve() / "mempalace.yaml"
+    config_path = Path(project_dir).expanduser().resolve() / "swampcastle.yaml"
     with open(config_path, "w") as f:
         yaml.dump(config, f, default_flow_style=False, sort_keys=False)
 
     print(f"\n  Config saved: {config_path}")
     print("\n  Next step:")
-    print(f"    mempalace mine {project_dir}")
+    print(f"    swampcastle gather {project_dir}")
     print(f"\n{'=' * 55}\n")
 
 

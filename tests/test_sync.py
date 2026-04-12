@@ -5,9 +5,9 @@ import os
 
 import pytest
 
-from mempalace.db import open_collection, LanceCollection
-from mempalace.sync import SyncEngine, ChangeSet, SyncRecord, VersionVector
-from mempalace.sync_meta import NodeIdentity
+from swampcastle.db import open_collection, LanceCollection
+from swampcastle.sync import SyncEngine, ChangeSet, SyncRecord, VersionVector
+from swampcastle.sync_meta import NodeIdentity
 
 
 # ── Helpers ───────────────────────────────────────────────────────────────────
@@ -663,16 +663,16 @@ class TestSyncServer:
             json.dump({"palace_path": palace}, f)
 
         # Reset server globals
-        import mempalace.sync_server as ss
+        import swampcastle.sync_server as ss
 
         ss._engine = None
         ss._config = None
         monkeypatch.setattr(
-            "mempalace.sync_server._get_engine",
+            "swampcastle.sync_server._get_engine",
             lambda: self._build_engine(tmp_path, palace),
         )
 
-        from mempalace.sync_server import create_app
+        from swampcastle.sync_server import create_app
 
         self._app = create_app()
         self._palace = palace

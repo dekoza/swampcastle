@@ -4,7 +4,7 @@ import numpy as np
 import pytest
 from unittest.mock import patch, MagicMock
 
-from mempalace.embeddings import (
+from swampcastle.embeddings import (
     OnnxEmbedder,
     SentenceTransformerEmbedder,
     OllamaEmbedder,
@@ -262,7 +262,7 @@ def test_list_embedders_returns_list():
 
 def test_embedding_model_stored_in_metadata(tmp_path):
     """Verify the embedding model name is stored in each record's metadata."""
-    from mempalace.db import open_collection
+    from swampcastle.db import open_collection
 
     col = open_collection(str(tmp_path / "palace"), backend="lance")
     col.upsert(
@@ -280,7 +280,7 @@ def test_embedding_model_stored_in_metadata(tmp_path):
 
 def test_lance_dimension_mismatch_guard(tmp_path):
     """Reopening a LanceDB collection with a different embedder dimension must fail."""
-    from mempalace.db import open_collection
+    from swampcastle.db import open_collection
 
     class FakeEmbedder384:
         model_name = "fake-384"
@@ -305,7 +305,7 @@ def test_lance_dimension_mismatch_guard(tmp_path):
 
 def test_lance_node_id_seq_are_filterable_columns(tmp_path):
     """node_id and seq must be top-level LanceDB columns, not buried in metadata_json."""
-    from mempalace.db import open_collection
+    from swampcastle.db import open_collection
 
     palace = str(tmp_path / "palace")
     col = open_collection(palace, backend="lance")

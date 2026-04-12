@@ -58,8 +58,8 @@ def sanitize_content(value: str, max_length: int = 100_000) -> str:
     return value
 
 
-DEFAULT_PALACE_PATH = os.path.expanduser("~/.mempalace/palace")
-DEFAULT_COLLECTION_NAME = "mempalace_drawers"
+DEFAULT_PALACE_PATH = os.path.expanduser("~/.swampcastle/castle")
+DEFAULT_COLLECTION_NAME = "swampcastle_chests"
 DEFAULT_BACKEND = "lance"  # "lance" or "chroma"
 
 DEFAULT_TOPIC_WINGS = [
@@ -113,7 +113,21 @@ DEFAULT_HALL_KEYWORDS = {
 }
 
 
-class MempalaceConfig:
+_LEGACY_CONFIG_DIR = Path(os.path.expanduser("~/.mempalace"))
+_NEW_CONFIG_DIR = Path(os.path.expanduser("~/.swampcastle"))
+
+
+def _resolve_config_dir(override=None):
+    """Pick config dir: explicit > ~/.swampcastle > ~/.mempalace (legacy)."""
+    if override:
+        return Path(override)
+    if _NEW_CONFIG_DIR.exists():
+        return _NEW_CONFIG_DIR
+    if _LEGACY_CONFIG_DIR.exists():
+        return _LEGACY_CONFIG_DIR
+    return _NEW_CONFIG_DIR
+
+class CastleConfig:
     """Configuration manager for MemPalace.
 
     Load order: env vars > config file > defaults.
@@ -124,11 +138,9 @@ class MempalaceConfig:
 
         Args:
             config_dir: Override config directory (useful for testing).
-                        Defaults to ~/.mempalace.
+                        Defaults to ~/.swampcastle.
         """
-        self._config_dir = (
-            Path(config_dir) if config_dir else Path(os.path.expanduser("~/.mempalace"))
-        )
+        self._config_dir = _resolve_config_dir(config_dir)
         self._config_file = self._config_dir / "config.json"
         self._people_map_file = self._config_dir / "people_map.json"
         self._file_config = {}
@@ -143,7 +155,7 @@ class MempalaceConfig:
     @property
     def palace_path(self):
         """Path to the memory palace data directory."""
-        env_val = os.environ.get("MEMPALACE_PALACE_PATH") or os.environ.get("MEMPAL_PALACE_PATH")
+        env_val = os.environ.get("SWAMPCASTLE_PATH") or os.environ.get("MEMPALACE_PALACE_PATH") or os.environ.get("MEMPAL_PALACE_PATH")
         if env_val:
             return env_val
         return self._file_config.get("palace_path", DEFAULT_PALACE_PATH)
@@ -156,7 +168,7 @@ class MempalaceConfig:
     @property
     def backend(self):
         """Storage backend: 'lance' (default) or 'chroma' (legacy)."""
-        env_val = os.environ.get("MEMPALACE_BACKEND")
+        env_val = os.environ.get("SWAMPCASTLE_BACKEND") or os.environ.get("MEMPALACE_BACKEND")
         if env_val:
             return env_val
         return self._file_config.get("backend", DEFAULT_BACKEND)
@@ -231,3 +243,6 @@ class MempalaceConfig:
         with open(self._people_map_file, "w") as f:
             json.dump(people_map, f, indent=2)
         return self._people_map_file
+
+# Legacy alias
+MempalaceConfig = CastleConfig

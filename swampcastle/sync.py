@@ -22,7 +22,7 @@ from dataclasses import dataclass, field
 
 from .sync_meta import NodeIdentity, get_identity
 
-logger = logging.getLogger("mempalace.sync")
+logger = logging.getLogger("swampcastle.sync")
 
 
 # ── Data types ────────────────────────────────────────────────────────────────

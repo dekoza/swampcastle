@@ -1,7 +1,7 @@
 """
 sync_server.py — HTTP sync server for multi-device MemPalace replication.
 
-Run with:  mempalace serve --host 0.0.0.0 --port 7433
+Run with:  swampcastle garrison --host 0.0.0.0 --port 7433
 
 Endpoints:
     GET  /health       — server health check
@@ -13,11 +13,11 @@ Endpoints:
 import logging
 import os
 
-from .config import MempalaceConfig
+from .config import CastleConfig
 from .sync import SyncEngine, ChangeSet, SyncRecord
 from .sync_meta import NodeIdentity
 
-logger = logging.getLogger("mempalace.sync_server")
+logger = logging.getLogger("swampcastle.sync_server")
 
 # ── Lazy globals (initialised on first request) ───────────────────────────────
 
@@ -28,7 +28,7 @@ _config = None
 def _get_engine() -> SyncEngine:
     global _engine, _config
     if _engine is None:
-        _config = MempalaceConfig()
+        _config = CastleConfig()
         palace_path = _config.palace_path
 
         from .db import open_collection, detect_backend
@@ -62,16 +62,16 @@ def create_app():
         from fastapi import FastAPI, Request
     except ImportError:
         raise ImportError(
-            "fastapi is required for the sync server. Install with: pip install 'mempalace[server]'"
+            "fastapi is required for the sync server. Install with: pip install 'swampcastle[server]'"
         )
 
-    app = FastAPI(title="MemPalace Sync Server", version="1.0.0")
+    app = FastAPI(title="Swamp Castle Sync Server", version="1.0.0")
 
     # ── Endpoints ─────────────────────────────────────────────────────
 
     @app.get("/health")
     def health():
-        return {"status": "ok", "service": "mempalace-sync"}
+        return {"status": "ok", "service": "swampcastle-sync"}
 
     @app.get("/sync/status")
     def sync_status():

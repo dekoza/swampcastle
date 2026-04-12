@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
 """
-MemPalace MCP Server — read/write palace access for Claude Code
+Swamp Castle MCP Server — read/write palace access for Claude Code
 ================================================================
-Install: claude mcp add mempalace -- python -m mempalace.mcp_server [--palace /path/to/palace]
+Install: claude mcp add swampcastle -- python -m swampcastle.drawbridge [--palace /path/to/palace]
 
 Tools (read):
   mempalace_status          — total drawers, wing/room breakdown
@@ -26,7 +26,7 @@ import hashlib
 from datetime import datetime
 from pathlib import Path
 
-from .config import MempalaceConfig, sanitize_name, sanitize_content
+from .config import CastleConfig, sanitize_name, sanitize_content
 from .version import __version__
 from .searcher import search_memories
 from .palace_graph import traverse, find_tunnels, graph_stats
@@ -39,7 +39,7 @@ logger = logging.getLogger("mempalace_mcp")
 
 
 def _parse_args():
-    parser = argparse.ArgumentParser(description="MemPalace MCP Server")
+    parser = argparse.ArgumentParser(description="Swamp Castle MCP Server")
     parser.add_argument(
         "--palace",
         metavar="PATH",
@@ -56,7 +56,7 @@ _args = _parse_args()
 if _args.palace:
     os.environ["MEMPALACE_PALACE_PATH"] = os.path.abspath(_args.palace)
 
-_config = MempalaceConfig()
+_config = CastleConfig()
 if _args.palace:
     _kg = KnowledgeGraph(palace_path=_config.palace_path)
 else:
@@ -72,7 +72,7 @@ _collection_cache = None
 # This provides an audit trail for detecting memory poisoning and
 # enables review/rollback of writes from external or untrusted sources.
 
-_WAL_DIR = Path(os.path.expanduser("~/.mempalace/wal"))
+_WAL_DIR = Path(os.path.expanduser("~/.swampcastle/wal"))
 _WAL_DIR.mkdir(parents=True, exist_ok=True)
 try:
     _WAL_DIR.chmod(0o700)
@@ -123,7 +123,7 @@ def _get_collection(create=False):
 def _no_palace():
     return {
         "error": "No palace found",
-        "hint": "Run: mempalace init <dir> && mempalace mine <dir>",
+        "hint": "Run: swampcastle build <dir> && swampcastle gather <dir>",
     }
 
 
@@ -857,7 +857,7 @@ def handle_request(request):
             "result": {
                 "protocolVersion": negotiated,
                 "capabilities": {"tools": {}},
-                "serverInfo": {"name": "mempalace", "version": __version__},
+                "serverInfo": {"name": "swampcastle", "version": __version__},
             },
         }
     elif method == "notifications/initialized":
@@ -916,7 +916,7 @@ def handle_request(request):
 
 
 def main():
-    logger.info("MemPalace MCP Server starting...")
+    logger.info("Swamp Castle MCP Server starting...")
     while True:
         try:
             line = sys.stdin.readline()

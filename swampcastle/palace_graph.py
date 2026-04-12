@@ -16,12 +16,12 @@ No external graph DB needed — built from ChromaDB metadata.
 """
 
 from collections import defaultdict, Counter
-from .config import MempalaceConfig
+from .config import CastleConfig
 from .palace import get_collection as _palace_get_collection
 
 
 def _get_collection(config=None):
-    config = config or MempalaceConfig()
+    config = config or CastleConfig()
     try:
         return _palace_get_collection(config.palace_path, config.collection_name)
     except Exception:

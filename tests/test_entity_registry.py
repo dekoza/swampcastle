@@ -2,7 +2,7 @@
 
 from unittest.mock import patch
 
-from mempalace.entity_registry import (
+from swampcastle.entity_registry import (
     COMMON_ENGLISH_WORDS,
     PERSON_CONTEXT_PATTERNS,
     EntityRegistry,
@@ -227,13 +227,13 @@ def test_research_caches_result(tmp_path):
         "wiki_title": "Saoirse",
     }
 
-    with patch("mempalace.entity_registry._wikipedia_lookup", return_value=mock_result):
+    with patch("swampcastle.entity_registry._wikipedia_lookup", return_value=mock_result):
         result = registry.research("Saoirse", auto_confirm=True)
     assert result["inferred_type"] == "person"
 
     # Second call should use cache, not call Wikipedia again
     with patch(
-        "mempalace.entity_registry._wikipedia_lookup",
+        "swampcastle.entity_registry._wikipedia_lookup",
         side_effect=AssertionError("should not be called"),
     ):
         cached = registry.research("Saoirse")
@@ -250,7 +250,7 @@ def test_confirm_research_adds_to_people(tmp_path):
         "wiki_summary": "Saoirse is a name",
         "wiki_title": "Saoirse",
     }
-    with patch("mempalace.entity_registry._wikipedia_lookup", return_value=mock_result):
+    with patch("swampcastle.entity_registry._wikipedia_lookup", return_value=mock_result):
         registry.research("Saoirse", auto_confirm=False)
 
     registry.confirm_research("Saoirse", entity_type="person", relationship="friend")

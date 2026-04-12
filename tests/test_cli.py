@@ -7,7 +7,7 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
-from mempalace.cli import (
+from swampcastle.cli import (
     cmd_compress,
     cmd_hook,
     cmd_init,
@@ -25,21 +25,21 @@ from mempalace.cli import (
 # ── cmd_status ─────────────────────────────────────────────────────────
 
 
-@patch("mempalace.cli.MempalaceConfig")
+@patch("swampcastle.cli.CastleConfig")
 def test_cmd_status_default_palace(mock_config_cls):
     mock_config_cls.return_value.palace_path = "/fake/palace"
     args = argparse.Namespace(palace=None)
     mock_miner = MagicMock()
-    with patch.dict("sys.modules", {"mempalace.miner": mock_miner}):
+    with patch.dict("sys.modules", {"swampcastle.miner": mock_miner}):
         cmd_status(args)
         mock_miner.status.assert_called_once_with(palace_path="/fake/palace")
 
 
-@patch("mempalace.cli.MempalaceConfig")
+@patch("swampcastle.cli.CastleConfig")
 def test_cmd_status_custom_palace(mock_config_cls):
     args = argparse.Namespace(palace="~/my_palace")
     mock_miner = MagicMock()
-    with patch.dict("sys.modules", {"mempalace.miner": mock_miner}):
+    with patch.dict("sys.modules", {"swampcastle.miner": mock_miner}):
         cmd_status(args)
         import os
 
@@ -50,13 +50,13 @@ def test_cmd_status_custom_palace(mock_config_cls):
 # ── cmd_search ─────────────────────────────────────────────────────────
 
 
-@patch("mempalace.cli.MempalaceConfig")
+@patch("swampcastle.cli.CastleConfig")
 def test_cmd_search_calls_search(mock_config_cls):
     mock_config_cls.return_value.palace_path = "/fake/palace"
     args = argparse.Namespace(
         palace=None, query="test query", wing="mywing", room="myroom", results=3
     )
-    with patch("mempalace.searcher.search") as mock_search:
+    with patch("swampcastle.searcher.search") as mock_search:
         cmd_search(args)
         mock_search.assert_called_once_with(
             query="test query",
@@ -67,13 +67,13 @@ def test_cmd_search_calls_search(mock_config_cls):
         )
 
 
-@patch("mempalace.cli.MempalaceConfig")
+@patch("swampcastle.cli.CastleConfig")
 def test_cmd_search_error_exits(mock_config_cls):
     mock_config_cls.return_value.palace_path = "/fake/palace"
     args = argparse.Namespace(palace=None, query="q", wing=None, room=None, results=5)
-    from mempalace.searcher import SearchError
+    from swampcastle.searcher import SearchError
 
-    with patch("mempalace.searcher.search", side_effect=SearchError("fail")):
+    with patch("swampcastle.searcher.search", side_effect=SearchError("fail")):
         with pytest.raises(SystemExit) as exc_info:
             cmd_search(args)
         assert exc_info.value.code == 1
@@ -84,7 +84,7 @@ def test_cmd_search_error_exits(mock_config_cls):
 
 def test_cmd_instructions_calls_run_instructions():
     args = argparse.Namespace(name="help")
-    with patch("mempalace.instructions_cli.run_instructions") as mock_run:
+    with patch("swampcastle.instructions_cli.run_instructions") as mock_run:
         cmd_instructions(args)
         mock_run.assert_called_once_with(name="help")
 
@@ -94,7 +94,7 @@ def test_cmd_instructions_calls_run_instructions():
 
 def test_cmd_hook_calls_run_hook():
     args = argparse.Namespace(hook="session-start", harness="claude-code")
-    with patch("mempalace.hooks_cli.run_hook") as mock_run:
+    with patch("swampcastle.hooks_cli.run_hook") as mock_run:
         cmd_hook(args)
         mock_run.assert_called_once_with(hook_name="session-start", harness="claude-code")
 
@@ -102,44 +102,44 @@ def test_cmd_hook_calls_run_hook():
 # ── cmd_init ───────────────────────────────────────────────────────────
 
 
-@patch("mempalace.cli.MempalaceConfig")
+@patch("swampcastle.cli.CastleConfig")
 def test_cmd_init_no_entities(mock_config_cls, tmp_path):
     args = argparse.Namespace(dir=str(tmp_path), yes=True)
     with (
-        patch("mempalace.entity_detector.scan_for_detection", return_value=[]),
-        patch("mempalace.room_detector_local.detect_rooms_local") as mock_rooms,
+        patch("swampcastle.entity_detector.scan_for_detection", return_value=[]),
+        patch("swampcastle.room_detector_local.detect_rooms_local") as mock_rooms,
     ):
         cmd_init(args)
         mock_rooms.assert_called_once_with(project_dir=str(tmp_path), yes=True)
         mock_config_cls.return_value.init.assert_called_once()
 
 
-@patch("mempalace.cli.MempalaceConfig")
+@patch("swampcastle.cli.CastleConfig")
 def test_cmd_init_with_entities(mock_config_cls, tmp_path):
     fake_files = [tmp_path / "a.txt"]
     detected = {"people": [{"name": "Alice"}], "projects": [], "uncertain": []}
     confirmed = {"people": ["Alice"], "projects": []}
     args = argparse.Namespace(dir=str(tmp_path), yes=True)
     with (
-        patch("mempalace.entity_detector.scan_for_detection", return_value=fake_files),
-        patch("mempalace.entity_detector.detect_entities", return_value=detected),
-        patch("mempalace.entity_detector.confirm_entities", return_value=confirmed),
-        patch("mempalace.room_detector_local.detect_rooms_local"),
+        patch("swampcastle.entity_detector.scan_for_detection", return_value=fake_files),
+        patch("swampcastle.entity_detector.detect_entities", return_value=detected),
+        patch("swampcastle.entity_detector.confirm_entities", return_value=confirmed),
+        patch("swampcastle.room_detector_local.detect_rooms_local"),
         patch("builtins.open", MagicMock()),
     ):
         cmd_init(args)
 
 
-@patch("mempalace.cli.MempalaceConfig")
+@patch("swampcastle.cli.CastleConfig")
 def test_cmd_init_with_entities_zero_total(mock_config_cls, tmp_path, capsys):
     """When entities detected but total is 0, prints 'No entities' message."""
     fake_files = [tmp_path / "a.txt"]
     detected = {"people": [], "projects": [], "uncertain": []}
     args = argparse.Namespace(dir=str(tmp_path), yes=False)
     with (
-        patch("mempalace.entity_detector.scan_for_detection", return_value=fake_files),
-        patch("mempalace.entity_detector.detect_entities", return_value=detected),
-        patch("mempalace.room_detector_local.detect_rooms_local"),
+        patch("swampcastle.entity_detector.scan_for_detection", return_value=fake_files),
+        patch("swampcastle.entity_detector.detect_entities", return_value=detected),
+        patch("swampcastle.room_detector_local.detect_rooms_local"),
     ):
         cmd_init(args)
     out = capsys.readouterr().out
@@ -149,7 +149,7 @@ def test_cmd_init_with_entities_zero_total(mock_config_cls, tmp_path, capsys):
 # ── cmd_mine ───────────────────────────────────────────────────────────
 
 
-@patch("mempalace.cli.MempalaceConfig")
+@patch("swampcastle.cli.CastleConfig")
 def test_cmd_mine_projects_mode(mock_config_cls):
     mock_config_cls.return_value.palace_path = "/fake/palace"
     args = argparse.Namespace(
@@ -164,7 +164,7 @@ def test_cmd_mine_projects_mode(mock_config_cls):
         include_ignored=[],
         extract="exchange",
     )
-    with patch("mempalace.miner.mine") as mock_mine:
+    with patch("swampcastle.miner.mine") as mock_mine:
         cmd_mine(args)
         mock_mine.assert_called_once_with(
             project_dir="/src",
@@ -178,7 +178,7 @@ def test_cmd_mine_projects_mode(mock_config_cls):
         )
 
 
-@patch("mempalace.cli.MempalaceConfig")
+@patch("swampcastle.cli.CastleConfig")
 def test_cmd_mine_convos_mode(mock_config_cls):
     mock_config_cls.return_value.palace_path = "/fake/palace"
     args = argparse.Namespace(
@@ -193,7 +193,7 @@ def test_cmd_mine_convos_mode(mock_config_cls):
         include_ignored=[],
         extract="general",
     )
-    with patch("mempalace.convo_miner.mine_convos") as mock_mine:
+    with patch("swampcastle.convo_miner.mine_convos") as mock_mine:
         cmd_mine(args)
         mock_mine.assert_called_once_with(
             convo_dir="/chats",
@@ -206,7 +206,7 @@ def test_cmd_mine_convos_mode(mock_config_cls):
         )
 
 
-@patch("mempalace.cli.MempalaceConfig")
+@patch("swampcastle.cli.CastleConfig")
 def test_cmd_mine_include_ignored_comma_split(mock_config_cls):
     mock_config_cls.return_value.palace_path = "/fake/palace"
     args = argparse.Namespace(
@@ -221,7 +221,7 @@ def test_cmd_mine_include_ignored_comma_split(mock_config_cls):
         include_ignored=["a.txt,b.txt", "c.txt"],
         extract="exchange",
     )
-    with patch("mempalace.miner.mine") as mock_mine:
+    with patch("swampcastle.miner.mine") as mock_mine:
         cmd_mine(args)
         mock_mine.assert_called_once()
         call_kwargs = mock_mine.call_args[1]
@@ -231,13 +231,13 @@ def test_cmd_mine_include_ignored_comma_split(mock_config_cls):
 # ── cmd_wakeup ─────────────────────────────────────────────────────────
 
 
-@patch("mempalace.cli.MempalaceConfig")
+@patch("swampcastle.cli.CastleConfig")
 def test_cmd_wakeup(mock_config_cls, capsys):
     mock_config_cls.return_value.palace_path = "/fake/palace"
     args = argparse.Namespace(palace=None, wing=None)
     mock_stack = MagicMock()
     mock_stack.wake_up.return_value = "Hello world context"
-    with patch("mempalace.layers.MemoryStack", return_value=mock_stack):
+    with patch("swampcastle.layers.MemoryStack", return_value=mock_stack):
         cmd_wakeup(args)
     out = capsys.readouterr().out
     assert "Hello world context" in out
@@ -249,14 +249,14 @@ def test_cmd_wakeup(mock_config_cls, capsys):
 
 def test_cmd_split_basic():
     args = argparse.Namespace(dir="/chats", output_dir=None, dry_run=False, min_sessions=2)
-    with patch("mempalace.split_mega_files.main") as mock_main:
+    with patch("swampcastle.split_mega_files.main") as mock_main:
         cmd_split(args)
         mock_main.assert_called_once()
 
 
 def test_cmd_split_all_options():
     args = argparse.Namespace(dir="/chats", output_dir="/out", dry_run=True, min_sessions=5)
-    with patch("mempalace.split_mega_files.main") as mock_main:
+    with patch("swampcastle.split_mega_files.main") as mock_main:
         cmd_split(args)
         mock_main.assert_called_once()
     # sys.argv should be restored
@@ -270,13 +270,13 @@ def test_main_no_args_prints_help(capsys):
     with patch("sys.argv", ["mempalace"]):
         main()
     out = capsys.readouterr().out
-    assert "MemPalace" in out
+    assert "Swamp Castle" in out or "swampcastle" in out
 
 
 def test_main_status_dispatches():
     with (
         patch("sys.argv", ["mempalace", "status"]),
-        patch("mempalace.cli.cmd_status") as mock_cmd,
+        patch("swampcastle.cli.cmd_status") as mock_cmd,
     ):
         main()
         mock_cmd.assert_called_once()
@@ -285,7 +285,7 @@ def test_main_status_dispatches():
 def test_main_search_dispatches():
     with (
         patch("sys.argv", ["mempalace", "search", "my query"]),
-        patch("mempalace.cli.cmd_search") as mock_cmd,
+        patch("swampcastle.cli.cmd_search") as mock_cmd,
     ):
         main()
         mock_cmd.assert_called_once()
@@ -294,7 +294,7 @@ def test_main_search_dispatches():
 def test_main_init_dispatches():
     with (
         patch("sys.argv", ["mempalace", "init", "/some/dir"]),
-        patch("mempalace.cli.cmd_init") as mock_cmd,
+        patch("swampcastle.cli.cmd_init") as mock_cmd,
     ):
         main()
         mock_cmd.assert_called_once()
@@ -303,7 +303,7 @@ def test_main_init_dispatches():
 def test_main_mine_dispatches():
     with (
         patch("sys.argv", ["mempalace", "mine", "/some/dir"]),
-        patch("mempalace.cli.cmd_mine") as mock_cmd,
+        patch("swampcastle.cli.cmd_mine") as mock_cmd,
     ):
         main()
         mock_cmd.assert_called_once()
@@ -312,7 +312,7 @@ def test_main_mine_dispatches():
 def test_main_wakeup_dispatches():
     with (
         patch("sys.argv", ["mempalace", "wake-up"]),
-        patch("mempalace.cli.cmd_wakeup") as mock_cmd,
+        patch("swampcastle.cli.cmd_wakeup") as mock_cmd,
     ):
         main()
         mock_cmd.assert_called_once()
@@ -321,7 +321,7 @@ def test_main_wakeup_dispatches():
 def test_main_split_dispatches():
     with (
         patch("sys.argv", ["mempalace", "split", "/chats"]),
-        patch("mempalace.cli.cmd_split") as mock_cmd,
+        patch("swampcastle.cli.cmd_split") as mock_cmd,
     ):
         main()
         mock_cmd.assert_called_once()
@@ -333,10 +333,10 @@ def test_mcp_command_prints_setup_guidance(monkeypatch, capsys):
     main()
 
     captured = capsys.readouterr()
-    assert "MemPalace MCP quick setup:" in captured.out
-    assert "claude mcp add mempalace -- python -m mempalace.mcp_server" in captured.out
+    assert "Swamp Castle MCP quick setup:" in captured.out
+    assert "claude mcp add swampcastle -- python -m swampcastle.drawbridge" in captured.out
     assert "\nOptional custom palace:\n" in captured.out
-    assert "python -m mempalace.mcp_server --palace /path/to/palace" in captured.out
+    assert "python -m swampcastle.drawbridge --palace /path/to/palace" in captured.out
     assert "[--palace /path/to/palace]" not in captured.out
     assert captured.err == ""
 
@@ -349,7 +349,7 @@ def test_mcp_command_uses_custom_palace_path_when_provided(monkeypatch, capsys):
     captured = capsys.readouterr()
     expanded = str(Path("~/tmp/my palace").expanduser())
 
-    assert "python -m mempalace.mcp_server --palace" in captured.out
+    assert "python -m swampcastle.drawbridge --palace" in captured.out
     assert expanded in captured.out
     assert "Optional custom palace:" not in captured.out
     assert "[--palace /path/to/palace]" not in captured.out
@@ -369,7 +369,7 @@ def test_main_hook_run_dispatches():
             "sys.argv",
             ["mempalace", "hook", "run", "--hook", "session-start", "--harness", "claude-code"],
         ),
-        patch("mempalace.cli.cmd_hook") as mock_cmd,
+        patch("swampcastle.cli.cmd_hook") as mock_cmd,
     ):
         main()
         mock_cmd.assert_called_once()
@@ -385,7 +385,7 @@ def test_main_instructions_no_subcommand_prints_help(capsys):
 def test_main_instructions_dispatches():
     with (
         patch("sys.argv", ["mempalace", "instructions", "help"]),
-        patch("mempalace.cli.cmd_instructions") as mock_cmd,
+        patch("swampcastle.cli.cmd_instructions") as mock_cmd,
     ):
         main()
         mock_cmd.assert_called_once()
@@ -394,7 +394,7 @@ def test_main_instructions_dispatches():
 def test_main_repair_dispatches():
     with (
         patch("sys.argv", ["mempalace", "repair"]),
-        patch("mempalace.cli.cmd_repair") as mock_cmd,
+        patch("swampcastle.cli.cmd_repair") as mock_cmd,
     ):
         main()
         mock_cmd.assert_called_once()
@@ -403,7 +403,7 @@ def test_main_repair_dispatches():
 def test_main_compress_dispatches():
     with (
         patch("sys.argv", ["mempalace", "compress"]),
-        patch("mempalace.cli.cmd_compress") as mock_cmd,
+        patch("swampcastle.cli.cmd_compress") as mock_cmd,
     ):
         main()
         mock_cmd.assert_called_once()
@@ -412,7 +412,7 @@ def test_main_compress_dispatches():
 # ── cmd_repair ─────────────────────────────────────────────────────────
 
 
-@patch("mempalace.cli.MempalaceConfig")
+@patch("swampcastle.cli.CastleConfig")
 def test_cmd_repair_no_palace(mock_config_cls, tmp_path, capsys):
     mock_config_cls.return_value.palace_path = str(tmp_path / "nonexistent")
     args = argparse.Namespace(palace=None)
@@ -421,20 +421,20 @@ def test_cmd_repair_no_palace(mock_config_cls, tmp_path, capsys):
     assert "No palace found" in out
 
 
-@patch("mempalace.cli.MempalaceConfig")
+@patch("swampcastle.cli.CastleConfig")
 def test_cmd_repair_error_reading(mock_config_cls, tmp_path, capsys):
     palace_dir = tmp_path / "palace"
     palace_dir.mkdir()
     mock_config_cls.return_value.palace_path = str(palace_dir)
     args = argparse.Namespace(palace=None)
     # Patch get_collection to raise an error
-    with patch("mempalace.cli.get_collection", side_effect=Exception("corrupt db")):
+    with patch("swampcastle.cli.get_collection", side_effect=Exception("corrupt db")):
         cmd_repair(args)
     out = capsys.readouterr().out
     assert "Error reading palace" in out
 
 
-@patch("mempalace.cli.MempalaceConfig")
+@patch("swampcastle.cli.CastleConfig")
 def test_cmd_repair_zero_drawers(mock_config_cls, tmp_path, capsys):
     palace_dir = tmp_path / "palace"
     palace_dir.mkdir()
@@ -442,13 +442,13 @@ def test_cmd_repair_zero_drawers(mock_config_cls, tmp_path, capsys):
     args = argparse.Namespace(palace=None)
     mock_col = MagicMock()
     mock_col.count.return_value = 0
-    with patch("mempalace.cli.get_collection", return_value=mock_col):
+    with patch("swampcastle.cli.get_collection", return_value=mock_col):
         cmd_repair(args)
     out = capsys.readouterr().out
     assert "Nothing to repair" in out
 
 
-@patch("mempalace.cli.MempalaceConfig")
+@patch("swampcastle.cli.CastleConfig")
 def test_cmd_repair_success(mock_config_cls, tmp_path, capsys):
     palace_dir = tmp_path / "palace"
     palace_dir.mkdir()
@@ -462,7 +462,7 @@ def test_cmd_repair_success(mock_config_cls, tmp_path, capsys):
         "metadatas": [{"wing": "a"}, {"wing": "b"}],
     }
     mock_new_col = MagicMock()
-    with patch("mempalace.cli.get_collection", side_effect=[mock_col, mock_new_col]):
+    with patch("swampcastle.cli.get_collection", side_effect=[mock_col, mock_new_col]):
         cmd_repair(args)
     out = capsys.readouterr().out
     assert "Repair complete" in out
@@ -472,25 +472,25 @@ def test_cmd_repair_success(mock_config_cls, tmp_path, capsys):
 # ── cmd_compress ───────────────────────────────────────────────────────
 
 
-@patch("mempalace.cli.MempalaceConfig")
+@patch("swampcastle.cli.CastleConfig")
 def test_cmd_compress_no_palace(mock_config_cls, capsys):
     mock_config_cls.return_value.palace_path = "/fake/palace"
     args = argparse.Namespace(palace=None, wing=None, dry_run=False, config=None)
     with (
-        patch("mempalace.cli.get_collection", side_effect=Exception("no palace")),
+        patch("swampcastle.cli.get_collection", side_effect=Exception("no palace")),
         pytest.raises(SystemExit),
     ):
         cmd_compress(args)
 
 
-@patch("mempalace.cli.MempalaceConfig")
+@patch("swampcastle.cli.CastleConfig")
 def test_cmd_compress_no_drawers(mock_config_cls, capsys):
     mock_config_cls.return_value.palace_path = "/fake/palace"
     args = argparse.Namespace(palace=None, wing="mywing", dry_run=False, config=None)
     mock_col = MagicMock()
     mock_col.count.return_value = 1  # non-zero to pass initial check
     mock_col.get.return_value = {"documents": [], "metadatas": [], "ids": []}
-    with patch("mempalace.cli.get_collection", return_value=mock_col):
+    with patch("swampcastle.cli.get_collection", return_value=mock_col):
         cmd_compress(args)
     out = capsys.readouterr().out
     assert "No drawers found" in out
@@ -505,7 +505,7 @@ def _make_mock_dialect_module(dialect_instance):
     return mock_mod
 
 
-@patch("mempalace.cli.MempalaceConfig")
+@patch("swampcastle.cli.CastleConfig")
 def test_cmd_compress_dry_run(mock_config_cls, capsys):
     mock_config_cls.return_value.palace_path = "/fake/palace"
     args = argparse.Namespace(palace=None, wing=None, dry_run=True, config=None)
@@ -532,8 +532,8 @@ def test_cmd_compress_dry_run(mock_config_cls, capsys):
     mock_dialect_mod = _make_mock_dialect_module(mock_dialect)
 
     with (
-        patch("mempalace.cli.get_collection", return_value=mock_col),
-        patch.dict("sys.modules", {"mempalace.dialect": mock_dialect_mod}),
+        patch("swampcastle.cli.get_collection", return_value=mock_col),
+        patch.dict("sys.modules", {"swampcastle.dialect": mock_dialect_mod}),
     ):
         cmd_compress(args)
     out = capsys.readouterr().out
@@ -541,7 +541,7 @@ def test_cmd_compress_dry_run(mock_config_cls, capsys):
     assert "Compressing" in out
 
 
-@patch("mempalace.cli.MempalaceConfig")
+@patch("swampcastle.cli.CastleConfig")
 def test_cmd_compress_with_config(mock_config_cls, tmp_path, capsys):
     mock_config_cls.return_value.palace_path = "/fake/palace"
     config_file = tmp_path / "entities.json"
@@ -555,15 +555,15 @@ def test_cmd_compress_with_config(mock_config_cls, tmp_path, capsys):
     mock_dialect_mod = _make_mock_dialect_module(mock_dialect)
 
     with (
-        patch("mempalace.cli.get_collection", return_value=mock_col),
-        patch.dict("sys.modules", {"mempalace.dialect": mock_dialect_mod}),
+        patch("swampcastle.cli.get_collection", return_value=mock_col),
+        patch.dict("sys.modules", {"swampcastle.dialect": mock_dialect_mod}),
     ):
         cmd_compress(args)
     out = capsys.readouterr().out
     assert "Loaded entity config" in out
 
 
-@patch("mempalace.cli.MempalaceConfig")
+@patch("swampcastle.cli.CastleConfig")
 def test_cmd_compress_stores_results(mock_config_cls, capsys):
     """Non-dry-run compress stores to mempalace_compressed collection."""
     mock_config_cls.return_value.palace_path = "/fake/palace"
@@ -593,8 +593,8 @@ def test_cmd_compress_stores_results(mock_config_cls, capsys):
 
     # get_collection called twice: once for drawers, once for compressed
     with (
-        patch("mempalace.cli.get_collection", side_effect=[mock_col, mock_comp_col]),
-        patch.dict("sys.modules", {"mempalace.dialect": mock_dialect_mod}),
+        patch("swampcastle.cli.get_collection", side_effect=[mock_col, mock_comp_col]),
+        patch.dict("sys.modules", {"swampcastle.dialect": mock_dialect_mod}),
     ):
         cmd_compress(args)
     out = capsys.readouterr().out
@@ -607,7 +607,7 @@ def test_cmd_repair_trailing_slash_does_not_recurse():
     import os
 
     args = argparse.Namespace(palace="/tmp/fake_palace/")
-    with patch("mempalace.cli.os.path.isdir", return_value=False):
+    with patch("swampcastle.cli.os.path.isdir", return_value=False):
         cmd_repair(args)
     # Verify the rstrip logic: palace_path should not end with separator
     palace_path = os.path.expanduser(args.palace).rstrip(os.sep)

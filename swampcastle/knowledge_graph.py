@@ -15,7 +15,7 @@ Storage: LanceDB tables (same palace directory as drawers).
 Falls back to SQLite for existing palaces (auto-detected).
 
 Usage:
-    from mempalace.knowledge_graph import KnowledgeGraph
+    from swampcastle.knowledge_graph import KnowledgeGraph
 
     kg = KnowledgeGraph("/path/to/palace")
     kg.add_triple("Max", "child_of", "Alice", valid_from="2015-04-01")

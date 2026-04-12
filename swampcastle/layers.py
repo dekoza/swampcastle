@@ -21,7 +21,7 @@ import sys
 from pathlib import Path
 from collections import defaultdict
 
-from .config import MempalaceConfig
+from .config import CastleConfig
 from .palace import get_collection as _get_palace_collection
 
 
@@ -83,7 +83,7 @@ class Layer1:
     MAX_CHARS = 3200  # hard cap on total L1 text (~800 tokens)
 
     def __init__(self, palace_path: str = None, wing: str = None):
-        cfg = MempalaceConfig()
+        cfg = CastleConfig()
         self.palace_path = palace_path or cfg.palace_path
         self.wing = wing
 
@@ -94,7 +94,7 @@ class Layer1:
             if col.count() == 0:
                 raise Exception("Empty palace")
         except Exception:
-            return "## L1 — No palace found. Run: mempalace mine <dir>"
+            return "## L1 — No palace found. Run: swampcastle gather <dir>"
 
         # Fetch all drawers in batches to avoid variable limit
         _BATCH = 500
@@ -190,7 +190,7 @@ class Layer2:
     """
 
     def __init__(self, palace_path: str = None):
-        cfg = MempalaceConfig()
+        cfg = CastleConfig()
         self.palace_path = palace_path or cfg.palace_path
 
     def retrieve(self, wing: str = None, room: str = None, n_results: int = 10) -> str:
@@ -255,7 +255,7 @@ class Layer3:
     """
 
     def __init__(self, palace_path: str = None):
-        cfg = MempalaceConfig()
+        cfg = CastleConfig()
         self.palace_path = palace_path or cfg.palace_path
 
     def search(self, query: str, wing: str = None, room: str = None, n_results: int = 5) -> str:
@@ -380,7 +380,7 @@ class MemoryStack:
     """
 
     def __init__(self, palace_path: str = None, identity_path: str = None):
-        cfg = MempalaceConfig()
+        cfg = CastleConfig()
         self.palace_path = palace_path or cfg.palace_path
         self.identity_path = identity_path or os.path.expanduser("~/.mempalace/identity.txt")
 

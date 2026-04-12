@@ -1,8 +1,8 @@
 import os
 import tempfile
 import shutil
-from mempalace.palace import get_collection as _get_test_collection
-from mempalace.convo_miner import mine_convos
+from swampcastle.palace import get_collection as _get_test_collection
+from swampcastle.convo_miner import mine_convos
 
 
 def test_convo_mining():

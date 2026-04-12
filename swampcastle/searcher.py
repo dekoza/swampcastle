@@ -32,12 +32,12 @@ def search(query: str, palace_path: str, wing: str = None, room: str = None, n_r
         raise SearchError(f"Missing chromadb dependency for {palace_path}")
     except Exception:
         print(f"\n  No palace found at {palace_path}")
-        print("  Run: mempalace init <dir> then mempalace mine <dir>")
+        print("  Run: swampcastle build <dir> then swampcastle gather <dir>")
         raise SearchError(f"No palace found at {palace_path}")
 
     if col.count() == 0:
         print(f"\n  Palace at {palace_path} exists but is empty.")
-        print("  Run: mempalace mine <dir>")
+        print("  Run: swampcastle gather <dir>")
         raise SearchError(f"Empty palace at {palace_path}")
 
     # Build where filter
@@ -117,13 +117,13 @@ def search_memories(
         logger.error("No palace found at %s: %s", palace_path, e)
         return {
             "error": "No palace found",
-            "hint": "Run: mempalace init <dir> && mempalace mine <dir>",
+            "hint": "Run: swampcastle build <dir> && swampcastle gather <dir>",
         }
 
     if col.count() == 0:
         return {
             "error": "Empty palace",
-            "hint": "Run: mempalace mine <dir>",
+            "hint": "Run: swampcastle gather <dir>",
         }
 
     # Build where filter

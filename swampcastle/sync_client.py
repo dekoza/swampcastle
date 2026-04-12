@@ -2,7 +2,7 @@
 sync_client.py — HTTP client for syncing with a remote MemPalace server.
 
 Usage:
-    from mempalace.sync_client import SyncClient
+    from swampcastle.sync_client import SyncClient
     client = SyncClient("http://homeserver:7433")
     client.sync(engine)           # push + pull
     client.is_reachable()         # health check
@@ -16,7 +16,7 @@ import json
 
 from .sync import SyncEngine, ChangeSet
 
-logger = logging.getLogger("mempalace.sync_client")
+logger = logging.getLogger("swampcastle.sync_client")
 
 
 class SyncClient:

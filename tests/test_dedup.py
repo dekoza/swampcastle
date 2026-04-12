@@ -3,7 +3,7 @@
 from unittest.mock import MagicMock, patch
 
 
-from mempalace import dedup
+from swampcastle import dedup
 
 
 # ── get_source_groups ─────────────────────────────────────────────────
@@ -198,7 +198,7 @@ def test_dedup_source_group_query_failure_keeps():
 # ── show_stats ────────────────────────────────────────────────────────
 
 
-@patch("mempalace.dedup.chromadb")
+@patch("swampcastle.dedup.chromadb")
 def test_show_stats(mock_chromadb, tmp_path):
     mock_col = MagicMock()
     mock_col.count.return_value = 5
@@ -225,9 +225,9 @@ def test_show_stats(mock_chromadb, tmp_path):
 # ── dedup_palace ──────────────────────────────────────────────────────
 
 
-@patch("mempalace.dedup.dedup_source_group")
-@patch("mempalace.dedup.get_source_groups")
-@patch("mempalace.dedup.chromadb")
+@patch("swampcastle.dedup.dedup_source_group")
+@patch("swampcastle.dedup.get_source_groups")
+@patch("swampcastle.dedup.chromadb")
 def test_dedup_palace_dry_run(mock_chromadb, mock_groups, mock_dedup_group, tmp_path):
     mock_col = MagicMock()
     mock_col.count.return_value = 10
@@ -242,9 +242,9 @@ def test_dedup_palace_dry_run(mock_chromadb, mock_groups, mock_dedup_group, tmp_
     mock_dedup_group.assert_called_once()
 
 
-@patch("mempalace.dedup.dedup_source_group")
-@patch("mempalace.dedup.get_source_groups")
-@patch("mempalace.dedup.chromadb")
+@patch("swampcastle.dedup.dedup_source_group")
+@patch("swampcastle.dedup.get_source_groups")
+@patch("swampcastle.dedup.chromadb")
 def test_dedup_palace_with_wing(mock_chromadb, mock_groups, mock_dedup_group, tmp_path):
     mock_col = MagicMock()
     mock_col.count.return_value = 10
@@ -257,9 +257,9 @@ def test_dedup_palace_with_wing(mock_chromadb, mock_groups, mock_dedup_group, tm
     mock_groups.assert_called_once_with(mock_col, 5, None, wing="test_wing")
 
 
-@patch("mempalace.dedup.dedup_source_group")
-@patch("mempalace.dedup.get_source_groups")
-@patch("mempalace.dedup.chromadb")
+@patch("swampcastle.dedup.dedup_source_group")
+@patch("swampcastle.dedup.get_source_groups")
+@patch("swampcastle.dedup.chromadb")
 def test_dedup_palace_no_groups(mock_chromadb, mock_groups, mock_dedup_group, tmp_path):
     mock_col = MagicMock()
     mock_col.count.return_value = 3

@@ -3,7 +3,7 @@
 import threading
 
 
-from mempalace.sync_meta import NodeIdentity, inject_sync_meta, utcnow_iso
+from swampcastle.sync_meta import NodeIdentity, inject_sync_meta, utcnow_iso
 
 
 # ── NodeIdentity ──────────────────────────────────────────────────────
@@ -161,8 +161,8 @@ def test_utcnow_iso_format():
 
 def test_sync_meta_in_lance_records(tmp_path):
     """Verify that upsert injects node_id/seq/updated_at into stored metadata."""
-    from mempalace.db import open_collection
-    from mempalace.sync_meta import NodeIdentity
+    from swampcastle.db import open_collection
+    from swampcastle.sync_meta import NodeIdentity
 
     ni = NodeIdentity(config_dir=str(tmp_path / "config"))
     col = open_collection(str(tmp_path / "palace"), backend="lance", sync_identity=ni)

@@ -41,9 +41,9 @@ MIN_DRAWERS_TO_CHECK = 5
 def _get_palace_path():
     """Resolve palace path from config."""
     try:
-        from .config import MempalaceConfig
+        from .config import CastleConfig
 
-        return MempalaceConfig().palace_path
+        return CastleConfig().palace_path
     except Exception:
         return os.path.join(os.path.expanduser("~"), ".mempalace", "palace")
 

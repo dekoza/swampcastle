@@ -5,7 +5,7 @@ All ChromaDB access is mocked — no real database needed.
 
 from unittest.mock import MagicMock
 
-from mempalace.palace_graph import (
+from swampcastle.palace_graph import (
     _fuzzy_match,
     build_graph,
     find_tunnels,

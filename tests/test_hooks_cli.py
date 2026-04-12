@@ -6,7 +6,7 @@ from unittest.mock import patch
 
 import pytest
 
-from mempalace.hooks_cli import (
+from swampcastle.hooks_cli import (
     SAVE_INTERVAL,
     STOP_BLOCK_REASON,
     PRECOMPACT_BLOCK_REASON,
@@ -113,9 +113,9 @@ def _capture_hook_output(hook_fn, data, harness="claude-code", state_dir=None):
     import io
 
     buf = io.StringIO()
-    patches = [patch("mempalace.hooks_cli._output", side_effect=lambda d: buf.write(json.dumps(d)))]
+    patches = [patch("swampcastle.hooks_cli._output", side_effect=lambda d: buf.write(json.dumps(d)))]
     if state_dir:
-        patches.append(patch("mempalace.hooks_cli.STATE_DIR", state_dir))
+        patches.append(patch("swampcastle.hooks_cli.STATE_DIR", state_dir))
     with contextlib.ExitStack() as stack:
         for p in patches:
             stack.enter_context(p)
@@ -124,7 +124,7 @@ def _capture_hook_output(hook_fn, data, harness="claude-code", state_dir=None):
 
 
 def test_stop_hook_passthrough_when_active(tmp_path):
-    with patch("mempalace.hooks_cli.STATE_DIR", tmp_path):
+    with patch("swampcastle.hooks_cli.STATE_DIR", tmp_path):
         result = _capture_hook_output(
             hook_stop,
             {"session_id": "test", "stop_hook_active": True, "transcript_path": ""},
@@ -134,7 +134,7 @@ def test_stop_hook_passthrough_when_active(tmp_path):
 
 
 def test_stop_hook_passthrough_when_active_string(tmp_path):
-    with patch("mempalace.hooks_cli.STATE_DIR", tmp_path):
+    with patch("swampcastle.hooks_cli.STATE_DIR", tmp_path):
         result = _capture_hook_output(
             hook_stop,
             {"session_id": "test", "stop_hook_active": "true", "transcript_path": ""},
@@ -218,7 +218,7 @@ def test_precompact_always_blocks(tmp_path):
 
 
 def test_log_writes_to_hook_log(tmp_path):
-    with patch("mempalace.hooks_cli.STATE_DIR", tmp_path):
+    with patch("swampcastle.hooks_cli.STATE_DIR", tmp_path):
         _log("test message")
     log_path = tmp_path / "hook.log"
     assert log_path.is_file()
@@ -228,7 +228,7 @@ def test_log_writes_to_hook_log(tmp_path):
 
 def test_log_oserror_is_silenced(tmp_path):
     """_log should not raise if the directory cannot be created."""
-    with patch("mempalace.hooks_cli.STATE_DIR", Path("/nonexistent/deeply/nested/dir")):
+    with patch("swampcastle.hooks_cli.STATE_DIR", Path("/nonexistent/deeply/nested/dir")):
         # Should not raise
         _log("this will fail silently")
 
@@ -239,7 +239,7 @@ def test_log_oserror_is_silenced(tmp_path):
 def test_maybe_auto_ingest_no_env(tmp_path):
     """Without MEMPAL_DIR set, does nothing."""
     with patch.dict("os.environ", {}, clear=True):
-        with patch("mempalace.hooks_cli.STATE_DIR", tmp_path):
+        with patch("swampcastle.hooks_cli.STATE_DIR", tmp_path):
             _maybe_auto_ingest()  # should not raise
 
 
@@ -248,8 +248,8 @@ def test_maybe_auto_ingest_with_env(tmp_path):
     mempal_dir = tmp_path / "project"
     mempal_dir.mkdir()
     with patch.dict("os.environ", {"MEMPAL_DIR": str(mempal_dir)}):
-        with patch("mempalace.hooks_cli.STATE_DIR", tmp_path):
-            with patch("mempalace.hooks_cli.subprocess.Popen") as mock_popen:
+        with patch("swampcastle.hooks_cli.STATE_DIR", tmp_path):
+            with patch("swampcastle.hooks_cli.subprocess.Popen") as mock_popen:
                 _maybe_auto_ingest()
                 mock_popen.assert_called_once()
 
@@ -259,8 +259,8 @@ def test_maybe_auto_ingest_oserror(tmp_path):
     mempal_dir = tmp_path / "project"
     mempal_dir.mkdir()
     with patch.dict("os.environ", {"MEMPAL_DIR": str(mempal_dir)}):
-        with patch("mempalace.hooks_cli.STATE_DIR", tmp_path):
-            with patch("mempalace.hooks_cli.subprocess.Popen", side_effect=OSError("fail")):
+        with patch("swampcastle.hooks_cli.STATE_DIR", tmp_path):
+            with patch("swampcastle.hooks_cli.subprocess.Popen", side_effect=OSError("fail")):
                 _maybe_auto_ingest()  # should not raise
 
 
@@ -314,7 +314,7 @@ def test_stop_hook_oserror_on_write(tmp_path):
     def bad_write_text(*args, **kwargs):
         raise OSError("disk full")
 
-    with patch("mempalace.hooks_cli.STATE_DIR", tmp_path):
+    with patch("swampcastle.hooks_cli.STATE_DIR", tmp_path):
         with patch.object(Path, "write_text", bad_write_text):
             result = _capture_hook_output(
                 hook_stop,
@@ -336,7 +336,7 @@ def test_precompact_with_mempal_dir(tmp_path):
     mempal_dir = tmp_path / "project"
     mempal_dir.mkdir()
     with patch.dict("os.environ", {"MEMPAL_DIR": str(mempal_dir)}):
-        with patch("mempalace.hooks_cli.subprocess.run") as mock_run:
+        with patch("swampcastle.hooks_cli.subprocess.run") as mock_run:
             result = _capture_hook_output(
                 hook_precompact,
                 {"session_id": "test"},
@@ -351,7 +351,7 @@ def test_precompact_with_mempal_dir_oserror(tmp_path):
     mempal_dir = tmp_path / "project"
     mempal_dir.mkdir()
     with patch.dict("os.environ", {"MEMPAL_DIR": str(mempal_dir)}):
-        with patch("mempalace.hooks_cli.subprocess.run", side_effect=OSError("fail")):
+        with patch("swampcastle.hooks_cli.subprocess.run", side_effect=OSError("fail")):
             result = _capture_hook_output(
                 hook_precompact,
                 {"session_id": "test"},
@@ -367,8 +367,8 @@ def test_run_hook_dispatches_session_start(tmp_path):
     """run_hook reads stdin JSON and dispatches to correct handler."""
     stdin_data = json.dumps({"session_id": "run-test"})
     with patch("sys.stdin", io.StringIO(stdin_data)):
-        with patch("mempalace.hooks_cli.STATE_DIR", tmp_path):
-            with patch("mempalace.hooks_cli._output") as mock_output:
+        with patch("swampcastle.hooks_cli.STATE_DIR", tmp_path):
+            with patch("swampcastle.hooks_cli._output") as mock_output:
                 run_hook("session-start", "claude-code")
     mock_output.assert_called_once_with({})
 
@@ -386,8 +386,8 @@ def test_run_hook_dispatches_stop(tmp_path):
         }
     )
     with patch("sys.stdin", io.StringIO(stdin_data)):
-        with patch("mempalace.hooks_cli.STATE_DIR", tmp_path):
-            with patch("mempalace.hooks_cli._output") as mock_output:
+        with patch("swampcastle.hooks_cli.STATE_DIR", tmp_path):
+            with patch("swampcastle.hooks_cli._output") as mock_output:
                 run_hook("stop", "claude-code")
     mock_output.assert_called_once_with({})
 
@@ -395,8 +395,8 @@ def test_run_hook_dispatches_stop(tmp_path):
 def test_run_hook_dispatches_precompact(tmp_path):
     stdin_data = json.dumps({"session_id": "run-test"})
     with patch("sys.stdin", io.StringIO(stdin_data)):
-        with patch("mempalace.hooks_cli.STATE_DIR", tmp_path):
-            with patch("mempalace.hooks_cli._output") as mock_output:
+        with patch("swampcastle.hooks_cli.STATE_DIR", tmp_path):
+            with patch("swampcastle.hooks_cli._output") as mock_output:
                 run_hook("precompact", "claude-code")
     mock_output.assert_called_once()
     call_args = mock_output.call_args[0][0]
@@ -414,7 +414,7 @@ def test_run_hook_unknown_hook():
 def test_run_hook_invalid_json(tmp_path):
     """Invalid stdin JSON should not crash — falls back to empty dict."""
     with patch("sys.stdin", io.StringIO("not valid json")):
-        with patch("mempalace.hooks_cli.STATE_DIR", tmp_path):
-            with patch("mempalace.hooks_cli._output") as mock_output:
+        with patch("swampcastle.hooks_cli.STATE_DIR", tmp_path):
+            with patch("swampcastle.hooks_cli._output") as mock_output:
                 run_hook("session-start", "claude-code")
     mock_output.assert_called_once_with({})

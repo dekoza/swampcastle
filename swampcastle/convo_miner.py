@@ -375,6 +375,6 @@ if __name__ == "__main__":
     if len(sys.argv) < 2:
         print("Usage: python convo_miner.py <convo_dir> [--palace PATH] [--limit N] [--dry-run]")
         sys.exit(1)
-    from .config import MempalaceConfig
+    from .config import CastleConfig
 
-    mine_convos(sys.argv[1], palace_path=MempalaceConfig().palace_path)
+    mine_convos(sys.argv[1], palace_path=CastleConfig().palace_path)

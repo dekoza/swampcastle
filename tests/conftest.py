@@ -16,7 +16,7 @@ import tempfile
 
 # ── Isolate HOME before any mempalace imports ──────────────────────────
 _original_env = {}
-_session_tmp = tempfile.mkdtemp(prefix="mempalace_session_")
+_session_tmp = tempfile.mkdtemp(prefix="swampcastle_session_")
 
 for _var in ("HOME", "USERPROFILE", "HOMEDRIVE", "HOMEPATH"):
     _original_env[_var] = os.environ.get(_var)
@@ -26,12 +26,12 @@ os.environ["USERPROFILE"] = _session_tmp
 os.environ["HOMEDRIVE"] = os.path.splitdrive(_session_tmp)[0] or "C:"
 os.environ["HOMEPATH"] = os.path.splitdrive(_session_tmp)[1] or _session_tmp
 
-# Now it is safe to import mempalace modules that trigger initialisation.
-from mempalace.palace import get_collection as _get_collection  # noqa: E402
+# Now it is safe to import swampcastle modules that trigger initialisation.
+from swampcastle.palace import get_collection as _get_collection  # noqa: E402
 import pytest  # noqa: E402
 
-from mempalace.config import MempalaceConfig  # noqa: E402
-from mempalace.knowledge_graph import KnowledgeGraph  # noqa: E402
+from swampcastle.config import CastleConfig  # noqa: E402
+from swampcastle.knowledge_graph import KnowledgeGraph  # noqa: E402
 
 
 @pytest.fixture(autouse=True)
@@ -40,7 +40,7 @@ def _reset_mcp_cache():
 
     def _clear_cache():
         try:
-            from mempalace import mcp_server
+            from swampcastle import mcp_server
 
             mcp_server._client_cache = None
             mcp_server._collection_cache = None
@@ -72,7 +72,7 @@ def _isolate_home():
 @pytest.fixture
 def tmp_dir():
     """Create and auto-cleanup a temporary directory."""
-    d = tempfile.mkdtemp(prefix="mempalace_test_")
+    d = tempfile.mkdtemp(prefix="swampcastle_test_")
     yield d
     shutil.rmtree(d, ignore_errors=True)
 
@@ -87,14 +87,14 @@ def palace_path(tmp_dir):
 
 @pytest.fixture
 def config(tmp_dir, palace_path):
-    """A MempalaceConfig pointing at the temp palace."""
+    """A CastleConfig pointing at the temp palace."""
     cfg_dir = os.path.join(tmp_dir, "config")
     os.makedirs(cfg_dir)
     import json
 
     with open(os.path.join(cfg_dir, "config.json"), "w") as f:
         json.dump({"palace_path": palace_path}, f)
-    return MempalaceConfig(config_dir=cfg_dir)
+    return CastleConfig(config_dir=cfg_dir)
 
 
 @pytest.fixture

@@ -37,7 +37,7 @@ SKIP_DIRS = {
 
 
 def get_collection(
-    palace_path: str, collection_name: str = "mempalace_drawers", backend: str = None, embedder=None
+    palace_path: str, collection_name: str = "swampcastle_chests", backend: str = None, embedder=None
 ):
     """Get or create the palace collection.
 
@@ -46,8 +46,8 @@ def get_collection(
     config, then falls back to auto-detection from existing data.
     """
     if backend is None:
-        from .config import MempalaceConfig
-        configured = MempalaceConfig().backend
+        from .config import CastleConfig
+        configured = CastleConfig().backend
         if configured:
             backend = configured
 

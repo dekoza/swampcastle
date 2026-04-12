@@ -96,7 +96,7 @@ def _output(data: dict):
 
 
 def _maybe_auto_ingest():
-    """If MEMPAL_DIR is set and exists, run mempalace mine in background."""
+    """If MEMPAL_DIR is set and exists, run swampcastle gather in background."""
     mempal_dir = os.environ.get("MEMPAL_DIR", "")
     if mempal_dir and os.path.isdir(mempal_dir):
         try:

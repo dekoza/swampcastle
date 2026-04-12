@@ -7,7 +7,7 @@ timeline, stats, and edge cases (duplicate triples, ID collisions).
 
 import os
 
-from mempalace.knowledge_graph import KnowledgeGraph
+from swampcastle.knowledge_graph import KnowledgeGraph
 
 
 class TestEntityOperations:

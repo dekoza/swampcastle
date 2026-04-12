@@ -3,7 +3,7 @@
 import os
 from unittest.mock import patch
 
-from mempalace.entity_detector import (
+from swampcastle.entity_detector import (
     PROSE_EXTENSIONS,
     STOPWORDS,
     _print_entity_list,

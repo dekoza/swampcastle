@@ -2,7 +2,7 @@
 
 from unittest.mock import MagicMock, patch
 
-from mempalace.room_detector_local import (
+from swampcastle.room_detector_local import (
     FOLDER_ROOM_MAP,
     detect_rooms_from_files,
     detect_rooms_from_folders,
@@ -142,7 +142,7 @@ def test_save_config_creates_yaml(tmp_path):
         {"name": "backend", "description": "Server files", "keywords": ["backend"]},
     ]
     save_config(str(tmp_path), "myproject", rooms)
-    config_file = tmp_path / "mempalace.yaml"
+    config_file = tmp_path / "swampcastle.yaml"
     assert config_file.exists()
     content = config_file.read_text()
     assert "myproject" in content
@@ -155,7 +155,7 @@ def test_save_config_valid_yaml(tmp_path):
 
     rooms = [{"name": "general", "description": "All files", "keywords": []}]
     save_config(str(tmp_path), "test_proj", rooms)
-    config_file = tmp_path / "mempalace.yaml"
+    config_file = tmp_path / "swampcastle.yaml"
     data = yaml.safe_load(config_file.read_text())
     assert data["wing"] == "test_proj"
     assert len(data["rooms"]) == 1
@@ -224,9 +224,9 @@ def test_detect_rooms_local_yes_mode(tmp_path):
     (tmp_path / "docs" / "readme.md").write_text("hello")
     mock_miner = MagicMock()
     mock_miner.scan_project.return_value = ["file1.py"]
-    with patch.dict("sys.modules", {"mempalace.miner": mock_miner}):
+    with patch.dict("sys.modules", {"swampcastle.miner": mock_miner}):
         detect_rooms_local(str(tmp_path), yes=True)
-    assert (tmp_path / "mempalace.yaml").exists()
+    assert (tmp_path / "swampcastle.yaml").exists()
 
 
 def test_detect_rooms_local_fallback_to_files(tmp_path):
@@ -235,9 +235,9 @@ def test_detect_rooms_local_fallback_to_files(tmp_path):
         (tmp_path / f"test_file_{i}.py").write_text("content")
     mock_miner = MagicMock()
     mock_miner.scan_project.return_value = ["f1", "f2"]
-    with patch.dict("sys.modules", {"mempalace.miner": mock_miner}):
+    with patch.dict("sys.modules", {"swampcastle.miner": mock_miner}):
         detect_rooms_local(str(tmp_path), yes=True)
-    assert (tmp_path / "mempalace.yaml").exists()
+    assert (tmp_path / "swampcastle.yaml").exists()
 
 
 def test_detect_rooms_local_missing_dir():
@@ -254,11 +254,11 @@ def test_detect_rooms_local_interactive(tmp_path):
     mock_miner = MagicMock()
     mock_miner.scan_project.return_value = ["f1"]
     with (
-        patch.dict("sys.modules", {"mempalace.miner": mock_miner}),
+        patch.dict("sys.modules", {"swampcastle.miner": mock_miner}),
         patch(
-            "mempalace.room_detector_local.get_user_approval",
+            "swampcastle.room_detector_local.get_user_approval",
             return_value=[{"name": "general", "description": "All files", "keywords": []}],
         ),
     ):
         detect_rooms_local(str(tmp_path), yes=False)
-    assert (tmp_path / "mempalace.yaml").exists()
+    assert (tmp_path / "swampcastle.yaml").exists()

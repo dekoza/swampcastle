@@ -1,6 +1,6 @@
 """Unit tests for convo_miner pure functions (no chromadb needed)."""
 
-from mempalace.convo_miner import (
+from swampcastle.convo_miner import (
     chunk_exchanges,
     detect_convo_room,
     scan_convos,

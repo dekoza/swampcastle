@@ -104,7 +104,7 @@ SwampCastle is most useful when your AI assistant can access it directly via MCP
 claude mcp add swampcastle -- python -m swampcastle.drawbridge
 ```
 
-Restart Claude Code, then ask it anything about your past work. It calls `mempalace_search` automatically.
+Restart Claude Code, then ask it anything about your past work. It calls `swampcastle_search` automatically.
 
 ### Gemini CLI
 

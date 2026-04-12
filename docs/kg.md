@@ -156,11 +156,11 @@ The knowledge graph is also accessible via MCP:
 
 | Tool | Maps to |
 |------|---------|
-| `mempalace_kg_query` | `query_entity()` |
-| `mempalace_kg_add` | `add_triple()` |
-| `mempalace_kg_invalidate` | `invalidate()` |
-| `mempalace_kg_timeline` | `timeline()` |
-| `mempalace_kg_stats` | `stats()` |
+| `swampcastle_kg_query` | `query_entity()` |
+| `swampcastle_kg_add` | `add_triple()` |
+| `swampcastle_kg_invalidate` | `invalidate()` |
+| `swampcastle_kg_timeline` | `timeline()` |
+| `swampcastle_kg_stats` | `stats()` |
 
 See [mcp.md](mcp.md) for parameter details.
 

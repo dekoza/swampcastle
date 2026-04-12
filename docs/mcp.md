@@ -47,24 +47,24 @@ Prints the `claude mcp add` command with the correct path.
 
 ## Memory protocol
 
-On first connection, the AI assistant should call `mempalace_status`. The response includes a protocol specification that instructs the AI how to use the memory system:
+On first connection, the AI assistant should call `swampcastle_status`. The response includes a protocol specification that instructs the AI how to use the memory system:
 
-1. **On wake-up:** call `mempalace_status` to load the palace overview.
-2. **Before responding about any person, project, or past event:** call `mempalace_kg_query` or `mempalace_search` first. Verify, don't guess.
-3. **After each session:** call `mempalace_diary_write` to record what happened.
-4. **When facts change:** call `mempalace_kg_invalidate` on the old fact, `mempalace_kg_add` for the new one.
+1. **On wake-up:** call `swampcastle_status` to load the palace overview.
+2. **Before responding about any person, project, or past event:** call `swampcastle_kg_query` or `swampcastle_search` first. Verify, don't guess.
+3. **After each session:** call `swampcastle_diary_write` to record what happened.
+4. **When facts change:** call `swampcastle_kg_invalidate` on the old fact, `swampcastle_kg_add` for the new one.
 
 ## Tool reference
 
 ### Palace (read)
 
-#### mempalace_status
+#### swampcastle_status
 
 Palace overview: total drawers, wing and room counts, palace path. Also returns the memory protocol and AAAK dialect spec.
 
 **Parameters:** none
 
-#### mempalace_list_wings
+#### swampcastle_list_wings
 
 List all wings with their drawer counts.
 
@@ -72,7 +72,7 @@ List all wings with their drawer counts.
 
 **Returns:** `{"wings": {"wing_myapp": 142, "wing_kai": 87, ...}}`
 
-#### mempalace_list_rooms
+#### swampcastle_list_rooms
 
 List rooms, optionally filtered by wing.
 
@@ -80,7 +80,7 @@ List rooms, optionally filtered by wing.
 |-----------|------|----------|-------------|
 | `wing` | string | no | Filter to rooms in this wing |
 
-#### mempalace_get_taxonomy
+#### swampcastle_get_taxonomy
 
 Full wing → room → drawer count tree.
 
@@ -88,7 +88,7 @@ Full wing → room → drawer count tree.
 
 **Returns:** `{"taxonomy": {"wing_myapp": {"auth": 12, "billing": 8}, ...}}`
 
-#### mempalace_search
+#### swampcastle_search
 
 Semantic search across the palace. Returns verbatim text with similarity scores.
 
@@ -102,7 +102,7 @@ Semantic search across the palace. Returns verbatim text with similarity scores.
 
 **Important:** The `query` field should contain only the search terms. Do not include system prompts, conversation history, or other context — those degrade search quality. Use the `context` field for background information.
 
-#### mempalace_check_duplicate
+#### swampcastle_check_duplicate
 
 Check if content already exists before filing.
 
@@ -113,7 +113,7 @@ Check if content already exists before filing.
 
 **Returns:** `{"is_duplicate": true/false, "matches": [...]}`
 
-#### mempalace_get_aaak_spec
+#### swampcastle_get_aaak_spec
 
 Returns the AAAK dialect specification.
 
@@ -121,7 +121,7 @@ Returns the AAAK dialect specification.
 
 ### Palace (write)
 
-#### mempalace_add_drawer
+#### swampcastle_add_drawer
 
 Store verbatim content in the palace. Uses a deterministic ID (wing + room + content hash), so upserting the same content is a no-op.
 
@@ -137,7 +137,7 @@ All write operations are logged to `~/.swampcastle/wal/write_log.jsonl` for audi
 
 **Returns:** `{"success": true, "drawer_id": "...", "wing": "...", "room": "..."}`
 
-#### mempalace_delete_drawer
+#### swampcastle_delete_drawer
 
 Delete a drawer by ID. Irreversible (but logged in WAL).
 
@@ -147,7 +147,7 @@ Delete a drawer by ID. Irreversible (but logged in WAL).
 
 ### Knowledge graph
 
-#### mempalace_kg_query
+#### swampcastle_kg_query
 
 Query entity relationships with optional time filtering.
 
@@ -157,7 +157,7 @@ Query entity relationships with optional time filtering.
 | `as_of` | string | no | Date filter — only facts valid at this date (YYYY-MM-DD) |
 | `direction` | string | no | `outgoing`, `incoming`, or `both` (default: `both`) |
 
-#### mempalace_kg_add
+#### swampcastle_kg_add
 
 Add a fact to the knowledge graph.
 
@@ -169,7 +169,7 @@ Add a fact to the knowledge graph.
 | `valid_from` | string | no | When this became true (YYYY-MM-DD) |
 | `source_closet` | string | no | Closet ID where this fact appears |
 
-#### mempalace_kg_invalidate
+#### swampcastle_kg_invalidate
 
 Mark a fact as no longer true.
 
@@ -180,7 +180,7 @@ Mark a fact as no longer true.
 | `object` | string | yes | Connected entity |
 | `ended` | string | no | When it stopped being true (YYYY-MM-DD, default: today) |
 
-#### mempalace_kg_timeline
+#### swampcastle_kg_timeline
 
 Chronological timeline of facts, optionally filtered to one entity.
 
@@ -188,7 +188,7 @@ Chronological timeline of facts, optionally filtered to one entity.
 |-----------|------|----------|-------------|
 | `entity` | string | no | Entity to filter by (omit for full timeline) |
 
-#### mempalace_kg_stats
+#### swampcastle_kg_stats
 
 Knowledge graph overview: entity count, triple count, current vs expired facts, relationship types.
 
@@ -196,7 +196,7 @@ Knowledge graph overview: entity count, triple count, current vs expired facts, 
 
 ### Navigation
 
-#### mempalace_traverse
+#### swampcastle_traverse
 
 Walk the palace graph from a starting room. Discovers connected rooms across wings via BFS traversal.
 
@@ -205,7 +205,7 @@ Walk the palace graph from a starting room. Discovers connected rooms across win
 | `start_room` | string | yes | Room to start from (e.g., `auth-migration`) |
 | `max_hops` | integer | no | How many connections to follow (default: 2) |
 
-#### mempalace_find_tunnels
+#### swampcastle_find_tunnels
 
 Find rooms that bridge two wings — topics that appear in both domains.
 
@@ -214,7 +214,7 @@ Find rooms that bridge two wings — topics that appear in both domains.
 | `wing_a` | string | no | First wing |
 | `wing_b` | string | no | Second wing |
 
-#### mempalace_graph_stats
+#### swampcastle_graph_stats
 
 Palace graph overview: total rooms, tunnel connections, rooms per wing.
 
@@ -222,7 +222,7 @@ Palace graph overview: total rooms, tunnel connections, rooms per wing.
 
 ### Agent diary
 
-#### mempalace_diary_write
+#### swampcastle_diary_write
 
 Write a diary entry for an agent. Each agent gets its own wing with a diary room.
 
@@ -232,7 +232,7 @@ Write a diary entry for an agent. Each agent gets its own wing with a diary room
 | `entry` | string | yes | Diary content (AAAK format recommended) |
 | `topic` | string | no | Topic tag (default: `general`) |
 
-#### mempalace_diary_read
+#### swampcastle_diary_read
 
 Read an agent's recent diary entries.
 

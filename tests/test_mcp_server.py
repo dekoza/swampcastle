@@ -92,10 +92,10 @@ class TestHandleRequest:
         resp = handle_request({"method": "tools/list", "id": 2, "params": {}})
         tools = resp["result"]["tools"]
         names = {t["name"] for t in tools}
-        assert "mempalace_status" in names
-        assert "mempalace_search" in names
-        assert "mempalace_add_drawer" in names
-        assert "mempalace_kg_add" in names
+        assert "swampcastle_status" in names
+        assert "swampcastle_search" in names
+        assert "swampcastle_add_drawer" in names
+        assert "swampcastle_kg_add" in names
 
     def test_null_arguments_does_not_hang(self, monkeypatch, config, palace_path, seeded_kg):
         """Sending arguments: null should return a result, not hang (#394)."""
@@ -108,7 +108,7 @@ class TestHandleRequest:
             {
                 "method": "tools/call",
                 "id": 10,
-                "params": {"name": "mempalace_status", "arguments": None},
+                "params": {"name": "swampcastle_status", "arguments": None},
             }
         )
         assert "error" not in resp
@@ -144,7 +144,7 @@ class TestHandleRequest:
             {
                 "method": "tools/call",
                 "id": 5,
-                "params": {"name": "mempalace_status", "arguments": {}},
+                "params": {"name": "swampcastle_status", "arguments": {}},
             }
         )
         assert "result" in resp

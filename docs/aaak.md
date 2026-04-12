@@ -103,9 +103,9 @@ tokens = Dialect.count_tokens(text)
 
 ### MCP
 
-The AAAK spec is automatically included in the `mempalace_status` response so the AI learns it on first connection. It can also be retrieved explicitly via `mempalace_get_aaak_spec`.
+The AAAK spec is automatically included in the `swampcastle_status` response so the AI learns it on first connection. It can also be retrieved explicitly via `swampcastle_get_aaak_spec`.
 
-Agent diary entries (`mempalace_diary_write`) are recommended to be written in AAAK format for compression:
+Agent diary entries (`swampcastle_diary_write`) are recommended to be written in AAAK format for compression:
 
 ```
 SESSION:2026-04-04|built.palace.graph+diary.tools|ALC.req:agent.diaries.in.aaak|★★★

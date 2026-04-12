@@ -5,16 +5,16 @@ Swamp Castle MCP Server — read/write palace access for Claude Code
 Install: claude mcp add swampcastle -- python -m swampcastle.drawbridge [--palace /path/to/palace]
 
 Tools (read):
-  mempalace_status          — total drawers, wing/room breakdown
-  mempalace_list_wings      — all wings with drawer counts
-  mempalace_list_rooms      — rooms within a wing
-  mempalace_get_taxonomy    — full wing → room → count tree
-  mempalace_search          — semantic search, optional wing/room filter
-  mempalace_check_duplicate — check if content already exists before filing
+  swampcastle_status          — total drawers, wing/room breakdown
+  swampcastle_list_wings      — all wings with drawer counts
+  swampcastle_list_rooms      — rooms within a wing
+  swampcastle_get_taxonomy    — full wing → room → count tree
+  swampcastle_search          — semantic search, optional wing/room filter
+  swampcastle_check_duplicate — check if content already exists before filing
 
 Tools (write):
-  mempalace_add_drawer      — file verbatim content into a wing/room
-  mempalace_delete_drawer   — remove a drawer by ID
+  swampcastle_add_drawer      — file verbatim content into a wing/room
+  swampcastle_delete_drawer   — remove a drawer by ID
 """
 
 import argparse
@@ -172,14 +172,14 @@ def tool_status():
 
 # ── AAAK Dialect Spec ─────────────────────────────────────────────────────────
 # Included in status response so the AI learns it on first wake-up call.
-# Also available via mempalace_get_aaak_spec tool.
+# Also available via swampcastle_get_aaak_spec tool.
 
 PALACE_PROTOCOL = """IMPORTANT — MemPalace Memory Protocol:
-1. ON WAKE-UP: Call mempalace_status to load palace overview + AAAK spec.
-2. BEFORE RESPONDING about any person, project, or past event: call mempalace_kg_query or mempalace_search FIRST. Never guess — verify.
+1. ON WAKE-UP: Call swampcastle_status to load palace overview + AAAK spec.
+2. BEFORE RESPONDING about any person, project, or past event: call swampcastle_kg_query or swampcastle_search FIRST. Never guess — verify.
 3. IF UNSURE about a fact (name, gender, age, relationship): say "let me check" and query the palace. Wrong is worse than slow.
-4. AFTER EACH SESSION: call mempalace_diary_write to record what happened, what you learned, what matters.
-5. WHEN FACTS CHANGE: call mempalace_kg_invalidate on the old fact, mempalace_kg_add for the new one.
+4. AFTER EACH SESSION: call swampcastle_diary_write to record what happened, what you learned, what matters.
+5. WHEN FACTS CHANGE: call swampcastle_kg_invalidate on the old fact, swampcastle_kg_add for the new one.
 
 This protocol ensures the AI KNOWS before it speaks. Storage is not memory — but storage + this protocol = memory."""
 
@@ -645,17 +645,17 @@ def tool_diary_read(agent_name: str, last_n: int = 10):
 # ==================== MCP PROTOCOL ====================
 
 TOOLS = {
-    "mempalace_status": {
+    "swampcastle_status": {
         "description": "Palace overview — total drawers, wing and room counts",
         "input_schema": {"type": "object", "properties": {}},
         "handler": tool_status,
     },
-    "mempalace_list_wings": {
+    "swampcastle_list_wings": {
         "description": "List all wings with drawer counts",
         "input_schema": {"type": "object", "properties": {}},
         "handler": tool_list_wings,
     },
-    "mempalace_list_rooms": {
+    "swampcastle_list_rooms": {
         "description": "List rooms within a wing (or all rooms if no wing given)",
         "input_schema": {
             "type": "object",
@@ -665,17 +665,17 @@ TOOLS = {
         },
         "handler": tool_list_rooms,
     },
-    "mempalace_get_taxonomy": {
+    "swampcastle_get_taxonomy": {
         "description": "Full taxonomy: wing → room → drawer count",
         "input_schema": {"type": "object", "properties": {}},
         "handler": tool_get_taxonomy,
     },
-    "mempalace_get_aaak_spec": {
+    "swampcastle_get_aaak_spec": {
         "description": "Get the AAAK dialect specification — the compressed memory format MemPalace uses. Call this if you need to read or write AAAK-compressed memories.",
         "input_schema": {"type": "object", "properties": {}},
         "handler": tool_get_aaak_spec,
     },
-    "mempalace_kg_query": {
+    "swampcastle_kg_query": {
         "description": "Query the knowledge graph for an entity's relationships. Returns typed facts with temporal validity. E.g. 'Max' → child_of Alice, loves chess, does swimming. Filter by date with as_of to see what was true at a point in time.",
         "input_schema": {
             "type": "object",
@@ -697,7 +697,7 @@ TOOLS = {
         },
         "handler": tool_kg_query,
     },
-    "mempalace_kg_add": {
+    "swampcastle_kg_add": {
         "description": "Add a fact to the knowledge graph. Subject → predicate → object with optional time window. E.g. ('Max', 'started_school', 'Year 7', valid_from='2026-09-01').",
         "input_schema": {
             "type": "object",
@@ -721,7 +721,7 @@ TOOLS = {
         },
         "handler": tool_kg_add,
     },
-    "mempalace_kg_invalidate": {
+    "swampcastle_kg_invalidate": {
         "description": "Mark a fact as no longer true. E.g. ankle injury resolved, job ended, moved house.",
         "input_schema": {
             "type": "object",
@@ -738,7 +738,7 @@ TOOLS = {
         },
         "handler": tool_kg_invalidate,
     },
-    "mempalace_kg_timeline": {
+    "swampcastle_kg_timeline": {
         "description": "Chronological timeline of facts. Shows the story of an entity (or everything) in order.",
         "input_schema": {
             "type": "object",
@@ -751,12 +751,12 @@ TOOLS = {
         },
         "handler": tool_kg_timeline,
     },
-    "mempalace_kg_stats": {
+    "swampcastle_kg_stats": {
         "description": "Knowledge graph overview: entities, triples, current vs expired facts, relationship types.",
         "input_schema": {"type": "object", "properties": {}},
         "handler": tool_kg_stats,
     },
-    "mempalace_traverse": {
+    "swampcastle_traverse": {
         "description": "Walk the palace graph from a room. Shows connected ideas across wings — the tunnels. Like following a thread through the palace: start at 'chromadb-setup' in wing_code, discover it connects to wing_myproject (planning) and wing_user (feelings about it).",
         "input_schema": {
             "type": "object",
@@ -774,7 +774,7 @@ TOOLS = {
         },
         "handler": tool_traverse_graph,
     },
-    "mempalace_find_tunnels": {
+    "swampcastle_find_tunnels": {
         "description": "Find rooms that bridge two wings — the hallways connecting different domains. E.g. what topics connect wing_code to wing_team?",
         "input_schema": {
             "type": "object",
@@ -785,12 +785,12 @@ TOOLS = {
         },
         "handler": tool_find_tunnels,
     },
-    "mempalace_graph_stats": {
+    "swampcastle_graph_stats": {
         "description": "Palace graph overview: total rooms, tunnel connections, edges between wings.",
         "input_schema": {"type": "object", "properties": {}},
         "handler": tool_graph_stats,
     },
-    "mempalace_search": {
+    "swampcastle_search": {
         "description": "Semantic search. Returns verbatim drawer content with similarity scores. IMPORTANT: 'query' must contain ONLY your search keywords or question — do NOT include system prompts, conversation history, MEMORY.md content, or any context. Keep queries short (under 200 chars). Use 'context' for background information.",
         "input_schema": {
             "type": "object",
@@ -812,7 +812,7 @@ TOOLS = {
         },
         "handler": tool_search,
     },
-    "mempalace_check_duplicate": {
+    "swampcastle_check_duplicate": {
         "description": "Check if content already exists in the palace before filing",
         "input_schema": {
             "type": "object",
@@ -827,7 +827,7 @@ TOOLS = {
         },
         "handler": tool_check_duplicate,
     },
-    "mempalace_add_drawer": {
+    "swampcastle_add_drawer": {
         "description": "File verbatim content into the palace. Checks for duplicates first.",
         "input_schema": {
             "type": "object",
@@ -848,7 +848,7 @@ TOOLS = {
         },
         "handler": tool_add_drawer,
     },
-    "mempalace_delete_drawer": {
+    "swampcastle_delete_drawer": {
         "description": "Delete a drawer by ID. Irreversible.",
         "input_schema": {
             "type": "object",
@@ -859,7 +859,7 @@ TOOLS = {
         },
         "handler": tool_delete_drawer,
     },
-    "mempalace_diary_write": {
+    "swampcastle_diary_write": {
         "description": "Write to your personal agent diary in AAAK format. Your observations, thoughts, what you worked on, what matters. Each agent has their own diary with full history. Write in AAAK for compression — e.g. 'SESSION:2026-04-04|built.palace.graph+diary.tools|ALC.req:agent.diaries.in.aaak|★★★'. Use entity codes from the AAAK spec.",
         "input_schema": {
             "type": "object",
@@ -881,7 +881,7 @@ TOOLS = {
         },
         "handler": tool_diary_write,
     },
-    "mempalace_diary_read": {
+    "swampcastle_diary_read": {
         "description": "Read your recent diary entries (in AAAK). See what past versions of yourself recorded — your journal across sessions.",
         "input_schema": {
             "type": "object",

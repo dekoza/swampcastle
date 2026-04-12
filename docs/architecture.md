@@ -67,7 +67,7 @@ wing_myapp     / auth-migration  →  "team decided to migrate auth to Clerk"
 wing_priya     / auth-migration  →  "Priya approved Clerk over Auth0"
 ```
 
-Same room, three wings. A tunnel connects them. Use `mempalace_find_tunnels` or `mempalace_traverse` to navigate these connections.
+Same room, three wings. A tunnel connects them. Use `swampcastle_find_tunnels` or `swampcastle_traverse` to navigate these connections.
 
 Tunnels are not stored explicitly — they're computed from shared room names across wings using the palace graph module (`palace_graph.py`).
 
@@ -100,11 +100,11 @@ Wing/room-filtered retrieval from ChromaDB. Loaded when a specific topic comes u
 
 ### L3 — Deep search (unlimited)
 
-Full semantic search against the entire palace. Used when the user explicitly asks a question. This is the `mempalace_search` tool.
+Full semantic search against the entire palace. Used when the user explicitly asks a question. This is the `swampcastle_search` tool.
 
 ### Wake-up flow
 
-When an AI session starts, it calls `mempalace_status` (via MCP) or `swampcastle wake-up` (via CLI), which loads L0 + L1. L2 and L3 fire on demand during the conversation.
+When an AI session starts, it calls `swampcastle_status` (via MCP) or `swampcastle wake-up` (via CLI), which loads L0 + L1. L2 and L3 fire on demand during the conversation.
 
 ```
 Session start → L0 + L1 loaded (~600-900 tokens)

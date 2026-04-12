@@ -116,15 +116,15 @@ Filtering by wing + room yields up to +34% retrieval improvement over unfiltered
 
 19 tools via [MCP](https://modelcontextprotocol.io/). Once connected, your AI reads, writes, and searches the palace without manual commands.
 
-**Read:** `mempalace_status`, `mempalace_search`, `mempalace_list_wings`, `mempalace_list_rooms`, `mempalace_get_taxonomy`, `mempalace_check_duplicate`, `mempalace_get_aaak_spec`
+**Read:** `swampcastle_status`, `swampcastle_search`, `swampcastle_list_wings`, `swampcastle_list_rooms`, `swampcastle_get_taxonomy`, `swampcastle_check_duplicate`, `swampcastle_get_aaak_spec`
 
-**Write:** `mempalace_add_drawer`, `mempalace_delete_drawer`
+**Write:** `swampcastle_add_drawer`, `swampcastle_delete_drawer`
 
-**Knowledge graph:** `mempalace_kg_query`, `mempalace_kg_add`, `mempalace_kg_invalidate`, `mempalace_kg_timeline`, `mempalace_kg_stats`
+**Knowledge graph:** `swampcastle_kg_query`, `swampcastle_kg_add`, `swampcastle_kg_invalidate`, `swampcastle_kg_timeline`, `swampcastle_kg_stats`
 
-**Navigation:** `mempalace_traverse`, `mempalace_find_tunnels`, `mempalace_graph_stats`
+**Navigation:** `swampcastle_traverse`, `swampcastle_find_tunnels`, `swampcastle_graph_stats`
 
-**Agent diary:** `mempalace_diary_write`, `mempalace_diary_read`
+**Agent diary:** `swampcastle_diary_write`, `swampcastle_diary_read`
 
 → Full tool reference: [docs/mcp.md](docs/mcp.md)
 

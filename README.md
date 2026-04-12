@@ -4,6 +4,8 @@
 
 # SwampCastle
 
+Built on ruins of [MemPalace](https://github.com/MemPalace/mempalace). And since MemPalace was first public version was v3, it clearly indicates that v1 and v2 sank. v3 burned down under scrutiny, collapsed, and than sank.
+
 **The fourth one stayed up.**
 
 Persistent, searchable memory for AI assistants. Local. Free. No API key.
@@ -11,7 +13,6 @@ Persistent, searchable memory for AI assistants. Local. Free. No API key.
 [![][version-shield]][release-link]
 [![][python-shield]][python-link]
 [![][license-shield]][license-link]
-[![][discord-shield]][discord-link]
 
 </div>
 
@@ -205,5 +206,3 @@ MIT — see [LICENSE](LICENSE).
 [python-link]: https://www.python.org/
 [license-shield]: https://img.shields.io/badge/license-MIT-b0e8ff?style=flat-square&labelColor=0a0e14
 [license-link]: https://github.com/dekoza/swampcastle/blob/main/LICENSE
-[discord-shield]: https://img.shields.io/badge/discord-join-5865F2?style=flat-square&labelColor=0a0e14&logo=discord&logoColor=5865F2
-[discord-link]: https://discord.com/invite/ycTQQCu6kn

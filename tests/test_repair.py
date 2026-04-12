@@ -1,4 +1,4 @@
-"""Tests for mempalace.repair — scan, prune, and rebuild HNSW index."""
+"""Tests for swampcastle.repair — scan, prune, and rebuild HNSW index."""
 
 import os
 from unittest.mock import MagicMock, patch
@@ -21,9 +21,9 @@ def test_get_palace_path_from_config(mock_config_cls):
 
 def test_get_palace_path_fallback():
     with patch("swampcastle.repair._get_palace_path") as mock_get:
-        mock_get.return_value = os.path.join(os.path.expanduser("~"), ".mempalace", "palace")
+        mock_get.return_value = os.path.join(os.path.expanduser("~"), ".swampcastle", "palace")
         result = mock_get()
-        assert ".mempalace" in result
+        assert ".swampcastle" in result
 
 
 # ── _paginate_ids ─────────────────────────────────────────────────────
@@ -245,9 +245,9 @@ def test_rebuild_index_success(mock_chromadb, mock_shutil, tmp_path):
     assert "chroma.sqlite3" in str(mock_shutil.copy2.call_args)
 
     # Verify: deleted and recreated with cosine
-    mock_client.delete_collection.assert_called_once_with("mempalace_drawers")
+    mock_client.delete_collection.assert_called_once_with("swampcastle_chests")
     mock_client.create_collection.assert_called_once_with(
-        "mempalace_drawers", metadata={"hnsw:space": "cosine"}
+        "swampcastle_chests", metadata={"hnsw:space": "cosine"}
     )
 
     # Verify: used upsert not add

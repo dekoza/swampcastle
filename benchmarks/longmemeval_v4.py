@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-longmemeval_v4.py — LongMemEval benchmark for MemPalace v4.0
+longmemeval_v4.py — LongMemEval benchmark for SwampCastle v4.0
 ==============================================================
 
 Runs the same LongMemEval benchmark as the original longmemeval_bench.py but
@@ -58,8 +58,8 @@ def ndcg(rankings, correct_ids, corpus_ids, k):
 
 def _make_lance_collection(embedder_name="all-MiniLM-L6-v2"):
     """Create a fresh ephemeral LanceDB collection."""
-    from mempalace.embeddings import get_embedder
-    from mempalace.db import LanceCollection
+    from swampcastle.embeddings import get_embedder
+    from swampcastle.db import LanceCollection
     import lancedb
 
     tmpdir = tempfile.mkdtemp()
@@ -232,7 +232,7 @@ def run_benchmark(data_file, modes, limit=0, out_file=None, embedder=None):
         data = data[:limit]
 
     print(f"\n{'=' * 70}")
-    print("  MemPalace LongMemEval Benchmark (v4)")
+    print("  SwampCastle LongMemEval Benchmark (v4)")
     print(f"{'=' * 70}")
     print(f"  Questions:  {len(data)}")
     print(f"  Modes:      {', '.join(modes)}")
@@ -323,7 +323,7 @@ MODE_PRESETS = {
 
 
 def main():
-    parser = argparse.ArgumentParser(description="MemPalace v4 LongMemEval Benchmark")
+    parser = argparse.ArgumentParser(description="SwampCastle v4 LongMemEval Benchmark")
     parser.add_argument("data_file", help="Path to longmemeval_s_cleaned.json")
     parser.add_argument(
         "--mode",

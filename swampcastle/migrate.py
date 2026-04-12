@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-mempalace migrate — Recover a palace created with a different ChromaDB version.
+swampcastle migrate — Recover a palace created with a different ChromaDB version.
 
 Reads documents and metadata directly from the palace's SQLite database
 (bypassing ChromaDB's API, which fails on version-mismatched palaces),
@@ -11,9 +11,9 @@ This fixes the 3.0.0 → 3.1.0 upgrade path where chromadb was downgraded
 from 1.5.x to 0.6.x, breaking the on-disk storage format.
 
 Usage:
-    mempalace migrate                          # migrate default palace
-    mempalace migrate --palace /path/to/palace  # migrate specific palace
-    mempalace migrate --dry-run                # show what would be migrated
+    swampcastle migrate                          # migrate default palace
+    swampcastle migrate --palace /path/to/palace  # migrate specific palace
+    swampcastle migrate --dry-run                # show what would be migrated
 """
 
 import os
@@ -116,7 +116,7 @@ def migrate(palace_path: str, dry_run: bool = False):
         return False
 
     print(f"\n{'=' * 60}")
-    print("  MemPalace Migrate")
+    print("  SwampCastle Migrate")
     print(f"{'=' * 60}\n")
     print(f"  Palace:    {palace_path}")
     print(f"  Database:  {db_path}")
@@ -130,7 +130,7 @@ def migrate(palace_path: str, dry_run: bool = False):
     # Try reading with current chromadb first
     try:
         client = chromadb.PersistentClient(path=palace_path)
-        col = client.get_collection("mempalace_drawers")
+        col = client.get_collection("swampcastle_chests")
         count = col.count()
         print(f"\n  Palace is already readable by chromadb {chromadb.__version__}.")
         print(f"  {count} drawers found. No migration needed.")
@@ -175,10 +175,10 @@ def migrate(palace_path: str, dry_run: bool = False):
     # Build fresh palace in a temp directory (avoids chromadb reading old state)
     import tempfile
 
-    temp_palace = tempfile.mkdtemp(prefix="mempalace_migrate_")
+    temp_palace = tempfile.mkdtemp(prefix="swampcastle_migrate_")
     print(f"  Creating fresh palace in {temp_palace}...")
     client = chromadb.PersistentClient(path=temp_palace)
-    col = client.get_or_create_collection("mempalace_drawers")
+    col = client.get_or_create_collection("swampcastle_chests")
 
     # Re-import in batches
     batch_size = 500

@@ -1,13 +1,13 @@
-# MemPalace Upgrade Plan
+# SwampCastle Upgrade Plan
 
 ## Status
 
 | Phase | Description | Status |
 |-------|-------------|--------|
 | **Phase 1** | Database abstraction + LanceDB backend | ✅ Done |
-| **Phase 2** | Pluggable vectorizers + `mempalace reindex` | ✅ Done |
+| **Phase 2** | Pluggable vectorizers + `swampcastle reindex` | ✅ Done |
 | **Phase 3** | Sync metadata in all writes (`node_id`, `seq`, `updated_at`) | ✅ Done |
-| **Phase 4** | Sync engine + server + `mempalace serve/sync` CLI | ✅ Done |
+| **Phase 4** | Sync engine + server + `swampcastle serve/sync` CLI | ✅ Done |
 | **Phase 5** | Unify knowledge graph into LanceDB tables | ✅ Done |
 | **Phase 6** | Benchmarks — LongMemEval comparison across backends | ✅ Done |
 
@@ -17,24 +17,24 @@
 
 **Completed.** Replaced ChromaDB as default with LanceDB. Created `db.py` abstraction
 layer (`LanceCollection` / `ChromaCollection`) with identical API. All 534 tests pass.
-Added `mempalace migrate` CLI command for ChromaDB → LanceDB migration.
+Added `swampcastle migrate` CLI command for ChromaDB → LanceDB migration.
 
-Files: `mempalace/db.py`, `mempalace/embeddings.py`, updated all consumers.
+Files: `swampcastle/db.py`, `swampcastle/embeddings.py`, updated all consumers.
 
 ---
 
 ## Phase 2 — Pluggable Vectorizers ✅
 
 **Completed.** Added `OllamaEmbedder` for GPU server usage, model aliases
-(`bge-small`, `nomic`, etc.), `mempalace reindex` to re-embed with a different
-model, `mempalace embedders` to list options, and `embedding_model` tracking
+(`bge-small`, `nomic`, etc.), `swampcastle reindex` to re-embed with a different
+model, `swampcastle embedders` to list options, and `embedding_model` tracking
 in every record's metadata. 552 tests pass.
 
 ### Goal
 
 Make the embedding model explicit and swappable. The `SentenceTransformerEmbedder`
 in `embeddings.py` already accepts any model name — Phase 2 adds dedicated backends
-for models that need different loading paths (Ollama, ONNX) and a `mempalace reindex`
+for models that need different loading paths (Ollama, ONNX) and a `swampcastle reindex`
 command to re-embed all drawers when the user changes model.
 
 ### Embedder backends to implement
@@ -63,7 +63,7 @@ command to re-embed all drawers when the user changes model.
 }
 ```
 
-### `mempalace reindex`
+### `swampcastle reindex`
 
 When the user changes vectorizer, existing embeddings are invalid.
 
@@ -77,7 +77,7 @@ When the user changes vectorizer, existing embeddings are invalid.
 
 Every record's `metadata_json` gains an `embedding_model` field. On `query()`,
 if the stored model differs from the active embedder, log a warning and suggest
-`mempalace reindex`.
+`swampcastle reindex`.
 
 ---
 
@@ -98,8 +98,8 @@ write operation:
 
 ### Implementation
 
-- **`~/.mempalace/node_id`** — generated once with `uuid4().hex[:12]`, persisted.
-- **Sequence counter** — stored in `~/.mempalace/seq` (atomic int file).  Incremented
+- **`~/.swampcastle/node_id`** — generated once with `uuid4().hex[:12]`, persisted.
+- **Sequence counter** — stored in `~/.swampcastle/seq` (atomic int file).  Incremented
   on every `upsert`/`add`/`delete`.
 - **`updated_at`** — ISO 8601 UTC timestamp, set at write time.
 - **Tombstones** — `delete()` doesn't remove rows, it sets `tombstone=true` +
@@ -108,9 +108,9 @@ write operation:
 
 ### Files to change
 
-- `mempalace/sync_meta.py` — new: `NodeIdentity` class, seq counter, metadata injector
-- `mempalace/db.py` — `LanceCollection.upsert/add/delete` inject sync metadata
-- `mempalace/config.py` — `node_id` property
+- `swampcastle/sync_meta.py` — new: `NodeIdentity` class, seq counter, metadata injector
+- `swampcastle/db.py` — `LanceCollection.upsert/add/delete` inject sync metadata
+- `swampcastle/config.py` — `node_id` property
 - LanceDB schema gains: `node_id: string`, `seq: int64`, `updated_at: string`,
   `tombstone: bool`
 
@@ -192,18 +192,18 @@ Two options:
 
 ```bash
 # Server
-mempalace serve --host 0.0.0.0 --port 7433
+swampcastle serve --host 0.0.0.0 --port 7433
 
 # Laptop
-mempalace sync --server https://homeserver:7433
-mempalace sync --server https://homeserver:7433 --auto   # every 5 min when reachable
+swampcastle sync --server https://homeserver:7433
+swampcastle sync --server https://homeserver:7433 --auto   # every 5 min when reachable
 ```
 
 ### Files
 
-- `mempalace/sync.py` — `SyncEngine`: `get_changes_since()`, `apply_changes()`, `get_version_vector()`
-- `mempalace/sync_server.py` — FastAPI app with `/sync/push`, `/sync/pull`, `/sync/status`
-- `mempalace/cli.py` — `mempalace serve`, `mempalace sync` commands
+- `swampcastle/sync.py` — `SyncEngine`: `get_changes_since()`, `apply_changes()`, `get_version_vector()`
+- `swampcastle/sync_server.py` — FastAPI app with `/sync/push`, `/sync/pull`, `/sync/status`
+- `swampcastle/cli.py` — `swampcastle serve`, `swampcastle sync` commands
 
 ### Dependencies
 
@@ -255,14 +255,14 @@ Table: kg_triples
 
 ### Migration
 
-`mempalace migrate-kg` reads all entities + triples from SQLite, writes to LanceDB.
+`swampcastle migrate-kg` reads all entities + triples from SQLite, writes to LanceDB.
 KG triples don't need embeddings (they're queried by subject/predicate, not by
 vector similarity), so the tables have no vector column.
 
 ### Files
 
-- `mempalace/knowledge_graph.py` — rewrite to use LanceDB tables via `db.py`
-- `mempalace/cli.py` — `mempalace migrate-kg` command
+- `swampcastle/knowledge_graph.py` — rewrite to use LanceDB tables via `db.py`
+- `swampcastle/cli.py` — `swampcastle migrate-kg` command
 
 ---
 

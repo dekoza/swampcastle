@@ -17,14 +17,14 @@ The rebuild backs up ONLY chroma.sqlite3 (the source of truth), not the
 full palace directory — so it works even when link_lists.bin is bloated.
 
 Usage (standalone):
-    python -m mempalace.repair scan [--wing X]
-    python -m mempalace.repair prune --confirm
-    python -m mempalace.repair rebuild
+    python -m swampcastle.repair scan [--wing X]
+    python -m swampcastle.repair prune --confirm
+    python -m swampcastle.repair rebuild
 
 Usage (from CLI):
-    mempalace repair
-    mempalace repair-scan [--wing X]
-    mempalace repair-prune --confirm
+    swampcastle repair
+    swampcastle repair-scan [--wing X]
+    swampcastle repair-prune --confirm
 """
 
 import argparse
@@ -35,7 +35,7 @@ import time
 import chromadb
 
 
-COLLECTION_NAME = "mempalace_drawers"
+COLLECTION_NAME = "swampcastle_chests"
 
 
 def _get_palace_path():
@@ -45,7 +45,7 @@ def _get_palace_path():
 
         return CastleConfig().palace_path
     except Exception:
-        default = os.path.join(os.path.expanduser("~"), ".mempalace", "palace")
+        default = os.path.join(os.path.expanduser("~"), ".swampcastle", "palace")
         return default
 
 
@@ -218,7 +218,7 @@ def rebuild_index(palace_path=None):
         return
 
     print(f"\n{'=' * 55}")
-    print("  MemPalace Repair — Index Rebuild")
+    print("  SwampCastle Repair — Index Rebuild")
     print(f"{'=' * 55}\n")
     print(f"  Palace: {palace_path}")
 
@@ -282,7 +282,7 @@ def rebuild_index(palace_path=None):
 
 
 if __name__ == "__main__":
-    p = argparse.ArgumentParser(description="MemPalace repair tools")
+    p = argparse.ArgumentParser(description="SwampCastle repair tools")
     p.add_argument("command", choices=["scan", "prune", "rebuild"])
     p.add_argument("--palace", default=None, help="Palace directory path")
     p.add_argument("--wing", default=None, help="Scan only this wing")

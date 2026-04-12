@@ -1,6 +1,6 @@
 # AGENTS.md
 
-> How to build, test, and contribute to MemPalace.
+> How to build, test, and contribute to SwampCastle.
 
 ## Setup
 
@@ -15,7 +15,7 @@ pip install -e ".[dev]"
 python -m pytest tests/ -v --ignore=tests/benchmarks
 
 # Run tests with coverage
-python -m pytest tests/ -v --ignore=tests/benchmarks --cov=mempalace --cov-report=term-missing
+python -m pytest tests/ -v --ignore=tests/benchmarks --cov=swampcastle --cov-report=term-missing
 
 # Lint
 ruff check .
@@ -30,7 +30,7 @@ ruff format --check .
 ## Project structure
 
 ```
-mempalace/
+swampcastle/
 ├── mcp_server.py        # MCP server — all read/write tools
 ├── miner.py             # Project file miner
 ├── convo_miner.py       # Conversation transcript miner
@@ -71,8 +71,8 @@ Knowledge Graph:
 
 ## Key files for common tasks
 
-- **Adding an MCP tool**: `mempalace/mcp_server.py` — add handler function + TOOLS dict entry
-- **Changing search**: `mempalace/searcher.py`
-- **Modifying mining**: `mempalace/miner.py` (project files) or `mempalace/convo_miner.py` (transcripts)
-- **Input validation**: `mempalace/config.py` — `sanitize_name()` / `sanitize_content()`
+- **Adding an MCP tool**: `swampcastle/mcp_server.py` — add handler function + TOOLS dict entry
+- **Changing search**: `swampcastle/searcher.py`
+- **Modifying mining**: `swampcastle/miner.py` (project files) or `swampcastle/convo_miner.py` (transcripts)
+- **Input validation**: `swampcastle/config.py` — `sanitize_name()` / `sanitize_content()`
 - **Tests**: mirror source structure in `tests/test_<module>.py`

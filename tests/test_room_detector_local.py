@@ -1,4 +1,4 @@
-"""Tests for mempalace.room_detector_local."""
+"""Tests for swampcastle.room_detector_local."""
 
 from unittest.mock import MagicMock, patch
 

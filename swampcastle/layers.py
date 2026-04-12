@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-layers.py — 4-Layer Memory Stack for mempalace
+layers.py — 4-Layer Memory Stack for swampcastle
 ===================================================
 
 Load only what you need, when you need it.
@@ -12,8 +12,8 @@ Load only what you need, when you need it.
 
 Wake-up cost: ~600-900 tokens (L0+L1). Leaves 95%+ of context free.
 
-Reads directly from ChromaDB (mempalace_drawers)
-and ~/.mempalace/identity.txt.
+Reads directly from ChromaDB (swampcastle_chests)
+and ~/.swampcastle/identity.txt.
 """
 
 import os
@@ -33,7 +33,7 @@ from .palace import get_collection as _get_palace_collection
 class Layer0:
     """
     ~100 tokens. Always loaded.
-    Reads from ~/.mempalace/identity.txt — a plain-text file the user writes.
+    Reads from ~/.swampcastle/identity.txt — a plain-text file the user writes.
 
     Example identity.txt:
         I am Atlas, a personal AI assistant for Alice.
@@ -44,7 +44,7 @@ class Layer0:
 
     def __init__(self, identity_path: str = None):
         if identity_path is None:
-            identity_path = os.path.expanduser("~/.mempalace/identity.txt")
+            identity_path = os.path.expanduser("~/.swampcastle/identity.txt")
         self.path = identity_path
         self._text = None
 
@@ -58,7 +58,7 @@ class Layer0:
                 self._text = f.read().strip()
         else:
             self._text = (
-                "## L0 — IDENTITY\nNo identity configured. Create ~/.mempalace/identity.txt"
+                "## L0 — IDENTITY\nNo identity configured. Create ~/.swampcastle/identity.txt"
             )
 
         return self._text
@@ -251,7 +251,7 @@ class Layer2:
 class Layer3:
     """
     Unlimited depth. Semantic search against the full palace.
-    Reuses searcher.py logic against mempalace_drawers.
+    Reuses searcher.py logic against swampcastle_chests.
     """
 
     def __init__(self, palace_path: str = None):
@@ -382,7 +382,7 @@ class MemoryStack:
     def __init__(self, palace_path: str = None, identity_path: str = None):
         cfg = CastleConfig()
         self.palace_path = palace_path or cfg.palace_path
-        self.identity_path = identity_path or os.path.expanduser("~/.mempalace/identity.txt")
+        self.identity_path = identity_path or os.path.expanduser("~/.swampcastle/identity.txt")
 
         self.l0 = Layer0(self.identity_path)
         self.l1 = Layer1(self.palace_path)

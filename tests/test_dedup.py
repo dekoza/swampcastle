@@ -1,4 +1,4 @@
-"""Tests for mempalace.dedup — near-duplicate drawer detection and removal."""
+"""Tests for swampcastle.dedup — near-duplicate drawer detection and removal."""
 
 from unittest.mock import MagicMock, patch
 

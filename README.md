@@ -4,7 +4,7 @@
 
 # SwampCastle
 
-Built on ruins of [MemPalace](https://github.com/MemPalace/mempalace). And since MemPalace was first public version was v3, it clearly indicates that v1 and v2 sank. v3 burned down under scrutiny, collapsed, and than sank.
+Built on ruins of [SwampCastle](https://github.com/dekoza/swampcastle). And since SwampCastle was first public version was v3, it clearly indicates that v1 and v2 sank. v3 burned down under scrutiny, collapsed, and than sank.
 
 **The fourth one stayed up.**
 
@@ -18,7 +18,7 @@ Persistent, searchable memory for AI assistants. Local. Free. No API key.
 
 ---
 
-> **⚠ Important:** Fake MemPalace websites are distributing malware. Strange websites lying in swamps distributing binaries is no basis for a memory system. The first three castles sank — don't download the rubble. The only legitimate sources are [GitHub](https://github.com/dekoza/swampcastle) and [PyPI](https://pypi.org/project/swampcastle/). See also [launch week errata](NOTICES.md).
+> **⚠ Important:** Fake SwampCastle websites are distributing malware. Strange websites lying in swamps distributing binaries is no basis for a memory system. The first three castles sank — don't download the rubble. The only legitimate sources are [GitHub](https://github.com/dekoza/swampcastle) and [PyPI](https://pypi.org/project/swampcastle/). See also [launch week errata](NOTICES.md).
 
 ---
 

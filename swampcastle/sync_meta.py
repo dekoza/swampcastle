@@ -1,14 +1,14 @@
 """
 sync_meta.py — Node identity and sync metadata for multi-device replication.
 
-Each MemPalace installation gets a unique node_id (generated once, persisted).
+Each SwampCastle installation gets a unique node_id (generated once, persisted).
 Every write operation gets a monotonically increasing sequence number and a
 UTC timestamp.  These three fields enable the sync protocol (Phase 4) to
 efficiently exchange only new/changed records between nodes.
 
 Files:
-    ~/.mempalace/node_id   — 12-char hex string, generated once
-    ~/.mempalace/seq       — integer, incremented on every write
+    ~/.swampcastle/node_id   — 12-char hex string, generated once
+    ~/.swampcastle/seq       — integer, incremented on every write
 
 Metadata injected into every record:
     node_id:    str   — which machine wrote this record
@@ -41,7 +41,7 @@ class NodeIdentity:
     """
 
     def __init__(self, config_dir: str = None):
-        self._dir = Path(config_dir) if config_dir else Path(os.path.expanduser("~/.mempalace"))
+        self._dir = Path(config_dir) if config_dir else Path(os.path.expanduser("~/.swampcastle"))
         self._dir.mkdir(parents=True, exist_ok=True)
         self._node_id_file = self._dir / "node_id"
         self._seq_file = self._dir / "seq"

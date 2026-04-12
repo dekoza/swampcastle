@@ -20,7 +20,7 @@ SKIP_DIRS = {
     "build",
     ".next",
     "coverage",
-    ".mempalace",
+    ".swampcastle",
     ".ruff_cache",
     ".mypy_cache",
     ".pytest_cache",

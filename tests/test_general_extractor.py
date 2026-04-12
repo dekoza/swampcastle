@@ -1,4 +1,4 @@
-"""Tests for mempalace.general_extractor."""
+"""Tests for swampcastle.general_extractor."""
 
 from swampcastle.general_extractor import (
     ALL_MARKERS,

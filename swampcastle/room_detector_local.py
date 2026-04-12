@@ -4,7 +4,7 @@ room_detector_local.py — Local setup, no API required.
 
 Two ways to define rooms without calling any AI:
   1. Auto-detect from folder structure (zero config)
-  2. Define manually in mempalace.yaml
+  2. Define manually in swampcastle.yaml
 
 No internet. No API key. Your files stay on your machine.
 """
@@ -205,7 +205,7 @@ def detect_rooms_from_files(project_dir: str) -> list:
 
 def print_proposed_structure(project_name: str, rooms: list, total_files: int, source: str):
     print(f"\n{'=' * 55}")
-    print("  MemPalace Init — Local setup")
+    print("  SwampCastle Init — Local setup")
     print(f"{'=' * 55}")
     print(f"\n  WING: {project_name}")
     print(f"  ({total_files} files found, rooms detected from {source})\n")

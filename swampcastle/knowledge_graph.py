@@ -1,5 +1,5 @@
 """
-knowledge_graph.py — Temporal Entity-Relationship Graph for MemPalace
+knowledge_graph.py — Temporal Entity-Relationship Graph for SwampCastle
 =====================================================================
 
 Real knowledge graph with:
@@ -29,7 +29,7 @@ from datetime import date, datetime
 from pathlib import Path
 
 
-DEFAULT_KG_PATH = os.path.expanduser("~/.mempalace/knowledge_graph.sqlite3")
+DEFAULT_KG_PATH = os.path.expanduser("~/.swampcastle/knowledge_graph.sqlite3")
 
 
 class KnowledgeGraph:

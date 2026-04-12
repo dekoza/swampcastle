@@ -1,5 +1,5 @@
 """
-Hook logic for MemPalace — Python implementation of session-start, stop, and precompact hooks.
+Hook logic for SwampCastle — Python implementation of session-start, stop, and precompact hooks.
 
 Reads JSON from stdin, outputs JSON to stdout.
 Supported hooks: session-start, stop, precompact
@@ -15,7 +15,7 @@ from datetime import datetime
 from pathlib import Path
 
 SAVE_INTERVAL = 15
-STATE_DIR = Path.home() / ".mempalace" / "hook_state"
+STATE_DIR = Path.home() / ".swampcastle" / "hook_state"
 
 STOP_BLOCK_REASON = (
     "AUTO-SAVE checkpoint. Save key topics, decisions, quotes, and code "
@@ -103,7 +103,7 @@ def _maybe_auto_ingest():
             log_path = STATE_DIR / "hook.log"
             with open(log_path, "a") as log_f:
                 subprocess.Popen(
-                    [sys.executable, "-m", "mempalace", "mine", mempal_dir],
+                    [sys.executable, "-m", "swampcastle", "mine", mempal_dir],
                     stdout=log_f,
                     stderr=log_f,
                 )
@@ -200,7 +200,7 @@ def hook_precompact(data: dict, harness: str):
             log_path = STATE_DIR / "hook.log"
             with open(log_path, "a") as log_f:
                 subprocess.run(
-                    [sys.executable, "-m", "mempalace", "mine", mempal_dir],
+                    [sys.executable, "-m", "swampcastle", "mine", mempal_dir],
                     stdout=log_f,
                     stderr=log_f,
                     timeout=60,

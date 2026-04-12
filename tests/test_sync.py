@@ -655,7 +655,7 @@ class TestSyncServer:
     def setup_server(self, tmp_path, monkeypatch):
         """Configure a fresh palace for the server."""
         palace = str(tmp_path / "server_palace")
-        monkeypatch.setenv("MEMPALACE_PALACE_PATH", palace)
+        monkeypatch.setenv("SWAMPCASTLE_PATH", palace)
 
         config_dir = str(tmp_path / "server_config")
         os.makedirs(config_dir, exist_ok=True)

@@ -1,5 +1,5 @@
 """
-sync.py — Sync engine for multi-device MemPalace replication.
+sync.py — Sync engine for multi-device SwampCastle replication.
 
 Hub-and-spoke model with version vectors.  Each node writes locally with
 its own node_id + monotonic seq.  On sync, nodes exchange records the
@@ -320,7 +320,7 @@ class SyncEngine:
         On exact timestamp tie the lexicographically higher node_id wins.
         This is arbitrary but deterministic — both sides reach the same
         conclusion without coordination.  Node IDs are stable across
-        restarts (persisted in ~/.mempalace/node_id).
+        restarts (persisted in ~/.swampcastle/node_id).
         """
         r_time = self._parse_ts(remote_meta.get("updated_at", ""))
         l_time = self._parse_ts(local_meta.get("updated_at", ""))

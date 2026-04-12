@@ -1,4 +1,4 @@
-# MemPalace v4.0 — Upgrade Changelog
+# SwampCastle v4.0 — Upgrade Changelog
 
 > Covers all changes on the `feat/multishare` branch: LanceDB migration,
 > pluggable embedders, multi-device sync.  Each section includes a compact
@@ -12,18 +12,18 @@
 |------|---------------|--------------|
 | Default database | ChromaDB (embedded SQLite + HNSW) | LanceDB (Lance columnar format) |
 | Default dependency | `chromadb>=0.5` | `lancedb>=0.14`, `onnxruntime`, `tokenizers` |
-| ChromaDB | Required | Optional — `pip install 'mempalace[chroma]'` |
+| ChromaDB | Required | Optional — `pip install 'swampcastle[chroma]'` |
 | Embeddings | Hidden inside ChromaDB (ONNX all-MiniLM-L6-v2) | Explicit, configurable, tracked per record |
 
 Existing ChromaDB palaces are detected automatically and still work.
-Run `mempalace migrate` to convert to LanceDB when ready.
+Run `swampcastle migrate` to convert to LanceDB when ready.
 
 ---
 
 ## 1. LanceDB Backend (Phase 1)
 
 ChromaDB is replaced by LanceDB as the default storage engine.  A database
-abstraction layer (`mempalace/db.py`) means all code goes through one
+abstraction layer (`swampcastle/db.py`) means all code goes through one
 interface regardless of backend.
 
 ### Why
@@ -41,14 +41,14 @@ interface regardless of backend.
 
 ```bash
 # 1. Verify current state
-mempalace status
+swampcastle status
 
 # 2. Migrate (transfers embeddings — no re-embedding needed)
-mempalace migrate
+swampcastle migrate
 
 # 3. Verify
-mempalace status
-mempalace search "test query"
+swampcastle status
+swampcastle search "test query"
 ```
 
 The migrator backs up your ChromaDB data to `<palace>.chroma-backup/` before
@@ -60,7 +60,7 @@ converting.
 export MEMPALACE_BACKEND=chroma   # or "lance"
 ```
 
-Or in `~/.mempalace/config.json`:
+Or in `~/.swampcastle/config.json`:
 
 ```json
 {"backend": "lance"}
@@ -88,21 +88,21 @@ stores which model embedded it so mismatches are detectable.
 
 ```bash
 # List models with active marker
-mempalace embedders
+swampcastle embedders
 
 # Switch model (updates config, re-embeds everything)
-mempalace reindex --embedder bge-small
+swampcastle reindex --embedder bge-small
 
 # Preview without changing
-mempalace reindex --dry-run
+swampcastle reindex --dry-run
 
 # Use a GPU server running Ollama
-mempalace reindex --embedder ollama \
+swampcastle reindex --embedder ollama \
     --ollama-model nomic-embed-text \
     --ollama-url http://homeserver:11434
 
 # Set permanently in config
-cat > ~/.mempalace/config.json << 'EOF'
+cat > ~/.swampcastle/config.json << 'EOF'
 {
   "embedder": "bge-small",
   "embedder_options": {"device": "cpu"}
@@ -126,7 +126,7 @@ EOF
 
 ## 3. Multi-Device Sync (Phases 3 + 4)
 
-MemPalace now supports hub-and-spoke replication between machines.  A
+SwampCastle now supports hub-and-spoke replication between machines.  A
 powerful home server acts as the hub; laptops sync over VPN when connected
 and work fully offline in between.
 
@@ -146,7 +146,7 @@ and work fully offline in between.
 ### How it works
 
 1. Each machine gets a unique **node ID** (auto-generated, persisted in
-   `~/.mempalace/node_id`).
+   `~/.swampcastle/node_id`).
 2. Every write increments a **monotonic sequence counter** and stamps the
    record with `node_id`, `seq`, and `updated_at`.
 3. On sync, nodes exchange only the records the other hasn't seen, using
@@ -157,26 +157,26 @@ and work fully offline in between.
 ### How-to: Server (home machine)
 
 ```bash
-pip install 'mempalace[server]'   # adds fastapi + uvicorn
+pip install 'swampcastle[server]'   # adds fastapi + uvicorn
 
 # Start the sync server
-mempalace serve --host 0.0.0.0 --port 7433
+swampcastle serve --host 0.0.0.0 --port 7433
 
 # Or with a custom palace path
-mempalace --palace /data/palace serve --port 7433
+swampcastle --palace /data/palace serve --port 7433
 ```
 
 ### How-to: Client (laptop)
 
 ```bash
 # One-shot sync
-mempalace sync --server http://homeserver:7433
+swampcastle sync --server http://homeserver:7433
 
 # Auto-sync every 5 minutes (stop with Ctrl+C)
-mempalace sync --server http://homeserver:7433 --auto
+swampcastle sync --server http://homeserver:7433 --auto
 
 # Custom interval (seconds)
-mempalace sync --server http://homeserver:7433 --auto --interval 60
+swampcastle sync --server http://homeserver:7433 --auto --interval 60
 ```
 
 ### Offline operation
@@ -189,7 +189,7 @@ The laptop is fully self-sufficient between syncs:
 - Writes accumulate locally with the laptop's node ID
 - Sync replicates drawers only; knowledge graph tables are node-local
 
-When the laptop reconnects, `mempalace sync` pushes local drawer changes and
+When the laptop reconnects, `swampcastle sync` pushes local drawer changes and
 pulls remote drawer changes.  After sync, both machines have identical
 drawer data.
 
@@ -197,7 +197,7 @@ drawer data.
 
 Both nodes **must use the same embedding model** for vectors to be
 compatible.  Configure both machines with the same `embedder` in
-`config.json`.  If you change model, run `mempalace reindex` on both sides.
+`config.json`.  If you change model, run `swampcastle reindex` on both sides.
 
 ### Conflict resolution
 
@@ -217,7 +217,7 @@ one format, one sync unit.
 
 ### What changed
 
-- **Before:** `~/.mempalace/knowledge_graph.sqlite3` (separate file)
+- **Before:** `~/.swampcastle/knowledge_graph.sqlite3` (separate file)
 - **After:** `kg_entities` and `kg_triples` tables inside `<palace>/` (LanceDB)
 
 Existing SQLite knowledge graphs still work — if you pass a `.sqlite3` path
@@ -271,11 +271,11 @@ python benchmarks/longmemeval_v4.py DATA --mode embedders
 
 | Command | Description |
 |---------|-------------|
-| `mempalace migrate` | Convert ChromaDB palace to LanceDB |
-| `mempalace reindex [--embedder NAME]` | Re-embed all drawers with a different model |
-| `mempalace embedders` | List available embedding models |
-| `mempalace serve [--host H --port P]` | Start the sync server |
-| `mempalace sync --server URL [--auto]` | Sync with a remote server |
+| `swampcastle migrate` | Convert ChromaDB palace to LanceDB |
+| `swampcastle reindex [--embedder NAME]` | Re-embed all drawers with a different model |
+| `swampcastle embedders` | List available embedding models |
+| `swampcastle serve [--host H --port P]` | Start the sync server |
+| `swampcastle sync --server URL [--auto]` | Sync with a remote server |
 
 ---
 
@@ -283,22 +283,22 @@ python benchmarks/longmemeval_v4.py DATA --mode embedders
 
 | File | Purpose |
 |------|---------|
-| `mempalace/db.py` | Database abstraction — `LanceCollection`, `ChromaCollection` |
-| `mempalace/embeddings.py` | `SentenceTransformerEmbedder`, `OllamaEmbedder`, factory |
-| `mempalace/sync_meta.py` | `NodeIdentity`, atomic sequence counter |
-| `mempalace/sync.py` | `SyncEngine`, `VersionVector`, `ChangeSet` |
-| `mempalace/sync_server.py` | FastAPI sync server |
-| `mempalace/sync_client.py` | HTTP sync client |
+| `swampcastle/db.py` | Database abstraction — `LanceCollection`, `ChromaCollection` |
+| `swampcastle/embeddings.py` | `SentenceTransformerEmbedder`, `OllamaEmbedder`, factory |
+| `swampcastle/sync_meta.py` | `NodeIdentity`, atomic sequence counter |
+| `swampcastle/sync.py` | `SyncEngine`, `VersionVector`, `ChangeSet` |
+| `swampcastle/sync_server.py` | FastAPI sync server |
+| `swampcastle/sync_client.py` | HTTP sync client |
 
 ---
 
 ## Configuration Reference
 
-All settings in `~/.mempalace/config.json`:
+All settings in `~/.swampcastle/config.json`:
 
 ```json
 {
-  "palace_path": "~/.mempalace/palace",
+  "palace_path": "~/.swampcastle/palace",
   "backend": "lance",
   "embedder": "bge-small",
   "embedder_options": {
@@ -318,6 +318,6 @@ All settings in `~/.mempalace/config.json`:
 
 | File | Purpose |
 |------|---------|
-| `~/.mempalace/node_id` | This machine's unique 12-char sync ID |
-| `~/.mempalace/seq` | Monotonic write counter |
+| `~/.swampcastle/node_id` | This machine's unique 12-char sync ID |
+| `~/.swampcastle/seq` | Monotonic write counter |
 | `<palace>/version_vector.json` | Sync state (node→seq mapping) |

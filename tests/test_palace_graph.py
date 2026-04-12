@@ -1,4 +1,4 @@
-"""Tests for mempalace.palace_graph — graph traversal layer.
+"""Tests for swampcastle.palace_graph — graph traversal layer.
 
 All ChromaDB access is mocked — no real database needed.
 """

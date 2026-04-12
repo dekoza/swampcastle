@@ -1,11 +1,11 @@
 """
-conftest.py — Shared fixtures for MemPalace tests.
+conftest.py — Shared fixtures for SwampCastle tests.
 
 Provides isolated palace and knowledge graph instances so tests never
 touch the user's real data or leak temp files on failure.
 
 HOME is redirected to a temp directory at module load time — before any
-mempalace imports — so that module-level initialisations (e.g.
+swampcastle imports — so that module-level initialisations (e.g.
 ``_kg = KnowledgeGraph()`` in mcp_server) write to a throwaway location
 instead of the real user profile.
 """
@@ -14,7 +14,7 @@ import os
 import shutil
 import tempfile
 
-# ── Isolate HOME before any mempalace imports ──────────────────────────
+# ── Isolate HOME before any swampcastle imports ──────────────────────────
 _original_env = {}
 _session_tmp = tempfile.mkdtemp(prefix="swampcastle_session_")
 

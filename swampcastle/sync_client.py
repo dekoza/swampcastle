@@ -1,5 +1,5 @@
 """
-sync_client.py — HTTP client for syncing with a remote MemPalace server.
+sync_client.py — HTTP client for syncing with a remote SwampCastle server.
 
 Usage:
     from swampcastle.sync_client import SyncClient
@@ -20,7 +20,7 @@ logger = logging.getLogger("swampcastle.sync_client")
 
 
 class SyncClient:
-    """HTTP client that talks to a mempalace sync server."""
+    """HTTP client that talks to a swampcastle sync server."""
 
     def __init__(self, server_url: str, timeout: float = 30.0):
         self._url = server_url.rstrip("/")

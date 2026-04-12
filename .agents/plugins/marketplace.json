@@ -1,11 +1,11 @@
 {
-  "name": "mempalace",
+  "name": "swampcastle",
   "interface": {
-    "displayName": "MemPalace"
+    "displayName": "SwampCastle"
   },
   "plugins": [
     {
-      "name": "mempalace",
+      "name": "swampcastle",
       "source": {
         "source": "local",
         "path": "./.codex-plugin"

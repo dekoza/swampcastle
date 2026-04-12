@@ -36,7 +36,7 @@ from .palace import get_collection as _palace_get_collection
 from .knowledge_graph import KnowledgeGraph
 
 logging.basicConfig(level=logging.INFO, format="%(message)s", stream=sys.stderr)
-logger = logging.getLogger("mempalace_mcp")
+logger = logging.getLogger("swampcastle_mcp")
 
 
 def _parse_args():
@@ -55,7 +55,7 @@ def _parse_args():
 _args = _parse_args()
 
 if _args.palace:
-    os.environ["MEMPALACE_PALACE_PATH"] = os.path.abspath(_args.palace)
+    os.environ["SWAMPCASTLE_PATH"] = os.path.abspath(_args.palace)
 
 _config = CastleConfig()
 if _args.palace:
@@ -174,7 +174,7 @@ def tool_status():
 # Included in status response so the AI learns it on first wake-up call.
 # Also available via swampcastle_get_aaak_spec tool.
 
-PALACE_PROTOCOL = """IMPORTANT — MemPalace Memory Protocol:
+PALACE_PROTOCOL = """IMPORTANT — SwampCastle Memory Protocol:
 1. ON WAKE-UP: Call swampcastle_status to load palace overview + AAAK spec.
 2. BEFORE RESPONDING about any person, project, or past event: call swampcastle_kg_query or swampcastle_search FIRST. Never guess — verify.
 3. IF UNSURE about a fact (name, gender, age, relationship): say "let me check" and query the palace. Wrong is worse than slow.
@@ -183,7 +183,7 @@ PALACE_PROTOCOL = """IMPORTANT — MemPalace Memory Protocol:
 
 This protocol ensures the AI KNOWS before it speaks. Storage is not memory — but storage + this protocol = memory."""
 
-AAAK_SPEC = """AAAK is a compressed memory dialect that MemPalace uses for efficient storage.
+AAAK_SPEC = """AAAK is a compressed memory dialect that SwampCastle uses for efficient storage.
 It is designed to be readable by both humans and LLMs without decoding.
 
 FORMAT:
@@ -671,7 +671,7 @@ TOOLS = {
         "handler": tool_get_taxonomy,
     },
     "swampcastle_get_aaak_spec": {
-        "description": "Get the AAAK dialect specification — the compressed memory format MemPalace uses. Call this if you need to read or write AAAK-compressed memories.",
+        "description": "Get the AAAK dialect specification — the compressed memory format SwampCastle uses. Call this if you need to read or write AAAK-compressed memories.",
         "input_schema": {"type": "object", "properties": {}},
         "handler": tool_get_aaak_spec,
     },

@@ -233,7 +233,7 @@ def mine_convos(
     convo_dir: str,
     palace_path: str,
     wing: str = None,
-    agent: str = "mempalace",
+    agent: str = "swampcastle",
     limit: int = 0,
     dry_run: bool = False,
     extract_mode: str = "exchange",
@@ -254,7 +254,7 @@ def mine_convos(
         files = files[:limit]
 
     print(f"\n{'=' * 55}")
-    print("  MemPalace Mine — Conversations")
+    print("  SwampCastle Mine — Conversations")
     print(f"{'=' * 55}")
     print(f"  Wing:    {wing}")
     print(f"  Source:  {convo_path}")
@@ -367,7 +367,7 @@ def mine_convos(
         print("\n  By room:")
         for room, count in sorted(room_counts.items(), key=lambda x: x[1], reverse=True):
             print(f"    {room:20} {count} files")
-    print('\n  Next: mempalace search "what you\'re looking for"')
+    print('\n  Next: swampcastle search "what you\'re looking for"')
     print(f"{'=' * 55}\n")
 
 

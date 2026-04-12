@@ -1,4 +1,4 @@
-"""Tests for mempalace.instructions_cli — instruction text output."""
+"""Tests for swampcastle.instructions_cli — instruction text output."""
 
 from unittest.mock import patch
 

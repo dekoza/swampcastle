@@ -1,4 +1,4 @@
-"""Tests for mempalace.spellcheck — spell-correction utilities."""
+"""Tests for swampcastle.spellcheck — spell-correction utilities."""
 
 from unittest.mock import patch
 
@@ -30,7 +30,7 @@ class TestShouldSkip:
 
     def test_camelcase_skipped(self):
         assert _should_skip("ChromaDB", set()) is True
-        assert _should_skip("MemPalace", set()) is True
+        assert _should_skip("SwampCastle", set()) is True
 
     def test_allcaps_skipped(self):
         assert _should_skip("NDCG", set()) is True
@@ -49,7 +49,7 @@ class TestShouldSkip:
         assert _should_skip("**bold**", set()) is True
 
     def test_known_name_skipped(self):
-        assert _should_skip("mempalace", {"mempalace"}) is True
+        assert _should_skip("swampcastle", {"swampcastle"}) is True
 
     def test_normal_word_not_skipped(self):
         assert _should_skip("hello", set()) is False

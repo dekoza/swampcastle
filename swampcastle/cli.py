@@ -170,7 +170,7 @@ def cmd_repair(args):
         return
 
     print(f"\n{'=' * 55}")
-    print("  MemPalace Repair")
+    print("  SwampCastle Repair")
     print(f"{'=' * 55}\n")
     print(f"  Palace: {palace_path}")
     print(f"  Backend: {detect_backend(palace_path)}")
@@ -264,7 +264,7 @@ def cmd_reindex(args):
         display_name = resolved_name
 
     print(f"\n{'=' * 55}")
-    print("  MemPalace Reindex")
+    print("  SwampCastle Reindex")
     print(f"{'=' * 55}\n")
     print(f"  Palace:   {palace_path}")
     print(f"  Embedder: {display_name}")
@@ -370,7 +370,7 @@ def cmd_embedders(args):
 
 
 def cmd_serve(args):
-    """Start the MemPalace sync server."""
+    """Start the SwampCastle sync server."""
     try:
         import uvicorn
     except ImportError:
@@ -380,7 +380,7 @@ def cmd_serve(args):
     from .sync_server import create_app
 
     palace_path = os.path.expanduser(args.palace) if args.palace else CastleConfig().palace_path
-    os.environ["MEMPALACE_PALACE_PATH"] = palace_path
+    os.environ["SWAMPCASTLE_PATH"] = palace_path
 
     host = args.host
     port = args.port
@@ -408,7 +408,7 @@ def cmd_sync(args):
 
     if detect_backend(palace_path) == "chroma":
         print(f"\n  Palace at {palace_path} uses ChromaDB.")
-        print("  Sync requires LanceDB. Run: mempalace migrate")
+        print("  Sync requires LanceDB. Run: swampcastle migrate")
         sys.exit(1)
 
     col = open_collection(palace_path, backend="lance")
@@ -426,7 +426,7 @@ def cmd_sync(args):
 
     def run_once():
         print(f"\n{'=' * 55}")
-        print("  MemPalace Sync")
+        print("  SwampCastle Sync")
         print(f"{'=' * 55}")
         print(f"  Palace: {palace_path}")
         print(f"  Server: {server_url}")
@@ -482,7 +482,7 @@ def cmd_migrate(args):
         return
 
     print(f"\n{'=' * 55}")
-    print("  MemPalace Migrate: ChromaDB → LanceDB")
+    print("  SwampCastle Migrate: ChromaDB → LanceDB")
     print(f"{'=' * 55}\n")
     print(f"  Palace: {palace_path}")
 
@@ -491,7 +491,7 @@ def cmd_migrate(args):
         import chromadb
 
         client = chromadb.PersistentClient(path=palace_path)
-        col = client.get_collection("mempalace_drawers")
+        col = client.get_collection("swampcastle_chests")
         total = col.count()
         print(f"  Drawers found: {total}")
     except Exception as e:
@@ -555,14 +555,14 @@ def cmd_migrate(args):
     # Also migrate compressed collection if it exists
     try:
         client2 = chromadb.PersistentClient(path=backup_path)
-        comp_col = client2.get_collection("mempalace_compressed")
+        comp_col = client2.get_collection("swampcastle_compressed")
         comp_total = comp_col.count()
         if comp_total > 0:
             print(f"\n  Migrating {comp_total} compressed drawers...")
             comp_data = comp_col.get(
                 limit=comp_total, include=["documents", "metadatas", "embeddings"]
             )
-            comp_lance = open_collection(palace_path, "mempalace_compressed", backend="lance")
+            comp_lance = open_collection(palace_path, "swampcastle_compressed", backend="lance")
             comp_embs = (
                 comp_data.get("embeddings")
                 if comp_data.get("embeddings") and comp_data["embeddings"][0] is not None
@@ -623,7 +623,7 @@ def cmd_mcp(args):
 def cmd_mcp_run(args):
     """Start the MCP server (JSON-RPC over stdin/stdout)."""
     if args.palace:
-        os.environ["MEMPALACE_PALACE_PATH"] = str(Path(args.palace).expanduser().resolve())
+        os.environ["SWAMPCASTLE_PATH"] = str(Path(args.palace).expanduser().resolve())
 
     from .mcp_server import main as mcp_main
 
@@ -655,8 +655,8 @@ def cmd_compress(args):
         col = get_collection(palace_path)
     except ImportError:
         print(f"\n  Palace at {palace_path} uses ChromaDB but 'chromadb' is not installed.")
-        print("  Install with: pip install 'mempalace[chroma]'")
-        print("  Or migrate:  mempalace migrate")
+        print("  Install with: pip install 'swampcastle[chroma]'")
+        print("  Or migrate:  swampcastle migrate")
         sys.exit(1)
     except Exception:
         print(f"\n  No palace found at {palace_path}")
@@ -733,7 +733,7 @@ def cmd_compress(args):
     # Store compressed versions (unless dry-run)
     if not args.dry_run:
         try:
-            comp_col = get_collection(palace_path, "mempalace_compressed")
+            comp_col = get_collection(palace_path, "swampcastle_compressed")
             for doc_id, compressed, meta, stats in compressed_entries:
                 comp_meta = dict(meta)
                 comp_meta["compression_ratio"] = round(stats["ratio"], 1)
@@ -744,7 +744,7 @@ def cmd_compress(args):
                     metadatas=[comp_meta],
                 )
             print(
-                f"  Stored {len(compressed_entries)} compressed drawers in 'mempalace_compressed' collection."
+                f"  Stored {len(compressed_entries)} compressed drawers in 'swampcastle_compressed' collection."
             )
         except Exception as e:
             print(f"  Error storing compressed drawers: {e}")

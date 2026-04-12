@@ -1,4 +1,4 @@
-"""Tests for mempalace.layers — Layer0, Layer1, Layer2, Layer3, MemoryStack."""
+"""Tests for swampcastle.layers — Layer0, Layer1, Layer2, Layer3, MemoryStack."""
 
 import os
 from unittest.mock import MagicMock, patch
@@ -63,7 +63,7 @@ def test_layer0_strips_whitespace(tmp_path):
 
 def test_layer0_default_path():
     layer = Layer0()
-    expected = os.path.expanduser("~/.mempalace/identity.txt")
+    expected = os.path.expanduser("~/.swampcastle/identity.txt")
     assert layer.path == expected
 
 

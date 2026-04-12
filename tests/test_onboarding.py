@@ -1,4 +1,4 @@
-"""Tests for mempalace.onboarding."""
+"""Tests for swampcastle.onboarding."""
 
 import os
 from unittest.mock import patch
@@ -100,11 +100,11 @@ def test_quick_setup_creates_registry(tmp_path):
     registry = quick_setup(
         mode="personal",
         people=[{"name": "Riley", "relationship": "daughter", "context": "personal"}],
-        projects=["MemPalace"],
+        projects=["SwampCastle"],
         config_dir=tmp_path,
     )
     assert "Riley" in registry.people
-    assert "MemPalace" in registry.projects
+    assert "SwampCastle" in registry.projects
     assert registry.mode == "personal"
 
 
@@ -143,7 +143,7 @@ def test_generate_aaak_bootstrap_creates_files(tmp_path):
         {"name": "Riley", "relationship": "daughter", "context": "personal"},
         {"name": "Devon", "relationship": "friend", "context": "personal"},
     ]
-    projects = ["MemPalace"]
+    projects = ["SwampCastle"]
     wings = ["family", "creative"]
     _generate_aaak_bootstrap(people, projects, wings, "personal", config_dir=tmp_path)
 
@@ -153,14 +153,14 @@ def test_generate_aaak_bootstrap_creates_files(tmp_path):
 
 def test_generate_aaak_bootstrap_entities_content(tmp_path):
     people = [{"name": "Riley", "relationship": "daughter", "context": "personal"}]
-    projects = ["MemPalace"]
+    projects = ["SwampCastle"]
     wings = ["family"]
     _generate_aaak_bootstrap(people, projects, wings, "personal", config_dir=tmp_path)
 
     content = (tmp_path / "aaak_entities.md").read_text()
     assert "Riley" in content
     assert "RIL" in content  # entity code
-    assert "MemPalace" in content
+    assert "SwampCastle" in content
 
 
 def test_generate_aaak_bootstrap_facts_content(tmp_path):

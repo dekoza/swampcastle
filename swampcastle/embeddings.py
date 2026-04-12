@@ -1,12 +1,12 @@
 """
-embeddings.py — Pluggable embedding backends for MemPalace.
+embeddings.py — Pluggable embedding backends for SwampCastle.
 
 Supported backends:
   - onnx: all-MiniLM-L6-v2 via ONNX Runtime (default, lightweight — no torch)
-  - sentence-transformers: any HuggingFace model (requires `pip install mempalace[gpu]`)
+  - sentence-transformers: any HuggingFace model (requires `pip install swampcastle[gpu]`)
   - ollama: any model served by a local/remote Ollama instance (no extra deps)
 
-Config in ~/.mempalace/config.json:
+Config in ~/.swampcastle/config.json:
     {}                                     — uses ONNX default
     {"embedder": "all-MiniLM-L6-v2"}       — same as default
     {"embedder": "bge-small"}              — requires [gpu]
@@ -19,7 +19,7 @@ from __future__ import annotations
 import logging
 from typing import Protocol, runtime_checkable
 
-logger = logging.getLogger("mempalace")
+logger = logging.getLogger("swampcastle")
 
 
 # ── Protocol ──────────────────────────────────────────────────────────────────
@@ -56,8 +56,8 @@ def _onnx_model_dir() -> str:
     import os
     from pathlib import Path
     return str(Path(os.environ.get(
-        "MEMPALACE_ONNX_CACHE",
-        Path.home() / ".cache" / "mempalace" / "onnx_models" / _ONNX_MODEL_NAME,
+        "SWAMPCASTLE_ONNX_CACHE",
+        Path.home() / ".cache" / "swampcastle" / "onnx_models" / _ONNX_MODEL_NAME,
     )) / _ONNX_SUBDIR)
 
 
@@ -117,7 +117,7 @@ class OnnxEmbedder:
 
     Uses the all-MiniLM-L6-v2 model converted to ONNX format.
     No torch or sentence-transformers required. The ONNX model (~87MB)
-    is downloaded once on first use and cached in ~/.cache/mempalace/.
+    is downloaded once on first use and cached in ~/.cache/swampcastle/.
     """
 
     DIMENSION = 384
@@ -247,7 +247,7 @@ class SentenceTransformerEmbedder:
         except ImportError:
             raise ImportError(
                 "sentence-transformers is required for this embedder. "
-                "Install with: pip install mempalace[gpu]"
+                "Install with: pip install swampcastle[gpu]"
             )
         self._model = SentenceTransformer(self._model_name, device=self._device)
         self._dim = self._model.get_embedding_dimension()

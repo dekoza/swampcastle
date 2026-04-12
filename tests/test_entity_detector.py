@@ -1,4 +1,4 @@
-"""Tests for mempalace.entity_detector."""
+"""Tests for swampcastle.entity_detector."""
 
 import os
 from unittest.mock import patch

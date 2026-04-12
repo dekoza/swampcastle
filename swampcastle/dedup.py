@@ -10,16 +10,16 @@ version, and deletes the rest.
 No API calls — uses ChromaDB's built-in embedding similarity.
 
 Usage (standalone):
-    python -m mempalace.dedup                          # dedup all
-    python -m mempalace.dedup --dry-run                # preview only
-    python -m mempalace.dedup --threshold 0.10         # stricter (near-identical only)
-    python -m mempalace.dedup --threshold 0.35         # looser (catches paraphrased content)
-    python -m mempalace.dedup --wing my_project        # scope to one wing
-    python -m mempalace.dedup --stats                  # stats only
-    python -m mempalace.dedup --source "my_project"    # filter by source
+    python -m swampcastle.dedup                          # dedup all
+    python -m swampcastle.dedup --dry-run                # preview only
+    python -m swampcastle.dedup --threshold 0.10         # stricter (near-identical only)
+    python -m swampcastle.dedup --threshold 0.35         # looser (catches paraphrased content)
+    python -m swampcastle.dedup --wing my_project        # scope to one wing
+    python -m swampcastle.dedup --stats                  # stats only
+    python -m swampcastle.dedup --source "my_project"    # filter by source
 
 Usage (from CLI):
-    mempalace dedup [--dry-run] [--threshold 0.15] [--stats]
+    swampcastle dedup [--dry-run] [--threshold 0.15] [--stats]
 """
 
 import argparse
@@ -30,7 +30,7 @@ from collections import defaultdict
 import chromadb
 
 
-COLLECTION_NAME = "mempalace_drawers"
+COLLECTION_NAME = "swampcastle_chests"
 # Cosine DISTANCE threshold (not similarity). Lower = stricter.
 # 0.15 = ~85% cosine similarity — catches near-identical chunks.
 # For looser dedup of paraphrased content, try 0.3–0.4.
@@ -45,7 +45,7 @@ def _get_palace_path():
 
         return CastleConfig().palace_path
     except Exception:
-        return os.path.join(os.path.expanduser("~"), ".mempalace", "palace")
+        return os.path.join(os.path.expanduser("~"), ".swampcastle", "palace")
 
 
 def get_source_groups(col, min_count=MIN_DRAWERS_TO_CHECK, source_pattern=None, wing=None):
@@ -160,7 +160,7 @@ def dedup_palace(
     palace_path = palace_path or _get_palace_path()
 
     print(f"\n{'=' * 55}")
-    print("  MemPalace Deduplicator")
+    print("  SwampCastle Deduplicator")
     print(f"{'=' * 55}")
 
     client = chromadb.PersistentClient(path=palace_path)

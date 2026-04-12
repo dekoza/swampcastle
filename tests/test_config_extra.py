@@ -1,4 +1,4 @@
-"""Extra tests for mempalace.config to cover remaining gaps."""
+"""Extra tests for swampcastle.config to cover remaining gaps."""
 
 import json
 import os

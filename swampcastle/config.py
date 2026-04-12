@@ -1,7 +1,7 @@
 """
-MemPalace configuration system.
+SwampCastle configuration system.
 
-Priority: env vars > config file (~/.mempalace/config.json) > defaults
+Priority: env vars > config file (~/.swampcastle/config.json) > defaults
 """
 
 import json
@@ -128,7 +128,7 @@ def _resolve_config_dir(override=None):
     return _NEW_CONFIG_DIR
 
 class CastleConfig:
-    """Configuration manager for MemPalace.
+    """Configuration manager for SwampCastle.
 
     Load order: env vars > config file > defaults.
     """
@@ -245,4 +245,4 @@ class CastleConfig:
         return self._people_map_file
 
 # Legacy alias
-MempalaceConfig = CastleConfig
+CastleConfig = CastleConfig

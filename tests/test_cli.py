@@ -1,4 +1,4 @@
-"""Tests for mempalace.cli — the main CLI dispatcher."""
+"""Tests for swampcastle.cli — the main CLI dispatcher."""
 
 import argparse
 import os
@@ -158,7 +158,7 @@ def test_cmd_mine_projects_mode(mock_config_cls):
         palace=None,
         mode="projects",
         wing=None,
-        agent="mempalace",
+        agent="swampcastle",
         limit=0,
         dry_run=False,
         no_gitignore=False,
@@ -171,7 +171,7 @@ def test_cmd_mine_projects_mode(mock_config_cls):
             project_dir="/src",
             palace_path="/fake/palace",
             wing_override=None,
-            agent="mempalace",
+            agent="swampcastle",
             limit=0,
             dry_run=False,
             respect_gitignore=True,
@@ -215,7 +215,7 @@ def test_cmd_mine_include_ignored_comma_split(mock_config_cls):
         palace=None,
         mode="projects",
         wing=None,
-        agent="mempalace",
+        agent="swampcastle",
         limit=0,
         dry_run=False,
         no_gitignore=False,
@@ -261,14 +261,14 @@ def test_cmd_split_all_options():
         cmd_split(args)
         mock_main.assert_called_once()
     # sys.argv should be restored
-    assert sys.argv[0] != "mempalace split"
+    assert sys.argv[0] != "swampcastle split"
 
 
 # ── main() argparse dispatch ──────────────────────────────────────────
 
 
 def test_main_no_args_prints_help(capsys):
-    with patch("sys.argv", ["mempalace"]):
+    with patch("sys.argv", ["swampcastle"]):
         main()
     out = capsys.readouterr().out
     assert "Swamp Castle" in out or "swampcastle" in out
@@ -276,7 +276,7 @@ def test_main_no_args_prints_help(capsys):
 
 def test_main_status_dispatches():
     with (
-        patch("sys.argv", ["mempalace", "status"]),
+        patch("sys.argv", ["swampcastle", "status"]),
         patch("swampcastle.cli.cmd_status") as mock_cmd,
     ):
         main()
@@ -285,7 +285,7 @@ def test_main_status_dispatches():
 
 def test_main_search_dispatches():
     with (
-        patch("sys.argv", ["mempalace", "search", "my query"]),
+        patch("sys.argv", ["swampcastle", "search", "my query"]),
         patch("swampcastle.cli.cmd_search") as mock_cmd,
     ):
         main()
@@ -294,7 +294,7 @@ def test_main_search_dispatches():
 
 def test_main_init_dispatches():
     with (
-        patch("sys.argv", ["mempalace", "init", "/some/dir"]),
+        patch("sys.argv", ["swampcastle", "init", "/some/dir"]),
         patch("swampcastle.cli.cmd_init") as mock_cmd,
     ):
         main()
@@ -303,7 +303,7 @@ def test_main_init_dispatches():
 
 def test_main_mine_dispatches():
     with (
-        patch("sys.argv", ["mempalace", "mine", "/some/dir"]),
+        patch("sys.argv", ["swampcastle", "mine", "/some/dir"]),
         patch("swampcastle.cli.cmd_mine") as mock_cmd,
     ):
         main()
@@ -312,7 +312,7 @@ def test_main_mine_dispatches():
 
 def test_main_wakeup_dispatches():
     with (
-        patch("sys.argv", ["mempalace", "wake-up"]),
+        patch("sys.argv", ["swampcastle", "wake-up"]),
         patch("swampcastle.cli.cmd_wakeup") as mock_cmd,
     ):
         main()
@@ -321,7 +321,7 @@ def test_main_wakeup_dispatches():
 
 def test_main_split_dispatches():
     with (
-        patch("sys.argv", ["mempalace", "split", "/chats"]),
+        patch("sys.argv", ["swampcastle", "split", "/chats"]),
         patch("swampcastle.cli.cmd_split") as mock_cmd,
     ):
         main()
@@ -329,7 +329,7 @@ def test_main_split_dispatches():
 
 
 def test_mcp_command_prints_setup_guidance(monkeypatch, capsys):
-    monkeypatch.setattr(sys, "argv", ["mempalace", "mcp"])
+    monkeypatch.setattr(sys, "argv", ["swampcastle", "mcp"])
 
     main()
 
@@ -343,7 +343,7 @@ def test_mcp_command_prints_setup_guidance(monkeypatch, capsys):
 
 
 def test_mcp_command_uses_custom_palace_path_when_provided(monkeypatch, capsys):
-    monkeypatch.setattr(sys, "argv", ["mempalace", "--palace", "~/tmp/my palace", "mcp"])
+    monkeypatch.setattr(sys, "argv", ["swampcastle", "--palace", "~/tmp/my palace", "mcp"])
 
     main()
 
@@ -367,14 +367,17 @@ def test_mcp_run_starts_server(monkeypatch):
 
 
 def test_mcp_run_sets_palace_env(monkeypatch):
-    """'drawbridge run --palace ~/x' sets MEMPALACE_PALACE_PATH before starting."""
+    """'drawbridge run --palace ~/x' sets SWAMPCASTLE_PATH before starting."""
     monkeypatch.setattr(sys, "argv", ["swampcastle", "drawbridge", "run", "--palace", "~/test_palace"])
+    monkeypatch.delenv("SWAMPCASTLE_PATH", raising=False)
+
+    expected = str(Path("~/test_palace").expanduser().resolve())
 
     with patch("swampcastle.mcp_server.main") as mock_main:
-        main()
-        mock_main.assert_called_once()
-    expected = str(Path("~/test_palace").expanduser().resolve())
-    assert os.environ.get("MEMPALACE_PALACE_PATH") == expected
+        with patch.dict(os.environ, {}, clear=False):
+            main()
+            mock_main.assert_called_once()
+            assert os.environ.get("SWAMPCASTLE_PATH") == expected
 
 
 def test_mcp_no_subcommand_shows_setup(monkeypatch, capsys):
@@ -386,7 +389,7 @@ def test_mcp_no_subcommand_shows_setup(monkeypatch, capsys):
 
 
 def test_main_hook_no_subcommand_prints_help(capsys):
-    with patch("sys.argv", ["mempalace", "hook"]):
+    with patch("sys.argv", ["swampcastle", "hook"]):
         main()
     out = capsys.readouterr().out
     assert "hook" in out.lower() or "run" in out.lower()
@@ -396,7 +399,7 @@ def test_main_hook_run_dispatches():
     with (
         patch(
             "sys.argv",
-            ["mempalace", "hook", "run", "--hook", "session-start", "--harness", "claude-code"],
+            ["swampcastle", "hook", "run", "--hook", "session-start", "--harness", "claude-code"],
         ),
         patch("swampcastle.cli.cmd_hook") as mock_cmd,
     ):
@@ -405,7 +408,7 @@ def test_main_hook_run_dispatches():
 
 
 def test_main_instructions_no_subcommand_prints_help(capsys):
-    with patch("sys.argv", ["mempalace", "instructions"]):
+    with patch("sys.argv", ["swampcastle", "instructions"]):
         main()
     out = capsys.readouterr().out
     assert "instructions" in out.lower() or "init" in out.lower()
@@ -413,7 +416,7 @@ def test_main_instructions_no_subcommand_prints_help(capsys):
 
 def test_main_instructions_dispatches():
     with (
-        patch("sys.argv", ["mempalace", "instructions", "help"]),
+        patch("sys.argv", ["swampcastle", "instructions", "help"]),
         patch("swampcastle.cli.cmd_instructions") as mock_cmd,
     ):
         main()
@@ -422,7 +425,7 @@ def test_main_instructions_dispatches():
 
 def test_main_repair_dispatches():
     with (
-        patch("sys.argv", ["mempalace", "repair"]),
+        patch("sys.argv", ["swampcastle", "repair"]),
         patch("swampcastle.cli.cmd_repair") as mock_cmd,
     ):
         main()
@@ -431,7 +434,7 @@ def test_main_repair_dispatches():
 
 def test_main_compress_dispatches():
     with (
-        patch("sys.argv", ["mempalace", "compress"]),
+        patch("sys.argv", ["swampcastle", "compress"]),
         patch("swampcastle.cli.cmd_compress") as mock_cmd,
     ):
         main()
@@ -594,7 +597,7 @@ def test_cmd_compress_with_config(mock_config_cls, tmp_path, capsys):
 
 @patch("swampcastle.cli.CastleConfig")
 def test_cmd_compress_stores_results(mock_config_cls, capsys):
-    """Non-dry-run compress stores to mempalace_compressed collection."""
+    """Non-dry-run compress stores to swampcastle_compressed collection."""
     mock_config_cls.return_value.palace_path = "/fake/palace"
     args = argparse.Namespace(palace=None, wing=None, dry_run=False, config=None)
     mock_col = MagicMock()

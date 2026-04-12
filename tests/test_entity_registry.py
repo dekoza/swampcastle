@@ -1,4 +1,4 @@
-"""Tests for mempalace.entity_registry."""
+"""Tests for swampcastle.entity_registry."""
 
 from unittest.mock import patch
 
@@ -48,13 +48,13 @@ def test_save_and_load_roundtrip(tmp_path):
     registry.seed(
         mode="work",
         people=[{"name": "Alice", "relationship": "colleague", "context": "work"}],
-        projects=["MemPalace"],
+        projects=["SwampCastle"],
     )
     # Load again from same dir
     loaded = EntityRegistry.load(config_dir=tmp_path)
     assert loaded.mode == "work"
     assert "Alice" in loaded.people
-    assert "MemPalace" in loaded.projects
+    assert "SwampCastle" in loaded.projects
 
 
 def test_save_creates_file(tmp_path):
@@ -74,7 +74,7 @@ def test_seed_registers_people(tmp_path):
             {"name": "Riley", "relationship": "daughter", "context": "personal"},
             {"name": "Devon", "relationship": "friend", "context": "personal"},
         ],
-        projects=["MemPalace"],
+        projects=["SwampCastle"],
     )
     assert "Riley" in registry.people
     assert "Devon" in registry.people
@@ -151,8 +151,8 @@ def test_lookup_known_person(tmp_path):
 
 def test_lookup_known_project(tmp_path):
     registry = EntityRegistry.load(config_dir=tmp_path)
-    registry.seed(mode="work", people=[], projects=["MemPalace"])
-    result = registry.lookup("MemPalace")
+    registry.seed(mode="work", people=[], projects=["SwampCastle"])
+    result = registry.lookup("SwampCastle")
     assert result["type"] == "project"
     assert result["confidence"] == 1.0
 
@@ -305,9 +305,9 @@ def test_summary(tmp_path):
     registry.seed(
         mode="personal",
         people=[{"name": "Riley", "relationship": "daughter", "context": "personal"}],
-        projects=["MemPalace"],
+        projects=["SwampCastle"],
     )
     s = registry.summary()
     assert "personal" in s
     assert "Riley" in s
-    assert "MemPalace" in s
+    assert "SwampCastle" in s

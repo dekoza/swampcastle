@@ -1,5 +1,5 @@
 """
-sync_server.py — HTTP sync server for multi-device MemPalace replication.
+sync_server.py — HTTP sync server for multi-device SwampCastle replication.
 
 Run with:  swampcastle garrison --host 0.0.0.0 --port 7433
 
@@ -36,7 +36,7 @@ def _get_engine() -> SyncEngine:
         if detect_backend(palace_path) == "chroma":
             raise RuntimeError(
                 f"Palace at {palace_path} uses ChromaDB. "
-                "Sync requires LanceDB. Run: mempalace migrate"
+                "Sync requires LanceDB. Run: swampcastle migrate"
             )
 
         col = open_collection(palace_path, backend="lance")

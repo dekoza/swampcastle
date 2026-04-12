@@ -11,7 +11,7 @@ from pathlib import Path
 
 from .palace import get_collection
 
-logger = logging.getLogger("mempalace_mcp")
+logger = logging.getLogger("swampcastle_mcp")
 
 
 class SearchError(Exception):
@@ -27,8 +27,8 @@ def search(query: str, palace_path: str, wing: str = None, room: str = None, n_r
         col = get_collection(palace_path)
     except ImportError:
         print(f"\n  Palace at {palace_path} uses ChromaDB but 'chromadb' is not installed.")
-        print("  Install with: pip install 'mempalace[chroma]'")
-        print("  Or migrate:  mempalace migrate")
+        print("  Install with: pip install 'swampcastle[chroma]'")
+        print("  Or migrate:  swampcastle migrate")
         raise SearchError(f"Missing chromadb dependency for {palace_path}")
     except Exception:
         print(f"\n  No palace found at {palace_path}")
@@ -111,7 +111,7 @@ def search_memories(
     except ImportError:
         return {
             "error": "Missing chromadb dependency",
-            "hint": "pip install 'mempalace[chroma]' or run: mempalace migrate",
+            "hint": "pip install 'swampcastle[chroma]' or run: swampcastle migrate",
         }
     except Exception as e:
         logger.error("No palace found at %s: %s", palace_path, e)

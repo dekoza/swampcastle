@@ -45,15 +45,15 @@
 # stop_hook_active=true so we let it through. No infinite loop.
 #
 # === MEMPALACE CLI ===
-# This repo uses: mempalace mine <dir>
-# or:            mempalace mine <dir> --mode convos
+# This repo uses: swampcastle mine <dir>
+# or:            swampcastle mine <dir> --mode convos
 # Set MEMPAL_DIR below if you want the hook to auto-ingest after blocking.
 # Leave blank to rely on the AI's own save instructions.
 #
 # === CONFIGURATION ===
 
 SAVE_INTERVAL=15  # Save every N human messages (adjust to taste)
-STATE_DIR="$HOME/.mempalace/hook_state"
+STATE_DIR="$HOME/.swampcastle/hook_state"
 mkdir -p "$STATE_DIR"
 
 # Optional: set to the directory you want auto-ingested on each save trigger.
@@ -123,7 +123,7 @@ fi
 
 SINCE_LAST=$((EXCHANGE_COUNT - LAST_SAVE))
 
-# Log for debugging (check ~/.mempalace/hook_state/hook.log)
+# Log for debugging (check ~/.swampcastle/hook_state/hook.log)
 echo "[$(date '+%H:%M:%S')] Session $SESSION_ID: $EXCHANGE_COUNT exchanges, $SINCE_LAST since last save" >> "$STATE_DIR/hook.log"
 
 # Time to save?
@@ -133,11 +133,11 @@ if [ "$SINCE_LAST" -ge "$SAVE_INTERVAL" ] && [ "$EXCHANGE_COUNT" -gt 0 ]; then
 
     echo "[$(date '+%H:%M:%S')] TRIGGERING SAVE at exchange $EXCHANGE_COUNT" >> "$STATE_DIR/hook.log"
 
-    # Optional: run mempalace ingest in background if MEMPAL_DIR is set
+    # Optional: run swampcastle ingest in background if MEMPAL_DIR is set
     if [ -n "$MEMPAL_DIR" ] && [ -d "$MEMPAL_DIR" ]; then
         SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
         REPO_DIR="$(dirname "$SCRIPT_DIR")"
-        python3 -m mempalace mine "$MEMPAL_DIR" >> "$STATE_DIR/hook.log" 2>&1 &
+        python3 -m swampcastle mine "$MEMPAL_DIR" >> "$STATE_DIR/hook.log" 2>&1 &
     fi
 
     # Block the AI and tell it to save

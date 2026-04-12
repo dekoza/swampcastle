@@ -1,0 +1,1 @@
+"""SwampCastle MCP server package."""

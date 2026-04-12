@@ -1,0 +1,85 @@
+"""Tests for swampcastle.settings — CastleSettings (Pydantic BaseSettings)."""
+
+import json
+import os
+from pathlib import Path
+
+import pytest
+
+from swampcastle.settings import CastleSettings
+
+
+class TestDefaults:
+    def test_default_castle_path(self):
+        s = CastleSettings(_env_file=None)
+        assert str(s.castle_path).endswith(".swampcastle/castle")
+
+    def test_default_collection_name(self):
+        s = CastleSettings(_env_file=None)
+        assert s.collection_name == "swampcastle_chests"
+
+    def test_default_backend(self):
+        s = CastleSettings(_env_file=None)
+        assert s.backend == "lance"
+
+    def test_default_embedder(self):
+        s = CastleSettings(_env_file=None)
+        assert s.embedder == "onnx"
+
+
+class TestComputedPaths:
+    def test_kg_path_derived_from_castle_path(self):
+        s = CastleSettings(castle_path="/tmp/test/castle", _env_file=None)
+        assert s.kg_path == Path("/tmp/test/knowledge_graph.sqlite3")
+
+    def test_wal_path_derived_from_castle_path(self):
+        s = CastleSettings(castle_path="/tmp/test/castle", _env_file=None)
+        assert s.wal_path == Path("/tmp/test/wal")
+
+    def test_config_dir_derived_from_castle_path(self):
+        s = CastleSettings(castle_path="/tmp/test/castle", _env_file=None)
+        assert s.config_dir == Path("/tmp/test")
+
+
+class TestEnvOverride:
+    def test_env_castle_path(self, monkeypatch):
+        monkeypatch.setenv("SWAMPCASTLE_CASTLE_PATH", "/env/path")
+        s = CastleSettings(_env_file=None)
+        assert str(s.castle_path) == "/env/path"
+
+    def test_env_backend(self, monkeypatch):
+        monkeypatch.setenv("SWAMPCASTLE_BACKEND", "postgres")
+        s = CastleSettings(_env_file=None)
+        assert s.backend == "postgres"
+
+    def test_env_database_url(self, monkeypatch):
+        monkeypatch.setenv("SWAMPCASTLE_DATABASE_URL", "postgresql://localhost/test")
+        s = CastleSettings(_env_file=None)
+        assert s.database_url == "postgresql://localhost/test"
+
+
+class TestJsonFile:
+    def test_load_from_json(self, tmp_path):
+        config = {"castle_path": "/from/json", "backend": "chroma"}
+        json_path = tmp_path / "config.json"
+        json_path.write_text(json.dumps(config))
+        s = CastleSettings(_env_file=None, _json_file=str(json_path))
+        assert str(s.castle_path) == "/from/json"
+        assert s.backend == "chroma"
+
+    def test_env_overrides_json(self, tmp_path, monkeypatch):
+        json_path = tmp_path / "config.json"
+        json_path.write_text(json.dumps({"castle_path": "/from/json"}))
+        monkeypatch.setenv("SWAMPCASTLE_CASTLE_PATH", "/from/env")
+        s = CastleSettings(_env_file=None, _json_file=str(json_path))
+        assert str(s.castle_path) == "/from/env"
+
+
+class TestValidation:
+    def test_backend_must_be_valid(self):
+        with pytest.raises(Exception):
+            CastleSettings(backend="nosql_yolo", _env_file=None)
+
+    def test_castle_path_accepts_string(self):
+        s = CastleSettings(castle_path="/tmp/x", _env_file=None)
+        assert isinstance(s.castle_path, Path)

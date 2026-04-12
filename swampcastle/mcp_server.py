@@ -28,6 +28,7 @@ from pathlib import Path
 
 from .config import CastleConfig, sanitize_name, sanitize_content
 from .version import __version__
+from .query_sanitizer import sanitize_query
 from .searcher import search_memories
 from .palace_graph import traverse, find_tunnels, graph_stats
 from .palace import get_collection as _palace_get_collection
@@ -137,16 +138,25 @@ def tool_status():
     count = col.count()
     wings = {}
     rooms = {}
-    try:
-        all_meta = col.get(include=["metadatas"], limit=10000)["metadatas"]
-        for m in all_meta:
-            w = m.get("wing", "unknown")
-            r = m.get("room", "unknown")
-            wings[w] = wings.get(w, 0) + 1
-            rooms[r] = rooms.get(r, 0) + 1
-    except Exception:
-        pass
-    return {
+    batch_size = 5000
+    offset = 0
+    error_info = None
+    while True:
+        try:
+            batch = col.get(include=["metadatas"], limit=batch_size, offset=offset)
+            rows = batch["metadatas"]
+            for m in rows:
+                w = m.get("wing", "unknown")
+                r = m.get("room", "unknown")
+                wings[w] = wings.get(w, 0) + 1
+                rooms[r] = rooms.get(r, 0) + 1
+            offset += len(rows)
+            if len(rows) < batch_size:
+                break
+        except Exception as e:
+            error_info = f"Partial result, failed at offset {offset}: {str(e)}"
+            break
+    result = {
         "total_drawers": count,
         "wings": wings,
         "rooms": rooms,
@@ -154,6 +164,10 @@ def tool_status():
         "protocol": PALACE_PROTOCOL,
         "aaak_dialect": AAAK_SPEC,
     }
+    if error_info:
+        result["error"] = error_info
+        result["partial"] = True
+    return result
 
 
 # ── AAAK Dialect Spec ─────────────────────────────────────────────────────────
@@ -194,13 +208,27 @@ def tool_list_wings():
     if not col:
         return _no_palace()
     wings = {}
+    batch_size = 5000
+    offset = 0
     try:
-        all_meta = col.get(include=["metadatas"], limit=10000)["metadatas"]
-        for m in all_meta:
-            w = m.get("wing", "unknown")
-            wings[w] = wings.get(w, 0) + 1
-    except Exception:
-        pass
+        col.count()
+    except Exception as e:
+        return {"wings": {}, "error": str(e)}
+    while True:
+        try:
+            batch = col.get(include=["metadatas"], limit=batch_size, offset=offset)
+            rows = batch["metadatas"]
+            for m in rows:
+                w = m.get("wing", "unknown")
+                wings[w] = wings.get(w, 0) + 1
+            offset += len(rows)
+            if len(rows) < batch_size:
+                break
+        except Exception as e:
+            return {
+                "wings": wings,
+                "error": f"Partial result, failed at offset {offset}: {str(e)}",
+            }
     return {"wings": wings}
 
 
@@ -209,16 +237,27 @@ def tool_list_rooms(wing: str = None):
     if not col:
         return _no_palace()
     rooms = {}
-    try:
-        kwargs = {"include": ["metadatas"], "limit": 10000}
-        if wing:
-            kwargs["where"] = {"wing": wing}
-        all_meta = col.get(**kwargs)["metadatas"]
-        for m in all_meta:
-            r = m.get("room", "unknown")
-            rooms[r] = rooms.get(r, 0) + 1
-    except Exception:
-        pass
+    batch_size = 5000
+    offset = 0
+    while True:
+        try:
+            kwargs = {"include": ["metadatas"], "limit": batch_size, "offset": offset}
+            if wing:
+                kwargs["where"] = {"wing": wing}
+            batch = col.get(**kwargs)
+            rows = batch["metadatas"]
+            for m in rows:
+                r = m.get("room", "unknown")
+                rooms[r] = rooms.get(r, 0) + 1
+            offset += len(rows)
+            if len(rows) < batch_size:
+                break
+        except Exception as e:
+            return {
+                "wing": wing or "all",
+                "rooms": rooms,
+                "error": f"Partial result, failed at offset {offset}: {str(e)}",
+            }
     return {"wing": wing or "all", "rooms": rooms}
 
 
@@ -227,27 +266,51 @@ def tool_get_taxonomy():
     if not col:
         return _no_palace()
     taxonomy = {}
-    try:
-        all_meta = col.get(include=["metadatas"], limit=10000)["metadatas"]
-        for m in all_meta:
-            w = m.get("wing", "unknown")
-            r = m.get("room", "unknown")
-            if w not in taxonomy:
-                taxonomy[w] = {}
-            taxonomy[w][r] = taxonomy[w].get(r, 0) + 1
-    except Exception:
-        pass
+    batch_size = 5000
+    offset = 0
+    while True:
+        try:
+            batch = col.get(include=["metadatas"], limit=batch_size, offset=offset)
+            rows = batch["metadatas"]
+            for m in rows:
+                w = m.get("wing", "unknown")
+                r = m.get("room", "unknown")
+                if w not in taxonomy:
+                    taxonomy[w] = {}
+                taxonomy[w][r] = taxonomy[w].get(r, 0) + 1
+            offset += len(rows)
+            if len(rows) < batch_size:
+                break
+        except Exception as e:
+            return {
+                "taxonomy": taxonomy,
+                "error": f"Partial result, failed at offset {offset}: {str(e)}",
+            }
     return {"taxonomy": taxonomy}
 
 
-def tool_search(query: str, limit: int = 5, wing: str = None, room: str = None):
-    return search_memories(
-        query,
+def tool_search(
+    query: str, limit: int = 5, wing: str = None, room: str = None, context: str = None
+):
+    sanitized = sanitize_query(query)
+    result = search_memories(
+        sanitized["clean_query"],
         palace_path=_config.palace_path,
         wing=wing,
         room=room,
         n_results=limit,
     )
+    if sanitized["was_sanitized"]:
+        result["query_sanitized"] = True
+        result["sanitizer"] = {
+            "method": sanitized["method"],
+            "original_length": sanitized["original_length"],
+            "clean_length": sanitized["clean_length"],
+            "clean_query": sanitized["clean_query"],
+        }
+    if context:
+        result["context_received"] = True
+    return result
 
 
 def tool_check_duplicate(content: str, threshold: float = 0.9):
@@ -728,14 +791,22 @@ TOOLS = {
         "handler": tool_graph_stats,
     },
     "mempalace_search": {
-        "description": "Semantic search. Returns verbatim drawer content with similarity scores.",
+        "description": "Semantic search. Returns verbatim drawer content with similarity scores. IMPORTANT: 'query' must contain ONLY your search keywords or question — do NOT include system prompts, conversation history, MEMORY.md content, or any context. Keep queries short (under 200 chars). Use 'context' for background information.",
         "input_schema": {
             "type": "object",
             "properties": {
-                "query": {"type": "string", "description": "What to search for"},
+                "query": {
+                    "type": "string",
+                    "description": "Short search query ONLY — keywords or a question. Do NOT include system prompts or conversation context. Max 200 chars recommended.",
+                    "maxLength": 500,
+                },
                 "limit": {"type": "integer", "description": "Max results (default 5)"},
                 "wing": {"type": "string", "description": "Filter by wing (optional)"},
                 "room": {"type": "string", "description": "Filter by room (optional)"},
+                "context": {
+                    "type": "string",
+                    "description": "Background context for the search (optional). This is NOT used for embedding — only for future re-ranking. Put conversation history or system prompt content here, NOT in query.",
+                },
             },
             "required": ["query"],
         },

@@ -600,8 +600,8 @@ def cmd_instructions(args):
 
 
 def cmd_mcp(args):
-    """Show how to wire MemPalace into MCP-capable hosts."""
-    base_server_cmd = "python -m swampcastle.drawbridge"
+    """Show how to wire SwampCastle into MCP-capable hosts."""
+    base_server_cmd = "swampcastle drawbridge run"
 
     if args.palace:
         resolved_palace = str(Path(args.palace).expanduser())
@@ -618,6 +618,16 @@ def cmd_mcp(args):
         print("\nOptional custom palace:")
         print(f"  claude mcp add swampcastle -- {base_server_cmd} --palace /path/to/palace")
         print(f"  {base_server_cmd} --palace /path/to/palace")
+
+
+def cmd_mcp_run(args):
+    """Start the MCP server (JSON-RPC over stdin/stdout)."""
+    if args.palace:
+        os.environ["MEMPALACE_PALACE_PATH"] = str(Path(args.palace).expanduser().resolve())
+
+    from .mcp_server import main as mcp_main
+
+    mcp_main()
 
 
 def cmd_compress(args):
@@ -853,7 +863,18 @@ def main():
     p.add_argument("--timeout", type=float, default=30.0)
 
     # drawbridge (was: mcp)
-    sub.add_parser("drawbridge", aliases=["mcp"], help="Lower the drawbridge (show MCP setup)")
+    p_drawbridge = sub.add_parser(
+        "drawbridge", aliases=["mcp"],
+        help="Lower the drawbridge — run the MCP server or show setup instructions",
+    )
+    drawbridge_sub = p_drawbridge.add_subparsers(dest="mcp_action")
+    p_drawbridge_run = drawbridge_sub.add_parser(
+        "run", help="Start the MCP server (JSON-RPC over stdin/stdout)",
+    )
+    p_drawbridge_run.add_argument(
+        "--palace", default=None,
+        help="Path to the palace directory (overrides config file and env var)",
+    )
 
     # survey (was: status)
     sub.add_parser("survey", aliases=["status"], help="Survey the castle")
@@ -874,6 +895,13 @@ def main():
         cmd_hook(args)
         return
 
+    if args.command in ("drawbridge", "mcp"):
+        if getattr(args, "mcp_action", None) == "run":
+            cmd_mcp_run(args)
+        else:
+            cmd_mcp(args)
+        return
+
     if args.command == "instructions":
         name = getattr(args, "instructions_name", None)
         if not name:
@@ -885,13 +913,13 @@ def main():
 
     dispatch = {
         "build": cmd_init, "gather": cmd_mine, "cleave": cmd_split,
-        "seek": cmd_search, "drawbridge": cmd_mcp, "distill": cmd_compress,
+        "seek": cmd_search, "distill": cmd_compress,
         "herald": cmd_wakeup, "rebuild": cmd_repair, "raise": cmd_migrate,
         "reforge": cmd_reindex, "armory": cmd_embedders, "garrison": cmd_serve,
         "parley": cmd_sync, "survey": cmd_status, "ni": cmd_ni,
         # aliases
         "init": cmd_init, "mine": cmd_mine, "split": cmd_split,
-        "search": cmd_search, "mcp": cmd_mcp, "compress": cmd_compress,
+        "search": cmd_search, "compress": cmd_compress,
         "wake-up": cmd_wakeup, "repair": cmd_repair, "migrate": cmd_migrate,
         "reindex": cmd_reindex, "embedders": cmd_embedders, "serve": cmd_serve,
         "sync": cmd_sync, "status": cmd_status,

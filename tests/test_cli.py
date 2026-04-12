@@ -1,6 +1,7 @@
 """Tests for mempalace.cli — the main CLI dispatcher."""
 
 import argparse
+import os
 import sys
 from pathlib import Path
 from unittest.mock import MagicMock, patch
@@ -334,9 +335,9 @@ def test_mcp_command_prints_setup_guidance(monkeypatch, capsys):
 
     captured = capsys.readouterr()
     assert "Swamp Castle MCP quick setup:" in captured.out
-    assert "claude mcp add swampcastle -- python -m swampcastle.drawbridge" in captured.out
+    assert "claude mcp add swampcastle -- swampcastle drawbridge run" in captured.out
     assert "\nOptional custom palace:\n" in captured.out
-    assert "python -m swampcastle.drawbridge --palace /path/to/palace" in captured.out
+    assert "swampcastle drawbridge run --palace /path/to/palace" in captured.out
     assert "[--palace /path/to/palace]" not in captured.out
     assert captured.err == ""
 
@@ -349,11 +350,39 @@ def test_mcp_command_uses_custom_palace_path_when_provided(monkeypatch, capsys):
     captured = capsys.readouterr()
     expanded = str(Path("~/tmp/my palace").expanduser())
 
-    assert "python -m swampcastle.drawbridge --palace" in captured.out
+    assert "swampcastle drawbridge run --palace" in captured.out
     assert expanded in captured.out
     assert "Optional custom palace:" not in captured.out
     assert "[--palace /path/to/palace]" not in captured.out
     assert captured.err == ""
+
+
+def test_mcp_run_starts_server(monkeypatch):
+    """'drawbridge run' / 'mcp run' calls mcp_server.main."""
+    monkeypatch.setattr(sys, "argv", ["swampcastle", "drawbridge", "run"])
+
+    with patch("swampcastle.cli.cmd_mcp_run") as mock_run:
+        main()
+        mock_run.assert_called_once()
+
+
+def test_mcp_run_sets_palace_env(monkeypatch):
+    """'drawbridge run --palace ~/x' sets MEMPALACE_PALACE_PATH before starting."""
+    monkeypatch.setattr(sys, "argv", ["swampcastle", "drawbridge", "run", "--palace", "~/test_palace"])
+
+    with patch("swampcastle.mcp_server.main") as mock_main:
+        main()
+        mock_main.assert_called_once()
+    expected = str(Path("~/test_palace").expanduser().resolve())
+    assert os.environ.get("MEMPALACE_PALACE_PATH") == expected
+
+
+def test_mcp_no_subcommand_shows_setup(monkeypatch, capsys):
+    """'drawbridge' with no subcommand still shows setup instructions."""
+    monkeypatch.setattr(sys, "argv", ["swampcastle", "drawbridge"])
+    main()
+    captured = capsys.readouterr()
+    assert "MCP" in captured.out
 
 
 def test_main_hook_no_subcommand_prints_help(capsys):

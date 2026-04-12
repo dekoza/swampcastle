@@ -2,7 +2,7 @@ import os
 import tempfile
 import shutil
 from swampcastle.palace import get_collection as _get_test_collection
-from swampcastle.convo_miner import mine_convos
+from swampcastle.mining.convo import mine_convos
 
 
 def test_convo_mining():

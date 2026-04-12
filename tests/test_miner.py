@@ -6,7 +6,7 @@ from pathlib import Path
 from swampcastle.palace import get_collection as _get_test_collection
 import yaml
 
-from swampcastle.miner import mine, scan_project
+from swampcastle.mining.miner import mine, scan_project
 from swampcastle.palace import file_already_mined
 
 

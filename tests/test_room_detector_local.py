@@ -2,7 +2,7 @@
 
 from unittest.mock import MagicMock, patch
 
-from swampcastle.room_detector_local import (
+from swampcastle.mining.rooms import (
     FOLDER_ROOM_MAP,
     detect_rooms_from_files,
     detect_rooms_from_folders,

@@ -4,7 +4,7 @@
 
 # SwampCastle
 
-Built on ruins of [SwampCastle](https://github.com/dekoza/swampcastle). And since SwampCastle was first public version was v3, it clearly indicates that v1 and v2 sank. v3 burned down under scrutiny, collapsed, and than sank.
+Built on ruins of [MemPalace](https://github.com/MemPalace/mempalace). And since MemPalace's first public version was v3, it clearly indicates that v1 and v2 sank. That base v3 was burned down, dismantled, and than sank.
 
 **The fourth one stayed up.**
 

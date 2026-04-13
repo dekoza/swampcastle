@@ -11,39 +11,86 @@ pip install -e ".[dev]"
 ## Commands
 
 ```bash
-# Run tests
-python -m pytest tests/ -v --ignore=tests/benchmarks
+# Run unit tests (fast, in-memory — default for TDD)
+uv run pytest tests/ -v --ignore=tests/benchmarks -k "not integration"
 
-# Run tests with coverage
-python -m pytest tests/ -v --ignore=tests/benchmarks --cov=swampcastle --cov-report=term-missing
+# Run integration tests (real LanceDB + SQLite)
+uv run pytest tests/ -v -m integration
+
+# Run all tests
+uv run pytest tests/ -v --ignore=tests/benchmarks
 
 # Lint
 ruff check .
 
 # Format
 ruff format .
+```
 
-# Format check (CI mode)
-ruff format --check .
+## Architecture
+
+```
+Castle (context object)
+  ├── settings: CastleSettings (Pydantic BaseSettings)
+  ├── collection: CollectionStore (ABC)
+  ├── graph: GraphStore (ABC)
+  ├── catalog: CatalogService — status, wings, rooms, taxonomy
+  ├── search: SearchService — semantic search, duplicate check
+  ├── vault: VaultService — add/delete drawers, diary
+  └── graph: GraphService — KG ops, traversal, tunnels
+
+Storage:
+  StorageFactory (ABC)
+    ├── InMemoryStorageFactory — unit tests
+    ├── LocalStorageFactory — LanceDB + SQLite (production)
+    └── PostgresStorageFactory — pgvector + SQL (planned)
+
+MCP: mcp/tools.py registers 19 tools, schemas from Pydantic models
+CLI: cli/main.py thin dispatcher over Castle services
 ```
 
 ## Project structure
 
 ```
 swampcastle/
-├── mcp_server.py        # MCP server — all read/write tools
-├── miner.py             # Project file miner
-├── convo_miner.py       # Conversation transcript miner
-├── searcher.py          # Semantic search
-├── knowledge_graph.py   # Temporal entity-relationship graph (SQLite)
-├── palace.py            # Shared palace operations (ChromaDB access)
-├── config.py            # Configuration + input validation
-├── normalize.py         # Transcript format detection + normalization
-├── cli.py               # CLI dispatcher
-├── dialect.py           # AAAK compression dialect
-├── palace_graph.py      # Room traversal + cross-wing tunnels
-├── hooks_cli.py         # Hook system for auto-save
-└── version.py           # Single source of truth for version
+├── castle.py              # Castle context + AsyncCastle wrapper
+├── settings.py            # CastleSettings (Pydantic BaseSettings)
+├── errors.py              # CastleError hierarchy
+├── wal.py                 # WalWriter audit log
+├── query_sanitizer.py     # Search query sanitization
+├── storage/
+│   ├── base.py            # CollectionStore, GraphStore ABCs
+│   ├── memory.py          # InMemory backends (testing)
+│   ├── lance.py           # LanceDB + LocalStorageFactory
+│   └── sqlite_graph.py    # SQLite KG backend
+├── services/
+│   ├── catalog.py         # CatalogService
+│   ├── search.py          # SearchService
+│   ├── vault.py           # VaultService
+│   └── graph.py           # GraphService
+├── models/
+│   ├── drawer.py          # Search, drawer I/O models
+│   ├── kg.py              # Knowledge graph models
+│   ├── catalog.py         # Status/taxonomy models
+│   ├── diary.py           # Diary models
+│   └── sync.py            # Sync models
+├── mcp/
+│   ├── server.py          # JSON-RPC handler
+│   └── tools.py           # Tool registry (19 tools)
+├── cli/
+│   └── main.py            # CLI dispatcher
+├── mining/
+│   ├── miner.py           # Project file ingest
+│   ├── convo.py           # Conversation ingest
+│   ├── normalize.py       # Format detection
+│   └── rooms.py           # Room detection
+├── embeddings.py          # Pluggable embedders (ONNX, ST, Ollama)
+├── dialect.py             # AAAK compression
+├── sync.py                # Sync engine
+├── sync_client.py         # HTTP sync client
+├── sync_meta.py           # Node identity + sequence counter
+├── sync_server.py         # FastAPI sync server
+└── version.py             # Version string
 ```
 
 ## Conventions
@@ -53,26 +100,13 @@ swampcastle/
 - **Formatter**: ruff format, double quotes
 - **Commits**: conventional commits (`fix:`, `feat:`, `test:`, `docs:`, `ci:`)
 - **Tests**: `tests/test_*.py`, fixtures in `tests/conftest.py`
-- **Coverage**: 85% threshold (80% on Windows due to ChromaDB file lock cleanup)
-
-## Architecture
-
-```
-User → CLI / MCP Server → ChromaDB (vector store) + SQLite (knowledge graph)
-
-Palace structure:
-  WING (person/project)
-    └── ROOM (topic)
-          └── DRAWER (verbatim text chunk)
-
-Knowledge Graph:
-  ENTITY → PREDICATE → ENTITY (with valid_from / valid_to dates)
-```
+- **TDD**: write tests first, verify they fail, then implement
 
 ## Key files for common tasks
 
-- **Adding an MCP tool**: `swampcastle/mcp_server.py` — add handler function + TOOLS dict entry
-- **Changing search**: `swampcastle/searcher.py`
-- **Modifying mining**: `swampcastle/miner.py` (project files) or `swampcastle/convo_miner.py` (transcripts)
-- **Input validation**: `swampcastle/config.py` — `sanitize_name()` / `sanitize_content()`
-- **Tests**: mirror source structure in `tests/test_<module>.py`
+- **Adding an MCP tool**: `swampcastle/mcp/tools.py` — add Pydantic input model + handler in `register_tools()`
+- **Adding a service method**: appropriate `swampcastle/services/*.py`, add Pydantic I/O models in `swampcastle/models/`
+- **Adding a storage backend**: subclass `CollectionStore`/`GraphStore` in `swampcastle/storage/`, add factory
+- **Changing search**: `swampcastle/services/search.py`
+- **Modifying mining**: `swampcastle/mining/miner.py` (files) or `swampcastle/mining/convo.py` (conversations)
+- **Configuration**: `swampcastle/settings.py` — add field to `CastleSettings`

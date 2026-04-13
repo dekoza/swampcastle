@@ -2,50 +2,47 @@
 
 ## Overview
 
-SwampCastle has two storage backends:
-
-- **ChromaDB** (vector store) — stores verbatim text chunks (drawers) with metadata, supports semantic search via embeddings.
-- **SQLite** (knowledge graph) — stores entity-relationship triples with temporal validity windows.
-
-Both are local files. No network access, no external services.
+SwampCastle v4 uses a layered architecture: Castle context → Services → Storage backends.
 
 ```
-User → CLI / MCP Server → ChromaDB (palace)
-                              ↕
-                        SQLite (knowledge graph)
+User → CLI / MCP Server → Castle (context)
+                            ├── CatalogService → CollectionStore
+                            ├── SearchService  → CollectionStore
+                            ├── VaultService   → CollectionStore + WalWriter
+                            └── GraphService   → GraphStore + CollectionStore + WalWriter
 ```
 
-## Palace model
+## Storage backends
 
-The palace organizes memories using a spatial metaphor. Each level of the hierarchy corresponds to ChromaDB metadata fields, which enables filtered search.
+Two abstract contracts:
+- **CollectionStore** — document + vector storage (drawers)
+- **GraphStore** — entity-relationship graph (knowledge graph)
+
+Three factory implementations:
+
+| Factory | CollectionStore | GraphStore | Use case |
+|---------|----------------|------------|----------|
+| `InMemoryStorageFactory` | Dict-based | Dict-based | Unit tests |
+| `LocalStorageFactory` | LanceDB | SQLite | Production (local) |
+| `PostgresStorageFactory` | pgvector | SQL tables | Production (server) |
+
+The `Castle` constructor takes a `CastleSettings` and a `StorageFactory`. Callers decide which backend to use.
+
+## Castle model
+
+The castle organizes memories using a spatial metaphor. Each level of the hierarchy corresponds to metadata fields, which enables filtered search.
 
 ### Wings
 
 A wing represents a person, project, or domain. Every memory belongs to exactly one wing.
 
-```
-wing_myapp        — a project
-wing_kai          — a person
-wing_hardware     — a domain
-```
-
-Wing names are stored as the `wing` metadata field on each ChromaDB document.
-
 ### Rooms
 
-A room is a specific topic within a wing. The same room name can appear in multiple wings — when it does, it creates a tunnel (see below).
-
-```
-wing_myapp / auth-migration
-wing_myapp / pricing-model
-wing_myapp / ci-pipeline
-```
-
-Room names are stored as the `room` metadata field. Rooms are auto-detected from folder structure during `swampcastle init`, or assigned during conversation mining based on content analysis.
+A room is a specific topic within a wing. The same room name in multiple wings creates a tunnel (cross-wing connection).
 
 ### Halls
 
-Halls are memory type corridors — the same set exists in every wing:
+Memory type corridors — the same set exists in every wing:
 
 | Hall | What it stores |
 |------|---------------|
@@ -55,146 +52,44 @@ Halls are memory type corridors — the same set exists in every wing:
 | `hall_preferences` | Habits, likes, opinions |
 | `hall_advice` | Recommendations and solutions |
 
-Halls are assigned during general extraction mode (`--extract general`). In default mining modes, the hall metadata may not be set.
-
 ### Tunnels
 
 When the same room name appears in multiple wings, a tunnel connects them. This enables cross-domain queries.
 
-```
-wing_kai       / auth-migration  →  "Kai debugged the OAuth token refresh"
-wing_myapp     / auth-migration  →  "team decided to migrate auth to Clerk"
-wing_priya     / auth-migration  →  "Priya approved Clerk over Auth0"
-```
+## Services
 
-Same room, three wings. A tunnel connects them. Use `swampcastle_find_tunnels` or `swampcastle_traverse` to navigate these connections.
+Four role-based services, each with explicit dependencies:
 
-Tunnels are not stored explicitly — they're computed from shared room names across wings using the palace graph module (`palace_graph.py`).
+| Service | Depends on | Responsibility |
+|---------|-----------|----------------|
+| `CatalogService` | `CollectionStore` | Read-only metadata: status, wings, rooms, taxonomy |
+| `SearchService` | `CollectionStore`, `QuerySanitizer` | Semantic search, duplicate detection |
+| `VaultService` | `CollectionStore`, `WalWriter` | Write operations: drawers, diary |
+| `GraphService` | `GraphStore`, `CollectionStore`, `WalWriter` | KG ops, graph traversal, tunnels |
 
-### Drawers
+Services return Pydantic models. They raise `CastleError` subclasses on failure.
 
-Drawers are the verbatim text chunks stored in ChromaDB. Each drawer is a ChromaDB document with metadata fields: `wing`, `room`, `hall`, `source_file`, `chunk_index`, `filed_at`, `added_by`.
+## MCP server
 
-Content is never summarized. The exact words from the source file or conversation are preserved.
+19 tools registered via `register_tools(castle)`. Each tool has:
+- A Pydantic input model (schema auto-generated via `model_json_schema()`)
+- A handler lambda that calls the appropriate service method
 
-## Memory layers
+The JSON-RPC handler catches `CastleError` at the boundary and converts to error responses.
 
-SwampCastle loads context in four layers, designed to minimize token usage while keeping important information accessible.
+## Async
 
-### L0 — Identity (~50 tokens)
+`AsyncCastle` wraps a sync `Castle`, delegating all calls to a thread pool via `anyio.to_thread.run_sync()`. Used by the FastAPI sync server and future async MCP.
 
-A plain-text file at `~/.swampcastle/identity.txt` describing who the AI is. Loaded every session.
+## Configuration
 
-```
-I am Atlas, a personal AI assistant for Alice.
-Traits: warm, direct, remembers everything.
-```
+`CastleSettings` (Pydantic `BaseSettings`) with priority: env vars (`SWAMPCASTLE_*`) > JSON config file > defaults.
 
-### L1 — Essential story (~500–800 tokens)
+Computed paths derive from `castle_path`:
+- `kg_path` = `castle_path/../knowledge_graph.sqlite3`
+- `wal_path` = `castle_path/../wal/`
+- `config_dir` = `castle_path/..`
 
-Auto-generated from the highest-importance drawers in the palace. Groups content by room and picks the top 15 moments. Generated on each `wake-up` call.
+## Error handling
 
-### L2 — On-demand (~200–500 tokens per retrieval)
-
-Wing/room-filtered retrieval from ChromaDB. Loaded when a specific topic comes up in conversation. Not semantic search — direct metadata-filtered reads.
-
-### L3 — Deep search (unlimited)
-
-Full semantic search against the entire palace. Used when the user explicitly asks a question. This is the `swampcastle_search` tool.
-
-### Wake-up flow
-
-When an AI session starts, it calls `swampcastle_status` (via MCP) or `swampcastle wake-up` (via CLI), which loads L0 + L1. L2 and L3 fire on demand during the conversation.
-
-```
-Session start → L0 + L1 loaded (~600-900 tokens)
-Topic mentioned → L2 retrieval
-Explicit question → L3 semantic search
-```
-
-## Data flow
-
-### Mining
-
-```
-Source files
-    ↓
-  normalize.py  (convert chat formats to transcript)
-    ↓
-  miner.py / convo_miner.py  (chunk into paragraphs or exchange pairs)
-    ↓
-  palace.py  (store in ChromaDB with wing/room/hall metadata)
-```
-
-### Search
-
-```
-Query string
-    ↓
-  query_sanitizer.py  (strip prompt contamination)
-    ↓
-  searcher.py  (ChromaDB vector query with optional wing/room filter)
-    ↓
-  Results: [{text, wing, room, source_file, similarity}]
-```
-
-### Knowledge graph
-
-```
-Facts (subject → predicate → object)
-    ↓
-  knowledge_graph.py  (SQLite with temporal validity)
-    ↓
-  Queries: entity lookup, time filtering, timeline, relationship traversal
-```
-
-## Module map
-
-| Module | Responsibility |
-|--------|---------------|
-| `cli.py` | CLI entry point, command routing |
-| `config.py` | Configuration loading, input validation |
-| `normalize.py` | Chat format detection and normalization (6 formats) |
-| `miner.py` | Project file ingest (code, docs, notes) |
-| `convo_miner.py` | Conversation ingest (exchange-pair chunking) |
-| `searcher.py` | Semantic search via LanceDB/ChromaDB |
-| `layers.py` | 4-layer memory stack (L0–L3) |
-| `palace.py` | Shared palace access (get_collection, dedup check) |
-| `palace_graph.py` | Room graph traversal, tunnel detection |
-| `knowledge_graph.py` | Temporal entity-relationship graph (SQLite) |
-| `db.py` | Database abstraction layer (LanceDB + ChromaDB backends) |
-| `embeddings.py` | Pluggable embedding backends (ONNX, sentence-transformers, Ollama) |
-| `sync.py` | Sync engine (changesets, version vectors, conflict resolution) |
-| `sync_meta.py` | Node identity, sequence counter, sync metadata injection |
-| `sync_server.py` | HTTP sync server (FastAPI) |
-| `sync_client.py` | HTTP sync client |
-| `dialect.py` | AAAK compression dialect |
-| `mcp_server.py` | MCP server (19 tools, JSON-RPC over stdin/stdout) |
-| `onboarding.py` | Interactive first-run setup |
-| `query_sanitizer.py` | Strip system prompt contamination from search queries |
-| `entity_detector.py` | Auto-detect people and projects from content |
-| `entity_registry.py` | Entity code registry for AAAK |
-| `general_extractor.py` | Classify text into 5 memory types |
-| `room_detector_local.py` | Map folders to room names (70+ patterns) |
-| `split_mega_files.py` | Split concatenated transcripts into per-session files |
-| `hooks_cli.py` | Hook system for auto-save |
-| `normalize.py` | Transcript format detection and normalization |
-| `spellcheck.py` | Name-aware spellcheck |
-| `dedup.py` | Deduplication utilities |
-| `repair.py` | Palace vector index rebuild |
-| `migrate.py` | ChromaDB version migration |
-
-## Storage locations
-
-| Path | Contents |
-|------|----------|
-| `~/.swampcastle/config.json` | Global configuration |
-| `~/.swampcastle/palace/` | ChromaDB vector store (default) |
-| `~/.swampcastle/identity.txt` | L0 identity text |
-| `~/.swampcastle/wing_config.json` | Wing definitions and keywords |
-| `~/.swampcastle/people_map.json` | Name variant mappings |
-| `~/.swampcastle/knowledge_graph.sqlite3` | Knowledge graph database |
-| `~/.swampcastle/wal/write_log.jsonl` | Write-ahead log (audit trail) |
-| `~/.swampcastle/hook_state/` | Hook state and logs |
-
-All paths can be overridden — see [configuration.md](configuration.md).
+`CastleError` hierarchy with typed `code` attributes. Each boundary (MCP, CLI) has one try/except that catches `CastleError` and converts to the appropriate response format.

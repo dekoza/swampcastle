@@ -630,14 +630,12 @@ class TestSyncServerFactoryRouting:
     def setup_method(self):
         import swampcastle.sync_server as ss
 
-        ss._engine = None
-        ss._config = None
+        ss._shutdown_engine()
 
     def teardown_method(self):
         import swampcastle.sync_server as ss
 
-        ss._engine = None
-        ss._config = None
+        ss._shutdown_engine()
 
     def test_get_engine_uses_factory_from_settings(self, tmp_path, monkeypatch):
         import swampcastle.sync_server as ss
@@ -719,6 +717,42 @@ class TestSyncServerFactoryRouting:
 
         with pytest.raises(RuntimeError, match="Sync does not support ChromaDB"):
             ss._get_engine()
+
+    def test_shutdown_engine_cleans_up_factory(self, tmp_path, monkeypatch):
+        """_shutdown_engine should close the factory and reset globals."""
+        import swampcastle.sync_server as ss
+
+        closed = {"called": False}
+
+        class DummyFactory:
+            def open_collection(self, name):
+                return object()
+            def close(self):
+                closed["called"] = True
+
+        settings = SimpleNamespace(
+            castle_path=tmp_path / "castle",
+            config_dir=tmp_path / "config",
+            collection_name="swampcastle_chests",
+            backend="lance",
+        )
+
+        monkeypatch.setattr(ss, "CastleConfig", lambda _env_file=None: settings)
+        monkeypatch.setattr(ss, "factory_from_settings", lambda s: DummyFactory())
+        monkeypatch.setattr(ss, "get_identity", lambda config_dir=None: SimpleNamespace(node_id="node"))
+
+        # Initialize the engine
+        ss._get_engine()
+        assert ss._engine is not None
+        assert ss._factory is not None
+
+        # Shutdown
+        ss._shutdown_engine()
+
+        assert closed["called"], "Factory.close() should be called"
+        assert ss._engine is None
+        assert ss._factory is None
+        assert ss._config is None
 
 
 # ── MEMPALACE_BACKEND env var ─────────────────────────────────────────────────

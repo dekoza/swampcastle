@@ -10,8 +10,10 @@ Endpoints:
     POST /sync/pull    — send records the client hasn't seen
 """
 
+import atexit
 import logging
 import os
+from contextlib import asynccontextmanager
 
 from .settings import CastleSettings as CastleConfig
 from .storage import factory_from_settings
@@ -24,16 +26,39 @@ logger = logging.getLogger("swampcastle.sync_server")
 
 _engine = None
 _config = None
+_factory = None
+
+
+def _shutdown_engine() -> None:
+    """Clean up the cached sync engine and factory.
+
+    Call this on application shutdown to release resources (database connections,
+    file handles, etc.). Registered with atexit as a fallback.
+    """
+    global _engine, _config, _factory
+    if _factory is not None:
+        try:
+            _factory.close()
+        except Exception as e:
+            logger.warning("Error closing factory during shutdown: %s", e)
+        _factory = None
+    _engine = None
+    _config = None
+    logger.debug("Sync engine shutdown complete")
+
+
+# Register shutdown with atexit as fallback for non-FastAPI usage
+atexit.register(_shutdown_engine)
 
 
 def _get_engine() -> SyncEngine:
-    global _engine, _config
+    global _engine, _config, _factory
     if _engine is None:
         _config = CastleConfig(_env_file=None)
         palace_path = _config.castle_path
 
         try:
-            factory = factory_from_settings(_config)
+            _factory = factory_from_settings(_config)
         except NotImplementedError as exc:
             raise RuntimeError(
                 f"Castle at {palace_path} uses ChromaDB. "
@@ -55,7 +80,7 @@ def _get_engine() -> SyncEngine:
             ) from exc
 
         os.makedirs(str(palace_path), exist_ok=True)
-        col = factory.open_collection(_config.collection_name)
+        col = _factory.open_collection(_config.collection_name)
         identity = get_identity(str(_config.config_dir))
         vv_path = os.path.join(str(palace_path), "version_vector.json")
 
@@ -72,6 +97,13 @@ def _get_engine() -> SyncEngine:
 # ── FastAPI app ───────────────────────────────────────────────────────────────
 
 
+@asynccontextmanager
+async def _lifespan(app):
+    """FastAPI lifespan for proper engine cleanup on shutdown."""
+    yield
+    _shutdown_engine()
+
+
 def create_app():
     """Create the FastAPI application."""
     try:
@@ -81,7 +113,11 @@ def create_app():
             "fastapi is required for the sync server. Install with: pip install 'swampcastle[server]'"
         )
 
-    app = FastAPI(title="Swamp Castle Sync Server", version="1.0.0")
+    app = FastAPI(
+        title="Swamp Castle Sync Server",
+        version="1.0.0",
+        lifespan=_lifespan,
+    )
 
     # ── Endpoints ─────────────────────────────────────────────────────
 

@@ -121,7 +121,7 @@ Client:
 swampcastle sync --server http://homeserver:7433
 ```
 
-The current CLI performs one sync exchange per invocation. The parser already accepts `--auto` and `--interval`, but that continuous loop is not wired yet.
+The current CLI performs one sync exchange per invocation. Continuous loop flags were removed because that mode was never implemented.
 
 ## PostgreSQL backend
 

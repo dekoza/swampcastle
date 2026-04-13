@@ -77,7 +77,7 @@ swampcastle parley --server http://homeserver:7433
 
 `--dry-run` is wired.
 
-The parser also accepts `--auto` and `--interval`, but the continuous sync loop is not implemented yet. Do not pretend otherwise.
+The CLI performs a single sync exchange per invocation. Continuous loop flags were removed because they were never implemented.
 
 ## Python API
 

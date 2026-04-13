@@ -131,8 +131,6 @@ def main():
     # parley (sync)
     p = sub.add_parser("parley", aliases=["sync"], help="Parley with remote castle (sync)")
     p.add_argument("--server", required=True)
-    p.add_argument("--auto", action="store_true")
-    p.add_argument("--interval", type=int, default=300)
     p.add_argument("--dry-run", action="store_true")
 
     # ni
@@ -142,7 +140,7 @@ def main():
     # Remove internal/easter-egg commands from the visible help listing.
     _hide_subparser(sub, "hook", "instructions", "ni")
 
-    args, _ = parser.parse_known_args()
+    args = parser.parse_args()
 
     if not args.command:
         parser.print_help()

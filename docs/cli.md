@@ -184,7 +184,7 @@ swampcastle parley --server URL [--dry-run]
 swampcastle sync --server URL [--dry-run]
 ```
 
-Parser flags also exist for `--auto` and `--interval`, but they are not wired into a loop yet.
+This command performs one sync exchange per invocation. There is no built-in continuous loop mode.
 
 ## hook run (internal)
 

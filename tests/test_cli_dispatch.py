@@ -3,6 +3,8 @@
 from types import SimpleNamespace
 from unittest.mock import patch
 
+import pytest
+
 from swampcastle.cli.main import main
 
 
@@ -145,6 +147,11 @@ class TestParley:
             with patch("swampcastle.cli.commands.cmd_parley") as mock:
                 main()
                 mock.assert_called_once()
+
+    def test_rejects_unsupported_loop_flags(self):
+        with patch("sys.argv", ["swampcastle", "parley", "--server", "http://x", "--auto"]):
+            with pytest.raises(SystemExit):
+                main()
 
 
 class TestNi:

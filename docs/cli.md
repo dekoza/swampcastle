@@ -100,14 +100,29 @@ swampcastle-mcp
 
 ## herald / wake-up
 
-Print the protocol / status context for the current castle.
+Print the stable SwampCastle protocol for agent wake-up.
 
 ```bash
-swampcastle herald [--wing NAME]
-swampcastle wake-up [--wing NAME]
+swampcastle herald
+swampcastle wake-up
 ```
 
-Current behavior is status-oriented. The old layer-based wake-up stack no longer exists as the public architecture.
+This command is for behavior/policy, not for project state.
+
+## brief / minstrel
+
+Print a wing-scoped briefing for prompt/context injection.
+
+```bash
+swampcastle brief --wing NAME
+swampcastle minstrel --wing NAME
+```
+
+Current behavior includes:
+- total drawers in the wing
+- room counts
+- tagged contributor counts when present
+- unique source file count
 
 ## cleave / split
 

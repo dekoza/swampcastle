@@ -98,6 +98,51 @@ class TestTaxonomy:
         assert r.taxonomy["personal"]["diary"] == 1
 
 
+class TestWingBrief:
+    def test_brief_counts_rooms_contributors_and_files(self, col, svc):
+        col.upsert(
+            documents=["a", "b", "c", "d"],
+            ids=["1", "2", "3", "4"],
+            metadatas=[
+                {
+                    "wing": "proj",
+                    "room": "auth",
+                    "contributor": "dekoza",
+                    "source_file": "src/auth.py",
+                },
+                {
+                    "wing": "proj",
+                    "room": "auth",
+                    "contributor": "dekoza",
+                    "source_file": "src/auth.py",
+                },
+                {
+                    "wing": "proj",
+                    "room": "billing",
+                    "contributor": "sarah",
+                    "source_file": "src/billing.py",
+                },
+                {"wing": "other", "room": "ops", "source_file": "ops.txt"},
+            ],
+        )
+
+        r = svc.brief("proj")
+
+        assert r.wing == "proj"
+        assert r.total_drawers == 3
+        assert r.rooms == {"auth": 2, "billing": 1}
+        assert r.contributors == {"dekoza": 2, "sarah": 1}
+        assert r.source_files == 2
+
+    def test_brief_returns_empty_summary_for_unknown_wing(self, svc):
+        r = svc.brief("missing")
+        assert r.wing == "missing"
+        assert r.total_drawers == 0
+        assert r.rooms == {}
+        assert r.contributors == {}
+        assert r.source_files == 0
+
+
 class TestAaakSpec:
     def test_returns_string(self, svc):
         spec = svc.get_aaak_spec()

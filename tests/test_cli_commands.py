@@ -187,7 +187,7 @@ def test_cmd_gather_convos_uses_convo_miner_in_dry_run(tmp_path):
     assert mock_mine.call_args.kwargs["extract_mode"] == "exchange"
 
 
-def test_cmd_herald_prints_protocol_and_totals(capsys):
+def test_cmd_herald_prints_protocol_only(capsys):
     status = SimpleNamespace(protocol="L0+L1", wings={"alpha": 1}, total_drawers=5)
 
     with patch("swampcastle.castle.Castle", lambda s, f: DummyCastle(s, f, status=status)):
@@ -196,7 +196,37 @@ def test_cmd_herald_prints_protocol_and_totals(capsys):
 
     out = capsys.readouterr().out
     assert "L0+L1" in out
-    assert "Total: 5 drawers" in out
+    assert "Total: 5 drawers" not in out
+    assert "Wings:" not in out
+
+
+def test_cmd_brief_prints_wing_summary(capsys):
+    brief = SimpleNamespace(
+        wing="proj",
+        total_drawers=3,
+        rooms={"auth": 2, "billing": 1},
+        contributors={"dekoza": 2, "sarah": 1},
+        source_files=2,
+        error=None,
+    )
+
+    class BriefCastle(DummyCastle):
+        def __init__(self, settings, factory):
+            super().__init__(settings, factory, status=None)
+            self.catalog = SimpleNamespace(brief=lambda wing: brief)
+
+    args = SimpleNamespace(wing="proj", palace=None, backend=None)
+    with patch("swampcastle.castle.Castle", BriefCastle):
+        with patch("swampcastle.cli.commands.factory_from_settings", return_value=object()):
+            commands.cmd_brief(args)
+
+    out = capsys.readouterr().out
+    assert "SwampCastle Brief" in out
+    assert "Wing: proj" in out
+    assert "Drawers: 3" in out
+    assert "Files: 2" in out
+    assert "auth (2)" in out
+    assert "dekoza (2)" in out
 
 
 def test_cmd_cleave_passes_argv_without_mutating_sys_argv(tmp_path):

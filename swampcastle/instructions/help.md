@@ -8,7 +8,9 @@ Local memory for AI assistants.
 2. `swampcastle gather <dir>` — ingest project files or conversation exports
 3. `swampcastle seek "query"` — search stored memory
 4. `swampcastle survey` — inspect current wings / rooms / drawer counts
-5. `swampcastle drawbridge` — print MCP setup command
+5. `swampcastle brief --wing <name>` — print a wing briefing for prompt/context use
+6. `swampcastle herald` — print the stable memory-use protocol
+7. `swampcastle drawbridge` — print MCP setup command
 
 ## MCP tools
 
@@ -52,6 +54,8 @@ swampcastle project <dir>
 swampcastle gather <dir>
 swampcastle seek "query"
 swampcastle survey
+swampcastle brief --wing <name>
+swampcastle herald
 swampcastle drawbridge
 swampcastle drawbridge run
 swampcastle cleave <dir>

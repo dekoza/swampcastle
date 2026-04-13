@@ -67,7 +67,10 @@ swampcastle seek "auth migration" --contributor dekoza
 
 ```bash
 swampcastle survey
+swampcastle brief --wing myapp
 ```
+
+Use `brief` when you want a wing summary to paste into temporary prompt context. Use `herald` when you want the stable memory-use protocol itself.
 
 ## Conversation ingest
 

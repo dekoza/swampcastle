@@ -30,3 +30,12 @@ class RoomsResponse(BaseModel):
 class TaxonomyResponse(BaseModel):
     taxonomy: dict[str, dict[str, int]]
     error: Optional[str] = None
+
+
+class WingBriefResponse(BaseModel):
+    wing: str
+    total_drawers: int
+    rooms: dict[str, int]
+    contributors: dict[str, int]
+    source_files: int
+    error: Optional[str] = None

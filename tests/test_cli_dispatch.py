@@ -159,6 +159,26 @@ class TestHerald:
                 main()
                 mock.assert_called_once()
 
+    def test_wake_up_alias_dispatches(self):
+        with patch("sys.argv", ["swampcastle", "wake-up"]):
+            with patch("swampcastle.cli.commands.cmd_herald") as mock:
+                main()
+                mock.assert_called_once()
+
+
+class TestBrief:
+    def test_dispatches(self):
+        with patch("sys.argv", ["swampcastle", "brief", "--wing", "proj"]):
+            with patch("swampcastle.cli.commands.cmd_brief") as mock:
+                main()
+                mock.assert_called_once()
+
+    def test_minstrel_alias_dispatches(self):
+        with patch("sys.argv", ["swampcastle", "minstrel", "--wing", "proj"]):
+            with patch("swampcastle.cli.commands.cmd_brief") as mock:
+                main()
+                mock.assert_called_once()
+
 
 class TestGarrison:
     def test_dispatches(self):

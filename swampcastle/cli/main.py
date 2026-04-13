@@ -96,8 +96,11 @@ def main():
     p_dbr.add_argument("--palace", dest="run_palace", default=None)
 
     # herald (wake-up)
-    p = sub.add_parser("herald", aliases=["wake-up"], help="Sound the herald — L0+L1 context")
-    p.add_argument("--wing", default=None)
+    sub.add_parser("herald", aliases=["wake-up"], help="Sound the herald — protocol")
+
+    # brief (minstrel)
+    p = sub.add_parser("brief", aliases=["minstrel"], help="Tell the story of a wing")
+    p.add_argument("--wing", required=True)
 
     # cleave (split)
     p = sub.add_parser("cleave", aliases=["split"], help="Cleave mega-files into sessions")
@@ -211,6 +214,8 @@ def main():
         "status": cmd.cmd_survey,
         "herald": cmd.cmd_herald,
         "wake-up": cmd.cmd_herald,
+        "brief": cmd.cmd_brief,
+        "minstrel": cmd.cmd_brief,
         "cleave": cmd.cmd_cleave,
         "split": cmd.cmd_cleave,
         "distill": cmd.cmd_distill,

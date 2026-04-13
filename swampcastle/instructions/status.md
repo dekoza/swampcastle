@@ -23,7 +23,19 @@ swampcastle status
 
 ## 3. Summarize briefly
 
-Report:
+If the user wants stable protocol text for memory usage, use:
+
+```bash
+swampcastle herald
+```
+
+If the user wants a wing-scoped prompt/context summary, use:
+
+```bash
+swampcastle brief --wing <name>
+```
+
+For ordinary status summaries, report:
 - total drawers
 - number of wings
 - number of rooms

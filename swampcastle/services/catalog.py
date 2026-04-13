@@ -4,6 +4,7 @@ from swampcastle.models.catalog import (
     RoomsResponse,
     StatusResponse,
     TaxonomyResponse,
+    WingBriefResponse,
     WingsResponse,
 )
 from swampcastle.storage.base import CollectionStore
@@ -134,6 +135,56 @@ class CatalogService:
             except Exception as e:
                 return TaxonomyResponse(taxonomy=taxonomy, error=str(e))
         return TaxonomyResponse(taxonomy=taxonomy)
+
+    def brief(self, wing: str) -> WingBriefResponse:
+        rooms: dict[str, int] = {}
+        contributors: dict[str, int] = {}
+        source_files: set[str] = set()
+        total_drawers = 0
+        offset = 0
+
+        while True:
+            try:
+                batch = self._col.get(
+                    include=["metadatas"],
+                    where={"wing": wing},
+                    limit=BATCH_SIZE,
+                    offset=offset,
+                )
+                rows = batch["metadatas"]
+                for meta in rows:
+                    total_drawers += 1
+                    room = meta.get("room", "unknown")
+                    rooms[room] = rooms.get(room, 0) + 1
+
+                    contributor = meta.get("contributor")
+                    if contributor:
+                        contributors[contributor] = contributors.get(contributor, 0) + 1
+
+                    source_file = meta.get("source_file")
+                    if source_file:
+                        source_files.add(source_file)
+
+                offset += len(rows)
+                if len(rows) < BATCH_SIZE:
+                    break
+            except Exception as e:
+                return WingBriefResponse(
+                    wing=wing,
+                    total_drawers=total_drawers,
+                    rooms=rooms,
+                    contributors=contributors,
+                    source_files=len(source_files),
+                    error=str(e),
+                )
+
+        return WingBriefResponse(
+            wing=wing,
+            total_drawers=total_drawers,
+            rooms=rooms,
+            contributors=contributors,
+            source_files=len(source_files),
+        )
 
     def get_aaak_spec(self) -> str:
         return AAAK_SPEC

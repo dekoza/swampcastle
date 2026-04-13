@@ -112,7 +112,10 @@ swampcastle seek "auth migration" --contributor dekoza
 
 ```bash
 swampcastle survey
+swampcastle brief --wing myapp
 ```
+
+Use `brief` (alias: `minstrel`) when you want a wing-scoped summary for prompt/context injection. Use `herald` when you want the stable SwampCastle memory protocol.
 
 ## MCP setup
 

@@ -1,6 +1,12 @@
 """SwampCastle Pydantic I/O models."""
 
-from .catalog import RoomsResponse, StatusResponse, TaxonomyResponse, WingsResponse
+from .catalog import (
+    RoomsResponse,
+    StatusResponse,
+    TaxonomyResponse,
+    WingBriefResponse,
+    WingsResponse,
+)
 from .diary import DiaryEntry, DiaryResponse, DiaryWriteCommand, DiaryWriteResult
 from .drawer import (
     AddDrawerCommand,
@@ -53,6 +59,7 @@ __all__ = [
     "SyncRecord",
     "SyncStatus",
     "TaxonomyResponse",
+    "WingBriefResponse",
     "TimelineQuery",
     "TimelineResult",
     "TripleResult",

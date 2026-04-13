@@ -141,16 +141,48 @@ def cmd_gather(args):
 
 
 def cmd_herald(args):
-    """Wake-up context (L0+L1)."""
+    """Print the stable SwampCastle protocol for agent wake-up."""
     from swampcastle.castle import Castle
 
     settings = _settings(args)
     with Castle(settings, factory_from_settings(settings)) as castle:
-        s = castle.catalog.status()
-        print(s.protocol)
-        if s.wings:
-            print(f"\nWings: {', '.join(sorted(s.wings.keys()))}")
-            print(f"Total: {s.total_drawers} drawers")
+        print(castle.catalog.status().protocol)
+
+
+def cmd_brief(args):
+    """Print a wing-scoped briefing for prompt/context injection."""
+    from swampcastle.castle import Castle
+
+    settings = _settings(args)
+    with Castle(settings, factory_from_settings(settings)) as castle:
+        brief = castle.catalog.brief(args.wing)
+
+    _print_section("Brief")
+    _print_kv("Wing", brief.wing)
+    _print_kv("Drawers", brief.total_drawers)
+    _print_kv("Files", brief.source_files)
+
+    if brief.error:
+        _print_kv("Warning", brief.error)
+
+    if brief.total_drawers == 0:
+        print("  No drawers found for that wing.")
+        return
+
+    rooms = ", ".join(
+        f"{name} ({count})"
+        for name, count in sorted(brief.rooms.items(), key=lambda item: (-item[1], item[0]))
+    )
+    _print_kv("Rooms", rooms)
+
+    if brief.contributors:
+        contributors = ", ".join(
+            f"{name} ({count})"
+            for name, count in sorted(
+                brief.contributors.items(), key=lambda item: (-item[1], item[0])
+            )
+        )
+        _print_kv("Contributors", contributors)
 
 
 def cmd_cleave(args):

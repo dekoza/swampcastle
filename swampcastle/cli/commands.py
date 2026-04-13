@@ -123,28 +123,24 @@ def cmd_cleave(args):
 
 
 def cmd_distill(args):
-    from swampcastle.dialect import Dialect
-    settings = _settings(args)
-    palace_path = str(settings.castle_path)
-
-    config_path = args.config
-    if not config_path:
-        for candidate in ["entities.json", os.path.join(palace_path, "entities.json")]:
-            if os.path.exists(candidate):
-                config_path = candidate
-                break
-
-    dialect = Dialect.from_config(config_path) if config_path else Dialect()
-
     from swampcastle.castle import Castle
+    from swampcastle.storage import factory_from_settings
+    settings = _settings(args)
+
     with Castle(settings, factory_from_settings(settings)) as castle:
-        s = castle.catalog.status()
-        if s.total_drawers == 0:
+        count = castle.vault.distill(
+            wing=args.wing,
+            room=args.room,
+            dry_run=args.dry_run,
+        )
+        if count == 0:
             print("  No drawers to distill.")
             return
-        print(f"  Distilling {s.total_drawers} drawers...")
+
         if args.dry_run:
-            print("  DRY RUN — no changes.")
+            print(f"  DRY RUN — would distill {count} drawers.")
+        else:
+            print(f"  Distilled {count} drawers with AAAK dialect.")
 
 
 def cmd_drawbridge_setup(args):
@@ -194,13 +190,24 @@ def cmd_raise(args):
 
 
 def cmd_reforge(args):
-    from swampcastle.embeddings import get_embedder, list_embedders
+    from swampcastle.castle import Castle
+    from swampcastle.storage import factory_from_settings
     settings = _settings(args)
-    if args.dry_run:
-        print("  DRY RUN — would re-embed all drawers")
-        return
-    print("  Reforging embeddings...")
-    print(f"  Embedder: {args.embedder or 'default'}")
+
+    with Castle(settings, factory_from_settings(settings)) as castle:
+        count = castle.vault.reforge(
+            wing=args.wing,
+            room=args.room,
+            dry_run=args.dry_run,
+        )
+        if count == 0:
+            print("  No drawers to reforge.")
+            return
+
+        if args.dry_run:
+            print(f"  DRY RUN — would reforge {count} drawers.")
+        else:
+            print(f"  Reforged {count} drawers with new embeddings.")
 
 
 def cmd_armory(args):

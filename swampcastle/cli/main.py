@@ -71,7 +71,8 @@ def main():
 
     # distill (compress)
     p = sub.add_parser("distill", aliases=["compress"], help="Distill using AAAK dialect")
-    p.add_argument("--wing", default=None)
+    p.add_argument("--wing", help="Filter by wing")
+    p.add_argument("--room", help="Filter by room")
     p.add_argument("--dry-run", action="store_true")
     p.add_argument("--config", default=None)
 
@@ -96,9 +97,11 @@ def main():
 
     # reforge (reindex)
     p = sub.add_parser("reforge", aliases=["reindex"], help="Reforge embeddings with new model")
+    p.add_argument("--wing", help="Filter by wing")
+    p.add_argument("--room", help="Filter by room")
+    p.add_argument("--dry-run", action="store_true")
     p.add_argument("--embedder", default=None)
     p.add_argument("--device", default=None)
-    p.add_argument("--dry-run", action="store_true")
 
     # armory (embedders)
     sub.add_parser("armory", aliases=["embedders"], help="List available embedding models")

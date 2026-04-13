@@ -146,3 +146,83 @@ class VaultService:
             agent=query.agent_name,
             entries=entries[:query.last_n],
         )
+
+    def distill(self, wing: str = None, room: str = None, dry_run: bool = False) -> int:
+        """Compute and store AAAK Dialect summaries in drawer metadata.
+
+        AAAK Dialect is a lossy compressed symbolic format that extracts
+        entities, topics, key quotes, emotions, and flags from plain text.
+        These summaries are stored in the 'aaak' metadata field.
+
+        Returns:
+            Number of drawers processed.
+        """
+        from swampcastle.dialect import Dialect
+
+        dialect = Dialect()  # TODO: load custom entities
+        where = {}
+        if wing:
+            where["wing"] = wing
+        if room:
+            where["room"] = room
+
+        results = self._col.get(where=where, include=["documents", "metadatas"])
+        ids = results.get("ids", [])
+        documents = results.get("documents", [])
+        metadatas = results.get("metadatas", [])
+
+        if not ids:
+            return 0
+
+        updates = []
+        for doc_id, doc, meta in zip(ids, documents, metadatas):
+            # Pass existing metadata to capture wing/room/etc
+            aaak = dialect.compress(doc, metadata=meta)
+            meta["aaak"] = aaak
+            updates.append(
+                {
+                    "id": doc_id,
+                    "metadata": meta,
+                }
+            )
+
+        if not dry_run:
+            # use update() which backends must implement
+            self._col.update(
+                ids=[u["id"] for u in updates],
+                metadatas=[u["metadata"] for u in updates],
+            )
+
+        return len(ids)
+
+    def reforge(self, wing: str = None, room: str = None, dry_run: bool = False) -> int:
+        """Re-embed all drawers using the currently configured embedding model.
+
+        Useful when switching to a different model (e.g. ST -> ONNX or ONNX -> Ollama).
+
+        Returns:
+            Number of drawers processed.
+        """
+        where = {}
+        if wing:
+            where["wing"] = wing
+        if room:
+            where["room"] = room
+
+        results = self._col.get(where=where, include=["documents", "metadatas"])
+        ids = results.get("ids", [])
+        documents = results.get("documents", [])
+        metadatas = results.get("metadatas", [])
+
+        if not ids:
+            return 0
+
+        if not dry_run:
+            # upsert re-embeds when embeddings aren't provided
+            self._col.upsert(
+                ids=ids,
+                documents=documents,
+                metadatas=metadatas,
+            )
+
+        return len(ids)

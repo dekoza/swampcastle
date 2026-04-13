@@ -234,6 +234,7 @@ The docs call that out explicitly where relevant instead of pretending those flo
 | [Python API](docs/python-api.md) | Programmatic usage |
 | [AAAK dialect](docs/aaak.md) | Experimental compression layer |
 | [Migration](docs/migration.md) | Moving from MemPalace |
+| [Changelog](CHANGELOG.md) | Release history and notable changes |
 | [Notices](NOTICES.md) | Security notes and release errata |
 
 ## License

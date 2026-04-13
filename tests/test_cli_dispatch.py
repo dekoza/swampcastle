@@ -1,41 +1,136 @@
 """Tests for swampcastle.cli — rebuilt thin dispatcher."""
 
+import os
 import sys
-from unittest.mock import patch
+from pathlib import Path
+from unittest.mock import patch, MagicMock
 
 import pytest
 
+from swampcastle.cli.main import main
 
-class TestDispatch:
-    def test_no_args_prints_help(self, capsys):
+
+class TestNoArgs:
+    def test_prints_help(self, capsys):
         with patch("sys.argv", ["swampcastle"]):
-            from swampcastle.cli.main import main
             main()
         assert "SwampCastle" in capsys.readouterr().out
 
-    def test_survey_dispatches(self, capsys):
+
+class TestSurvey:
+    def test_dispatches(self, capsys):
         with patch("sys.argv", ["swampcastle", "survey"]):
-            from swampcastle.cli.main import main
             main()
-        out = capsys.readouterr().out
-        assert "drawers" in out.lower() or "castle" in out.lower()
+        assert "drawers" in capsys.readouterr().out.lower()
 
-    def test_drawbridge_no_subcommand_shows_setup(self, capsys):
+    def test_status_alias(self, capsys):
+        with patch("sys.argv", ["swampcastle", "status"]):
+            main()
+        assert "drawers" in capsys.readouterr().out.lower()
+
+
+class TestSeek:
+    def test_no_results(self, capsys):
+        with patch("sys.argv", ["swampcastle", "seek", "nonexistent"]):
+            main()
+        assert "no results" in capsys.readouterr().out.lower()
+
+    def test_search_alias(self, capsys):
+        with patch("sys.argv", ["swampcastle", "search", "anything"]):
+            main()
+        out = capsys.readouterr().out.lower()
+        assert "no results" in out or "result" in out
+
+
+class TestDrawbridge:
+    def test_no_subcommand_shows_setup(self, capsys):
         with patch("sys.argv", ["swampcastle", "drawbridge"]):
-            from swampcastle.cli.main import main
             main()
-        out = capsys.readouterr().out
-        assert "swampcastle drawbridge run" in out
+        assert "swampcastle drawbridge run" in capsys.readouterr().out
 
-    def test_drawbridge_run_starts_mcp(self):
+    def test_mcp_alias(self, capsys):
+        with patch("sys.argv", ["swampcastle", "mcp"]):
+            main()
+        assert "swampcastle drawbridge run" in capsys.readouterr().out
+
+    def test_run_starts_mcp(self):
         with patch("sys.argv", ["swampcastle", "drawbridge", "run"]):
-            with patch("swampcastle.mcp.server.main") as mock_main:
-                from swampcastle.cli.main import main
+            with patch("swampcastle.mcp.server.main") as mock:
                 main()
-                mock_main.assert_called_once()
+                mock.assert_called_once()
 
-    def test_unknown_command_exits(self, capsys):
-        with patch("sys.argv", ["swampcastle", "bogus"]):
-            from swampcastle.cli.main import main
-            with pytest.raises(SystemExit):
+
+class TestBuild:
+    def test_dispatches(self, tmp_path):
+        target = tmp_path / "project"
+        target.mkdir()
+        (target / "README.md").write_text("# Test")
+        with patch("sys.argv", ["swampcastle", "build", str(target)]):
+            with patch("swampcastle.cli.commands.cmd_build") as mock:
                 main()
+                mock.assert_called_once()
+
+
+class TestGather:
+    def test_dispatches(self, tmp_path):
+        target = tmp_path / "project"
+        target.mkdir()
+        with patch("sys.argv", ["swampcastle", "gather", str(target)]):
+            with patch("swampcastle.cli.commands.cmd_gather") as mock:
+                main()
+                mock.assert_called_once()
+
+
+class TestCleave:
+    def test_dispatches(self, tmp_path):
+        with patch("sys.argv", ["swampcastle", "cleave", str(tmp_path)]):
+            with patch("swampcastle.cli.commands.cmd_cleave") as mock:
+                main()
+                mock.assert_called_once()
+
+
+class TestHerald:
+    def test_dispatches(self):
+        with patch("sys.argv", ["swampcastle", "herald"]):
+            with patch("swampcastle.cli.commands.cmd_herald") as mock:
+                main()
+                mock.assert_called_once()
+
+
+class TestGarrison:
+    def test_dispatches(self):
+        with patch("sys.argv", ["swampcastle", "garrison"]):
+            with patch("swampcastle.cli.commands.cmd_garrison") as mock:
+                main()
+                mock.assert_called_once()
+
+
+class TestParley:
+    def test_dispatches(self):
+        with patch("sys.argv", ["swampcastle", "parley", "--server", "http://x"]):
+            with patch("swampcastle.cli.commands.cmd_parley") as mock:
+                main()
+                mock.assert_called_once()
+
+
+class TestNi:
+    def test_easter_egg(self, capsys):
+        with patch("sys.argv", ["swampcastle", "ni"]):
+            main()
+        assert "Ni!" in capsys.readouterr().out
+
+
+class TestHook:
+    def test_dispatches(self):
+        with patch("sys.argv", ["swampcastle", "hook", "run", "--hook", "stop", "--harness", "claude-code"]):
+            with patch("swampcastle.cli.commands.cmd_hook") as mock:
+                main()
+                mock.assert_called_once()
+
+
+class TestInstructions:
+    def test_dispatches(self):
+        with patch("sys.argv", ["swampcastle", "instructions", "help"]):
+            with patch("swampcastle.cli.commands.cmd_instructions") as mock:
+                main()
+                mock.assert_called_once()

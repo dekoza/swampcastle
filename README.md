@@ -189,6 +189,7 @@ Runners and methodology in [benchmarks/](benchmarks/).
 | [Python API](docs/python-api.md) | Programmatic usage |
 | [AAAK dialect](docs/aaak.md) | Compression format, status, limitations |
 | [Sync](docs/sync.md) | Multi-device replication, server setup |
+| [Migration](docs/migration.md) | Migrating from MemPalace v3 |
 | [Notices](NOTICES.md) | Security warnings, launch errata |
 
 ## Contributing

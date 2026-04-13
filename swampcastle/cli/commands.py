@@ -276,7 +276,7 @@ def cmd_parley(args):
 
     settings = _settings(args)
     with Castle(settings, factory_from_settings(settings)) as castle:
-        identity = NodeIdentity()
+        identity = NodeIdentity(config_dir=str(settings.config_dir))
         vv_path = os.path.join(str(settings.castle_path), "version_vector.json")
         engine = SyncEngine(castle._collection, identity=identity, vv_path=vv_path)
         client = SyncClient(args.server)

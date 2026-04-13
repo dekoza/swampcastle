@@ -365,6 +365,27 @@ def test_cmd_parley_live_prints_summary(capsys):
     assert "Pushed: 2, Pulled: 3" in capsys.readouterr().out
 
 
+def test_cmd_parley_uses_config_dir_for_identity(tmp_path):
+    class ParleyCastle(DummyCastle):
+        def __init__(self, settings, factory):
+            self._collection = object()
+            self.catalog = None
+            self.search = None
+            self.vault = None
+
+    palace = tmp_path / "castle"
+    args = SimpleNamespace(server="http://x", dry_run=True, palace=str(palace), backend=None)
+
+    with patch("swampcastle.castle.Castle", lambda s, f: ParleyCastle(s, f)):
+        with patch("swampcastle.cli.commands.factory_from_settings", return_value=object()):
+            with patch("swampcastle.sync.SyncEngine"):
+                with patch("swampcastle.sync_client.SyncClient"):
+                    with patch("swampcastle.sync_meta.NodeIdentity") as mock_identity:
+                        commands.cmd_parley(args)
+
+    mock_identity.assert_called_once_with(config_dir=str(palace.parent))
+
+
 def test_cmd_ni_prints_easter_egg(capsys):
     commands.cmd_ni(SimpleNamespace())
     assert "Ni!" in capsys.readouterr().out

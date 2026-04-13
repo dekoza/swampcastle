@@ -316,6 +316,7 @@ class EntityRegistry:
         return {
             "version": 1,
             "mode": "personal",
+            "self": {},
             "people": {},
             "projects": [],
             "ambiguous_flags": [],
@@ -329,6 +330,10 @@ class EntityRegistry:
         return self._data.get("mode", "personal")
 
     @property
+    def self_identity(self) -> dict:
+        return self._data.get("self", {})
+
+    @property
     def people(self) -> dict:
         return self._data.get("people", {})
 
@@ -339,6 +344,31 @@ class EntityRegistry:
     @property
     def ambiguous_flags(self) -> list:
         return self._data.get("ambiguous_flags", [])
+
+    def set_self(
+        self,
+        name: str,
+        nickname: str = "",
+        facts: list[str] | None = None,
+    ) -> None:
+        """Set the current user's identity."""
+        self._data["self"] = {
+            "name": name,
+            "nickname": nickname,
+            "facts": facts or [],
+        }
+        self.save()
+
+    def is_self(self, identifier: str) -> bool:
+        """Check if an identifier matches the current user."""
+        identity = self.self_identity
+        if not identity:
+            return False
+        lower = identifier.lower()
+        return (
+            lower == identity.get("name", "").lower()
+            or lower == identity.get("nickname", "").lower()
+        )
 
     # ── Seed from onboarding ─────────────────────────────────────────────────
 

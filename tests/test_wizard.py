@@ -61,7 +61,7 @@ def test_wizard_can_switch_to_postgres(tmp_path, monkeypatch):
     assert data["database_url"] == "postgresql://localhost/test"
 
 
-def test_wizard_with_personal_identity(tmp_path, monkeypatch, capsys):
+def test_wizard_with_personal_identity_and_self(tmp_path, monkeypatch, capsys):
     monkeypatch.setattr("swampcastle.runtime_config.Path.home", lambda: tmp_path)
 
     responses = iter(
@@ -69,9 +69,11 @@ def test_wizard_with_personal_identity(tmp_path, monkeypatch, capsys):
             "",  # backend default
             str(tmp_path / "castle"),  # castle path
             "y",  # set up identity? yes
+            "Riley",  # self name
+            "ril",  # self nickname
+            "likes dogs",  # self facts
             "2",  # mode: personal
-            "Riley, daughter",  # person
-            "Devon",  # person
+            "Devon, friend",  # person
             "",  # done people
         ]
     )
@@ -81,20 +83,16 @@ def test_wizard_with_personal_identity(tmp_path, monkeypatch, capsys):
 
     out = capsys.readouterr().out
     assert "Identity saved" in out
-    assert "AAAK entities" in out
 
     registry_path = tmp_path / ".swampcastle" / "entity_registry.json"
-    assert registry_path.exists()
     registry = json.loads(registry_path.read_text())
-    assert "Riley" in registry["people"]
-
-    aaak_path = tmp_path / ".swampcastle" / "aaak_entities.md"
-    assert aaak_path.exists()
-    aaak = aaak_path.read_text()
-    assert "RIL=Riley" in aaak
+    assert registry["self"]["name"] == "Riley"
+    assert registry["self"]["nickname"] == "ril"
+    assert "likes dogs" in registry["self"]["facts"]
+    assert "Devon" in registry["people"]
 
 
-def test_wizard_with_work_identity_includes_projects(tmp_path, monkeypatch, capsys):
+def test_wizard_with_work_identity_includes_projects(tmp_path, monkeypatch):
     monkeypatch.setattr("swampcastle.runtime_config.Path.home", lambda: tmp_path)
 
     responses = iter(
@@ -102,6 +100,9 @@ def test_wizard_with_work_identity_includes_projects(tmp_path, monkeypatch, caps
             "",  # backend default
             str(tmp_path / "castle"),  # castle path
             "y",  # set up identity? yes
+            "Dominik",  # self name
+            "dekoza",  # self nickname
+            "",  # self facts (blank)
             "1",  # mode: work
             "Sarah, team lead",  # person
             "",  # done people
@@ -115,5 +116,7 @@ def test_wizard_with_work_identity_includes_projects(tmp_path, monkeypatch, caps
 
     registry_path = tmp_path / ".swampcastle" / "entity_registry.json"
     registry = json.loads(registry_path.read_text())
+    assert registry["self"]["name"] == "Dominik"
+    assert registry["self"]["nickname"] == "dekoza"
     assert "Sarah" in registry["people"]
     assert "SwampCastle" in registry["projects"]

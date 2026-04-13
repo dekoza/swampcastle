@@ -138,7 +138,13 @@ def _ask_projects() -> list[str]:
 
 
 def _save_identity(
-    mode: str, people: list[dict], projects: list[str], config_dir: Path | None = None
+    mode: str,
+    people: list[dict],
+    projects: list[str],
+    config_dir: Path | None = None,
+    self_name: str = "",
+    self_nickname: str = "",
+    self_facts: list[str] | None = None,
 ) -> None:
     from swampcastle.runtime_config import runtime_config_dir
 
@@ -147,6 +153,8 @@ def _save_identity(
     resolved_dir = config_dir or runtime_config_dir()
     registry = EntityRegistry.load(resolved_dir)
     registry.seed(mode=mode, people=people, projects=projects, aliases={})
+    if self_name:
+        registry.set_self(name=self_name, nickname=self_nickname, facts=self_facts or [])
 
     resolved_dir.mkdir(parents=True, exist_ok=True)
 
@@ -192,10 +200,28 @@ def run_wizard() -> None:
     print(f"\n  Saved runtime config: {config_path}")
 
     # Part 2: personal identity (optional)
-    if _yn("\n  Set up personal identity? (people, projects, usage mode)", default=True):
+    if _yn("\n  Set up personal identity? (who you are, people, projects)", default=True):
+        # Self identity
+        print("\n  --- Your identity ---\n")
+        print("  This helps SwampCastle recognise you in project teams")
+        print("  and tag your own contributions during ingest.\n")
+        self_name = _prompt("Your name")
+        self_nickname = _prompt("Nickname or username (used in git, etc.)") if self_name else ""
+        self_facts_raw = _prompt("Key facts about you (comma-separated, or blank)")
+        self_facts = (
+            [f.strip() for f in self_facts_raw.split(",") if f.strip()] if self_facts_raw else []
+        )
+
         mode = _ask_mode()
         people = _ask_people(mode)
         projects = _ask_projects() if mode != "personal" else []
-        _save_identity(mode, people, projects)
+        _save_identity(
+            mode,
+            people,
+            projects,
+            self_name=self_name,
+            self_nickname=self_nickname,
+            self_facts=self_facts,
+        )
 
     print("\n  Wizard complete.")

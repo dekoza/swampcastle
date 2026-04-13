@@ -311,3 +311,26 @@ def test_summary(tmp_path):
     assert "personal" in s
     assert "Riley" in s
     assert "SwampCastle" in s
+
+
+def test_self_identity_defaults_empty(tmp_path):
+    registry = EntityRegistry.load(tmp_path)
+    assert registry.self_identity == {}
+
+
+def test_set_self_identity(tmp_path):
+    registry = EntityRegistry.load(tmp_path)
+    registry.set_self(name="Dominik", nickname="dekoza", facts=["maintains SwampCastle"])
+
+    reloaded = EntityRegistry.load(tmp_path)
+    assert reloaded.self_identity["name"] == "Dominik"
+    assert reloaded.self_identity["nickname"] == "dekoza"
+    assert "maintains SwampCastle" in reloaded.self_identity["facts"]
+
+
+def test_self_nickname_resolves_in_team(tmp_path):
+    registry = EntityRegistry.load(tmp_path)
+    registry.set_self(name="Dominik", nickname="dekoza")
+    assert registry.is_self("dekoza") is True
+    assert registry.is_self("Dominik") is True
+    assert registry.is_self("sarah") is False

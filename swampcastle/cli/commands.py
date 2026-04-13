@@ -72,16 +72,15 @@ def cmd_seek(args):
 
 
 def cmd_build(args):
-    from swampcastle.entity_detector import scan_for_detection, detect_entities, confirm_entities
-    from swampcastle.mining.rooms import detect_rooms_from_folders
+    from swampcastle.entity_detector import confirm_entities, detect_entities, scan_for_detection
+    from swampcastle.mining.rooms import detect_rooms_local
 
     project_dir = os.path.expanduser(args.dir)
     if not os.path.isdir(project_dir):
         print(f"  Error: {project_dir} is not a directory")
         sys.exit(1)
 
-    rooms = detect_rooms_from_folders(project_dir)
-    print(f"  Detected {len(rooms)} rooms in {project_dir}")
+    detect_rooms_local(project_dir, yes=args.yes)
 
     candidates = scan_for_detection(project_dir)
     if candidates:

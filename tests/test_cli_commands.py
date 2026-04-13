@@ -107,7 +107,7 @@ def test_cmd_build_prints_detection_summary(tmp_path, capsys):
     project.mkdir()
     args = SimpleNamespace(dir=str(project), yes=False, palace=None, backend=None)
 
-    with patch("swampcastle.mining.rooms.detect_rooms_from_folders", return_value=["a", "b"]):
+    with patch("swampcastle.mining.rooms.detect_rooms_local") as mock_detect_rooms:
         with patch("swampcastle.entity_detector.scan_for_detection", return_value=["file1"]):
             with patch(
                 "swampcastle.entity_detector.detect_entities",
@@ -119,22 +119,35 @@ def test_cmd_build_prints_detection_summary(tmp_path, capsys):
                 ):
                     commands.cmd_build(args)
 
+    mock_detect_rooms.assert_called_once_with(str(project), yes=False)
     out = capsys.readouterr().out
-    assert "Detected 2 rooms" in out
     assert "Detected 1 people, 2 projects" in out
 
 
 def test_cmd_build_calls_real_room_detector_signature(tmp_path, capsys):
     project = tmp_path / "project"
     (project / "backend").mkdir(parents=True)
+    (project / "backend" / "app.py").write_text("print('hello')\n")
     args = SimpleNamespace(dir=str(project), yes=True, palace=None, backend=None)
 
     with patch("swampcastle.entity_detector.scan_for_detection", return_value=[]):
         commands.cmd_build(args)
 
     out = capsys.readouterr().out
-    assert "Detected " in out
-    assert " rooms in " in out
+    assert "Config saved:" in out
+    assert "swampcastle gather" in out
+
+
+def test_cmd_build_creates_swampcastle_yaml(tmp_path):
+    project = tmp_path / "project"
+    (project / "backend").mkdir(parents=True)
+    (project / "backend" / "app.py").write_text("print('hello')\n")
+    args = SimpleNamespace(dir=str(project), yes=True, palace=None, backend=None)
+
+    with patch("swampcastle.entity_detector.scan_for_detection", return_value=[]):
+        commands.cmd_build(args)
+
+    assert (project / "swampcastle.yaml").exists()
 
 
 def test_cmd_gather_projects_uses_miner(tmp_path, capsys):

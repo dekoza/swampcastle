@@ -2,6 +2,8 @@
 
 from unittest.mock import MagicMock, patch
 
+import yaml
+
 from swampcastle.mining.rooms import (
     FOLDER_ROOM_MAP,
     detect_rooms_from_files,
@@ -276,3 +278,24 @@ def test_detect_rooms_local_interactive(tmp_path):
     ):
         detect_rooms_local(str(tmp_path), yes=False)
     assert (tmp_path / ".swampcastle.yaml").exists()
+
+
+def test_save_config_includes_team_field(tmp_path):
+    rooms = [{"name": "general", "description": "All files", "keywords": []}]
+    team = ["dekoza", "sarah", "ben"]
+    save_config(str(tmp_path), "myproject", rooms, team=team)
+    config_file = tmp_path / ".swampcastle.yaml"
+    data = yaml.safe_load(config_file.read_text())
+    assert data["team"] == ["dekoza", "sarah", "ben"]
+
+
+def test_detect_rooms_local_with_team(tmp_path):
+    (tmp_path / "src").mkdir()
+    (tmp_path / "src" / "main.py").write_text("code")
+    mock_miner = MagicMock()
+    mock_miner.scan_project.return_value = ["f1"]
+    with patch.dict("sys.modules", {"swampcastle.miner": mock_miner}):
+        detect_rooms_local(str(tmp_path), yes=True, team=["dekoza", "sarah"])
+    config_file = tmp_path / ".swampcastle.yaml"
+    data = yaml.safe_load(config_file.read_text())
+    assert data["team"] == ["dekoza", "sarah"]

@@ -273,18 +273,26 @@ def get_user_approval(rooms: list, project_name: str) -> tuple[list, str]:
     return rooms, wing
 
 
-def save_config(project_dir: str, project_name: str, rooms: list, force: bool = False) -> bool:
+def save_config(
+    project_dir: str,
+    project_name: str,
+    rooms: list,
+    force: bool = False,
+    team: list[str] | None = None,
+) -> bool:
     config = {
         "wing": project_name,
-        "rooms": [
-            {
-                "name": r["name"],
-                "description": r["description"],
-                "keywords": sorted(set(r.get("keywords", [r["name"]]))),
-            }
-            for r in rooms
-        ],
     }
+    if team:
+        config["team"] = team
+    config["rooms"] = [
+        {
+            "name": r["name"],
+            "description": r["description"],
+            "keywords": sorted(set(r.get("keywords", [r["name"]]))),
+        }
+        for r in rooms
+    ]
     config_path = project_config_path(project_dir)
 
     if config_path.exists() and not force:
@@ -303,7 +311,12 @@ def save_config(project_dir: str, project_name: str, rooms: list, force: bool = 
     return True
 
 
-def detect_rooms_local(project_dir: str, yes: bool = False, wing: str | None = None):
+def detect_rooms_local(
+    project_dir: str,
+    yes: bool = False,
+    wing: str | None = None,
+    team: list[str] | None = None,
+):
     """Main entry point for local project setup."""
     project_path = Path(project_dir).expanduser().resolve()
     project_name = wing or project_path.name.lower().replace(" ", "_").replace("-", "_")
@@ -340,4 +353,4 @@ def detect_rooms_local(project_dir: str, yes: bool = False, wing: str | None = N
             print("  Cancelled. No config written.")
             return
 
-    save_config(project_dir, final_wing, approved_rooms, force=yes)
+    save_config(project_dir, final_wing, approved_rooms, force=yes, team=team)

@@ -112,7 +112,7 @@ def test_cmd_project_prints_detection_summary(tmp_path, capsys):
     with patch("swampcastle.mining.rooms.detect_rooms_local") as mock_detect_rooms:
         commands.cmd_project(args)
 
-    mock_detect_rooms.assert_called_once_with(str(project), yes=False, wing=None)
+    mock_detect_rooms.assert_called_once_with(str(project), yes=False, wing=None, team=None)
 
 
 def test_cmd_project_calls_real_room_detector_signature(tmp_path, capsys):

@@ -61,6 +61,7 @@ def main():
     p.add_argument("dir", help="Project directory")
     p.add_argument("--yes", action="store_true", help="Auto-accept without prompts")
     p.add_argument("--wing", default=None, help="Override wing name")
+    p.add_argument("--team", nargs="*", default=None, help="Team member identifiers")
 
     # wizard
     sub.add_parser("wizard", help="Configure global runtime settings")

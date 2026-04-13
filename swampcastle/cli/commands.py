@@ -81,7 +81,12 @@ def cmd_project(args):
         print(f"  Error: {project_dir} is not a directory")
         sys.exit(1)
 
-    detect_rooms_local(project_dir, yes=args.yes, wing=getattr(args, "wing", None))
+    detect_rooms_local(
+        project_dir,
+        yes=args.yes,
+        wing=getattr(args, "wing", None),
+        team=getattr(args, "team", None),
+    )
 
 
 def cmd_gather(args):

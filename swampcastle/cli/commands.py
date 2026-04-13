@@ -74,7 +74,6 @@ def cmd_seek(args):
 
 
 def cmd_project(args):
-    from swampcastle.entity_detector import confirm_entities, detect_entities, scan_for_detection
     from swampcastle.mining.rooms import detect_rooms_local
 
     project_dir = os.path.expanduser(args.dir)
@@ -83,16 +82,6 @@ def cmd_project(args):
         sys.exit(1)
 
     detect_rooms_local(project_dir, yes=args.yes, wing=getattr(args, "wing", None))
-
-    candidates = scan_for_detection(project_dir)
-    if candidates:
-        entities = detect_entities(candidates)
-        if not args.yes:
-            entities = confirm_entities(entities)
-        print(
-            f"  Detected {len(entities.get('people', []))} people, "
-            f"{len(entities.get('projects', []))} projects"
-        )
 
 
 def cmd_gather(args):

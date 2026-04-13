@@ -176,13 +176,14 @@ class VaultService:
 
         updates = []
         for doc_id, doc, meta in zip(ids, documents, metadatas):
-            # Pass existing metadata to capture wing/room/etc
-            aaak = dialect.compress(doc, metadata=meta)
-            meta["aaak"] = aaak
+            # Copy metadata before mutating to avoid side effects
+            meta_copy = dict(meta)
+            aaak = dialect.compress(doc, metadata=meta_copy)
+            meta_copy["aaak"] = aaak
             updates.append(
                 {
                     "id": doc_id,
-                    "metadata": meta,
+                    "metadata": meta_copy,
                 }
             )
 

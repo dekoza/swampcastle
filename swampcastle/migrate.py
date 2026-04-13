@@ -241,6 +241,12 @@ def migrate(
             raise FileExistsError(f"Target castle already exists and is not empty: {target_path}")
 
     drawers = extract_drawers_from_sqlite(str(source_db))
+    if not drawers:
+        raise ValueError(
+            f"No drawers found in source palace at {source_path}. "
+            "The database may be empty or corrupted."
+        )
+
     report = MigrationReport(
         source_palace=source_path,
         target_castle=target_path,

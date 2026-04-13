@@ -39,6 +39,20 @@ def _get_engine() -> SyncEngine:
                 f"Castle at {palace_path} uses ChromaDB. "
                 "Sync does not support ChromaDB. Run: swampcastle raise"
             ) from exc
+        except ValueError as exc:
+            raise RuntimeError(
+                f"Invalid configuration for sync server: {exc}"
+            ) from exc
+        except ImportError as exc:
+            raise RuntimeError(
+                f"Missing dependency for configured backend: {exc}. "
+                "Check your installation."
+            ) from exc
+        except FileNotFoundError as exc:
+            raise RuntimeError(
+                f"Castle path not found: {palace_path}. "
+                "Run 'swampcastle build' first."
+            ) from exc
 
         os.makedirs(str(palace_path), exist_ok=True)
         col = factory.open_collection(_config.collection_name)

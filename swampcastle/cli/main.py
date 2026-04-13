@@ -5,6 +5,22 @@ import argparse
 from swampcastle.version import __version__
 
 
+def _hide_subparser(subparsers, *hidden_names: str) -> None:
+    """Hide internal subcommands from argparse help output.
+
+    argparse does not support hidden subparsers properly: using
+    help=argparse.SUPPRESS on add_parser() still renders '==SUPPRESS==' in the
+    command list. To hide a subparser, we must remove its pseudo-action from
+    _choices_actions and rebuild the metavar used in the usage line.
+    """
+    hidden = set(hidden_names)
+    subparsers._choices_actions = [
+        action for action in subparsers._choices_actions if action.dest not in hidden
+    ]
+    visible_names = [name for name in subparsers._name_parser_map if name not in hidden]
+    subparsers.metavar = "{" + ",".join(visible_names) + "}"
+
+
 def main():
     parser = argparse.ArgumentParser(
         prog="swampcastle",
@@ -121,6 +137,10 @@ def main():
 
     # ni
     sub.add_parser("ni", help=argparse.SUPPRESS)
+
+    # argparse does not hide subparsers correctly with help=SUPPRESS.
+    # Remove internal/easter-egg commands from the visible help listing.
+    _hide_subparser(sub, "hook", "instructions", "ni")
 
     args, _ = parser.parse_known_args()
 

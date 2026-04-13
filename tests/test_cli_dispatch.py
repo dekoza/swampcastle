@@ -12,6 +12,19 @@ class TestNoArgs:
             main()
         assert "SwampCastle" in capsys.readouterr().out
 
+    def test_help_hides_internal_and_easter_egg_commands(self, capsys):
+        with patch("sys.argv", ["swampcastle", "--help"]):
+            try:
+                main()
+            except SystemExit:
+                pass
+
+        out = capsys.readouterr().out
+        assert "==SUPPRESS==" not in out
+        assert "\n    hook" not in out
+        assert "\n    instructions" not in out
+        assert "\n    ni" not in out
+
 
 class TestSurvey:
     def test_dispatches(self, capsys):

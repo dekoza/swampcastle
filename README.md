@@ -241,7 +241,7 @@ The docs call that out explicitly where relevant instead of pretending those flo
 MIT — see [LICENSE](LICENSE).
 
 <!-- Link Definitions -->
-[version-shield]: https://img.shields.io/badge/version-4.0.0-4dc9f6?style=flat-square&labelColor=0a0e14
+[version-shield]: https://img.shields.io/badge/version-4.0.1-4dc9f6?style=flat-square&labelColor=0a0e14
 [release-link]: https://github.com/dekoza/swampcastle/releases
 [python-shield]: https://img.shields.io/badge/python-3.11%2B-7dd8f8?style=flat-square&labelColor=0a0e14&logo=python&logoColor=7dd8f8
 [python-link]: https://www.python.org/

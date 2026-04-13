@@ -71,7 +71,7 @@ def cmd_seek(args):
             print(f"      {hit.text[:200]}")
 
 
-def cmd_build(args):
+def cmd_project(args):
     from swampcastle.entity_detector import confirm_entities, detect_entities, scan_for_detection
     from swampcastle.mining.rooms import detect_rooms_local
 

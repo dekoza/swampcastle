@@ -53,8 +53,11 @@ def main():
 
     sub = parser.add_subparsers(dest="command")
 
-    # build (init)
-    p = sub.add_parser("build", aliases=["init"], help="Build your castle from a project directory")
+    # project
+    p = sub.add_parser(
+        "project",
+        help="Create or update project-local mining config (.swampcastle.yaml)",
+    )
     p.add_argument("dir", help="Project directory")
     p.add_argument("--yes", action="store_true", help="Auto-accept detected entities")
 
@@ -188,8 +191,7 @@ def main():
         return
 
     dispatch = {
-        "build": cmd.cmd_build,
-        "init": cmd.cmd_build,
+        "project": cmd.cmd_project,
         "gather": cmd.cmd_gather,
         "mine": cmd.cmd_gather,
         "seek": cmd.cmd_seek,

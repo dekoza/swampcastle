@@ -94,15 +94,15 @@ def test_cmd_seek_prints_hits(capsys):
     assert "hello world" in out
 
 
-def test_cmd_build_exits_for_missing_dir(capsys):
+def test_cmd_project_exits_for_missing_dir(capsys):
     with pytest.raises(SystemExit, match="1"):
-        commands.cmd_build(
+        commands.cmd_project(
             SimpleNamespace(dir="/does/not/exist", yes=False, palace=None, backend=None)
         )
     assert "not a directory" in capsys.readouterr().out
 
 
-def test_cmd_build_prints_detection_summary(tmp_path, capsys):
+def test_cmd_project_prints_detection_summary(tmp_path, capsys):
     project = tmp_path / "project"
     project.mkdir()
     args = SimpleNamespace(dir=str(project), yes=False, palace=None, backend=None)
@@ -117,35 +117,35 @@ def test_cmd_build_prints_detection_summary(tmp_path, capsys):
                     "swampcastle.entity_detector.confirm_entities",
                     return_value={"people": [1], "projects": [1, 2]},
                 ):
-                    commands.cmd_build(args)
+                    commands.cmd_project(args)
 
     mock_detect_rooms.assert_called_once_with(str(project), yes=False)
     out = capsys.readouterr().out
     assert "Detected 1 people, 2 projects" in out
 
 
-def test_cmd_build_calls_real_room_detector_signature(tmp_path, capsys):
+def test_cmd_project_calls_real_room_detector_signature(tmp_path, capsys):
     project = tmp_path / "project"
     (project / "backend").mkdir(parents=True)
     (project / "backend" / "app.py").write_text("print('hello')\n")
     args = SimpleNamespace(dir=str(project), yes=True, palace=None, backend=None)
 
     with patch("swampcastle.entity_detector.scan_for_detection", return_value=[]):
-        commands.cmd_build(args)
+        commands.cmd_project(args)
 
     out = capsys.readouterr().out
     assert "Config saved:" in out
     assert "swampcastle gather" in out
 
 
-def test_cmd_build_creates_swampcastle_yaml(tmp_path):
+def test_cmd_project_creates_swampcastle_yaml(tmp_path):
     project = tmp_path / "project"
     (project / "backend").mkdir(parents=True)
     (project / "backend" / "app.py").write_text("print('hello')\n")
     args = SimpleNamespace(dir=str(project), yes=True, palace=None, backend=None)
 
     with patch("swampcastle.entity_detector.scan_for_detection", return_value=[]):
-        commands.cmd_build(args)
+        commands.cmd_project(args)
 
     assert (project / "swampcastle.yaml").exists()
 

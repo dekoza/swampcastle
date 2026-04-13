@@ -96,15 +96,29 @@ class TestDrawbridge:
                 mock.assert_called_once()
 
 
-class TestBuild:
+class TestProject:
     def test_dispatches(self, tmp_path):
         target = tmp_path / "project"
         target.mkdir()
         (target / "README.md").write_text("# Test")
-        with patch("sys.argv", ["swampcastle", "build", str(target)]):
-            with patch("swampcastle.cli.commands.cmd_build") as mock:
+        with patch("sys.argv", ["swampcastle", "project", str(target)]):
+            with patch("swampcastle.cli.commands.cmd_project") as mock:
                 main()
                 mock.assert_called_once()
+
+    def test_build_is_unknown_command(self, tmp_path):
+        target = tmp_path / "project"
+        target.mkdir()
+        with patch("sys.argv", ["swampcastle", "build", str(target)]):
+            with pytest.raises(SystemExit):
+                main()
+
+    def test_init_is_unknown_command(self, tmp_path):
+        target = tmp_path / "project"
+        target.mkdir()
+        with patch("sys.argv", ["swampcastle", "init", str(target)]):
+            with pytest.raises(SystemExit):
+                main()
 
 
 class TestGather:

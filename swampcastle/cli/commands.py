@@ -55,6 +55,7 @@ def cmd_seek(args):
                 query=args.query,
                 wing=args.wing,
                 room=args.room,
+                contributor=getattr(args, "contributor", None),
                 limit=args.results,
             )
         )
@@ -64,12 +65,18 @@ def cmd_seek(args):
             _print_kv("Wing", args.wing)
         if args.room:
             _print_kv("Room", args.room)
+        if getattr(args, "contributor", None):
+            _print_kv("Contributor", args.contributor)
         if not result.results:
             print("  No results found.")
             return
         _print_kv("Results", len(result.results))
         for i, hit in enumerate(result.results, 1):
-            print(f"\n  [{i}] {hit.wing} / {hit.room}  (match: {hit.similarity})")
+            label = f"\n  [{i}] {hit.wing} / {hit.room}"
+            if getattr(hit, "contributor", None):
+                label += f" by {hit.contributor}"
+            label += f"  (match: {hit.similarity})"
+            print(label)
             print(f"      {hit.text[:200]}")
 
 

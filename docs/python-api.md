@@ -22,7 +22,9 @@ with Castle(settings, factory) as castle:
         )
     )
 
-    result = castle.search.search(SearchQuery(query="provider switch", wing="myapp"))
+    result = castle.search.search(
+        SearchQuery(query="provider switch", wing="myapp", contributor="dekoza")
+    )
     print(result.results)
 ```
 
@@ -80,7 +82,13 @@ postgres = PostgresStorageFactory("postgresql://user:pass@localhost:5432/swampca
 from swampcastle.models import SearchQuery
 
 result = castle.search.search(
-    SearchQuery(query="billing retry policy", wing="myapp", room="billing", limit=5)
+    SearchQuery(
+        query="billing retry policy",
+        wing="myapp",
+        room="billing",
+        contributor="dekoza",
+        limit=5,
+    )
 )
 ```
 

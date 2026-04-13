@@ -292,3 +292,43 @@ def test_file_already_mined_check_mtime():
     finally:
         del col
         shutil.rmtree(tmpdir, ignore_errors=True)
+
+
+def test_project_mining_tags_contributor_metadata():
+    tmpdir = tempfile.mkdtemp()
+    try:
+        project_root = Path(tmpdir).resolve()
+        os.makedirs(project_root / "backend")
+
+        write_file(
+            project_root / "backend" / "app.py",
+            "def main():\n    print('hello world')\n" * 20,
+        )
+        with open(project_root / ".swampcastle.yaml", "w") as f:
+            yaml.dump(
+                {
+                    "wing": "test_project",
+                    "team": ["dekoza", "sarah"],
+                    "rooms": [
+                        {"name": "backend", "description": "Backend code"},
+                        {"name": "general", "description": "General"},
+                    ],
+                },
+                f,
+            )
+
+        factory = InMemoryStorageFactory()
+        from unittest.mock import patch
+
+        with patch(
+            "swampcastle.mining.contributor._git_last_author",
+            return_value="dekoza",
+        ):
+            mine(str(project_root), str(project_root / "palace"), storage_factory=factory)
+
+        col = factory.open_collection("swampcastle_chests")
+        rows = col.get(include=["metadatas"])
+        assert rows["metadatas"]
+        assert all(meta.get("contributor") == "dekoza" for meta in rows["metadatas"])
+    finally:
+        shutil.rmtree(tmpdir, ignore_errors=True)

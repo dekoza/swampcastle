@@ -30,6 +30,12 @@ Run:
 swampcastle project <dir>
 ```
 
+If they want contributor tagging during ingest, include a shared team list:
+
+```bash
+swampcastle project <dir> --team dekoza sarah
+```
+
 Explain that this writes `.swampcastle.yaml` for that project.
 
 ## Step 5: Ingest data

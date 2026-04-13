@@ -13,13 +13,13 @@ SwampCastle auto-creates a default global runtime config at `~/.swampcastle/conf
 Create or update project-local mining config for a directory.
 
 ```bash
-swampcastle project <dir> [--yes]
+swampcastle project <dir> [--yes] [--team NAME ...]
 ```
 
 Current behavior:
 - detects project rooms
 - writes `.swampcastle.yaml`
-- scans content to infer people / projects
+- optionally stores a shared `team` list for contributor tagging
 - does **not** ingest files on its own
 
 ## wizard
@@ -30,7 +30,7 @@ Edit global runtime configuration.
 swampcastle wizard
 ```
 
-The wizard edits `~/.swampcastle/config.json` and supports the default Lance backend or manual PostgreSQL configuration.
+The wizard edits `~/.swampcastle/config.json` and supports the default Lance backend or manual PostgreSQL configuration. It can also seed `~/.swampcastle/entity_registry.json` with your self identity and known people/projects.
 
 ## gather / mine
 
@@ -64,8 +64,8 @@ swampcastle gather ~/projects/myapp --dry-run --limit 10
 Semantic search.
 
 ```bash
-swampcastle seek <query> [--wing NAME] [--room NAME] [--results N]
-swampcastle search <query> [--wing NAME] [--room NAME] [--results N]
+swampcastle seek <query> [--wing NAME] [--room NAME] [--contributor NAME] [--results N]
+swampcastle search <query> [--wing NAME] [--room NAME] [--contributor NAME] [--results N]
 ```
 
 ## survey / status

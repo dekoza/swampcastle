@@ -45,3 +45,34 @@ def test_convo_mining_accepts_storage_factory():
     assert col.count() >= 2
 
     shutil.rmtree(tmpdir, ignore_errors=True)
+
+
+def test_convo_mining_tags_contributor_metadata():
+    tmpdir = tempfile.mkdtemp()
+    with open(os.path.join(tmpdir, "chat.txt"), "w") as f:
+        f.write(
+            "> What is memory?\nMemory is persistence.\n\n> Why does it matter?\nIt enables continuity.\n\n> How do we build it?\nWith structured storage.\n"
+        )
+
+    with open(os.path.join(tmpdir, ".swampcastle.yaml"), "w") as f:
+        import yaml
+
+        yaml.dump({"wing": "test_convos", "team": ["dekoza", "sarah"]}, f)
+
+    factory = InMemoryStorageFactory()
+    from unittest.mock import patch
+
+    with patch(
+        "swampcastle.mining.contributor._git_last_author",
+        return_value="dekoza",
+    ):
+        mine_convos(
+            tmpdir, os.path.join(tmpdir, "palace"), wing="test_convos", storage_factory=factory
+        )
+
+    col = factory.open_collection("swampcastle_chests")
+    rows = col.get(include=["metadatas"])
+    assert rows["metadatas"]
+    assert all(meta.get("contributor") == "dekoza" for meta in rows["metadatas"])
+
+    shutil.rmtree(tmpdir, ignore_errors=True)

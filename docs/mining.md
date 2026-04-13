@@ -26,6 +26,7 @@ swampcastle mine ~/projects/myapp
 - respects `.gitignore` by default
 - chunks readable text files into drawers
 - assigns a wing and room to each chunk
+- tags chunks with a best-effort `contributor` when the project config includes a `team` list
 - skips already-mined files when possible
 
 ### Common options
@@ -38,6 +39,18 @@ swampcastle gather <dir> \
   [--agent NAME] \
   [--limit N] \
   [--dry-run]
+```
+
+Contributor tagging does not come from a `gather` flag. It comes from `.swampcastle.yaml`:
+
+```yaml
+wing: myapp
+team:
+  - dekoza
+  - sarah
+rooms:
+  - name: backend
+    description: Backend code
 ```
 
 Examples:
@@ -80,15 +93,19 @@ swampcastle gather ~/exports --mode convos --extract general
 
 `general` classifies chunks into broader memory types instead of keeping only exchange-pair structure.
 
+Conversation ingest also performs contributor tagging when the source directory has `.swampcastle.yaml` with a `team` list and the files live inside a git repository.
+
 ## Project setup
 
 `swampcastle project` prepares a directory for mining by writing `.swampcastle.yaml`:
 
 ```bash
-swampcastle project ~/projects/myapp
+swampcastle project ~/projects/myapp --team dekoza sarah
 ```
 
 That command helps you inspect and save the inferred structure before you ingest anything. New setups use `.swampcastle.yaml`; if a legacy `swampcastle.yaml` exists, SwampCastle migrates it automatically.
+
+The optional `team` list is shared project metadata. During ingest, SwampCastle checks git history for each file, matches the author against the configured team, and stores the matched identifier in drawer metadata as `contributor`.
 
 ## Splitting mega-files
 

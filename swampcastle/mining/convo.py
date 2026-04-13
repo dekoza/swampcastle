@@ -16,6 +16,8 @@ from datetime import datetime
 from collections import defaultdict
 
 from .normalize import normalize
+from .contributor import detect_contributor
+from ..project_config import resolve_project_config
 from ..settings import CastleSettings
 from ..storage import StorageFactory, factory_from_settings
 
@@ -252,6 +254,38 @@ def scan_convos(convo_dir: str) -> list:
 # =============================================================================
 
 
+def _load_contributor_context(convo_path: Path):
+    team = None
+    registry = None
+    config_path = resolve_project_config(convo_path)
+    if config_path is None:
+        return team, registry
+
+    import yaml
+
+    with open(config_path, encoding="utf-8") as f:
+        config = yaml.safe_load(f) or {}
+    team = config.get("team")
+    if not team:
+        return team, registry
+
+    try:
+        from ..entity_registry import EntityRegistry
+
+        registry = EntityRegistry.load()
+    except Exception:
+        registry = None
+    return team, registry
+
+
+def _extract_chunks(content: str, extract_mode: str):
+    if extract_mode == "general":
+        from .general_extractor import extract_memories
+
+        return extract_memories(content)
+    return chunk_exchanges(content)
+
+
 def mine_convos(
     convo_dir: str,
     palace_path: str,
@@ -295,6 +329,8 @@ def mine_convos(
             storage_factory = factory_from_settings(settings)
         collection = storage_factory.open_collection("swampcastle_chests")
 
+    team, registry = _load_contributor_context(convo_path)
+
     total_drawers = 0
     files_skipped = 0
     room_counts = defaultdict(int)
@@ -316,14 +352,7 @@ def mine_convos(
         if not content or len(content.strip()) < MIN_CHUNK_SIZE:
             continue
 
-        # Chunk — either exchange pairs or general extraction
-        if extract_mode == "general":
-            from .general_extractor import extract_memories
-
-            chunks = extract_memories(content)
-            # Each chunk already has memory_type; use it as the room name
-        else:
-            chunks = chunk_exchanges(content)
+        chunks = _extract_chunks(content, extract_mode)
 
         if not chunks:
             continue
@@ -333,6 +362,8 @@ def mine_convos(
             room = detect_convo_room(content)
         else:
             room = None  # set per-chunk below
+
+        contributor = detect_contributor(filepath, convo_path, team=team, registry=registry)
 
         if dry_run:
             if extract_mode == "general":
@@ -376,6 +407,7 @@ def mine_convos(
                             "filed_at": datetime.now().isoformat(),
                             "ingest_mode": "convos",
                             "extract_mode": extract_mode,
+                            **({"contributor": contributor} if contributor else {}),
                         }
                     ],
                 )

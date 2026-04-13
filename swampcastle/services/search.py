@@ -19,19 +19,24 @@ class SearchService:
     def search(self, query: SearchQuery) -> SearchResponse:
         sanitized = self._sanitizer(query.query)
 
-        where = {}
+        filters = []
         if query.wing:
-            where["wing"] = query.wing
+            filters.append({"wing": query.wing})
         if query.room:
-            if where:
-                where = {"$and": [{"wing": query.wing}, {"room": query.room}]}
-            else:
-                where["room"] = query.room
+            filters.append({"room": query.room})
+        if query.contributor:
+            filters.append({"contributor": query.contributor})
+
+        where = None
+        if len(filters) == 1:
+            where = filters[0]
+        elif filters:
+            where = {"$and": filters}
 
         raw = self._col.query(
             query_texts=[sanitized["clean_query"]],
             n_results=query.limit,
-            where=where or None,
+            where=where,
             include=["documents", "metadatas", "distances"],
         )
 
@@ -47,13 +52,18 @@ class SearchService:
                         room=meta.get("room", ""),
                         similarity=round(1 - dist, 3),
                         source_file=meta.get("source_file"),
+                        contributor=meta.get("contributor"),
                     )
                 )
 
         resp = SearchResponse(
             query=sanitized["clean_query"],
             results=hits,
-            filters={"wing": query.wing, "room": query.room},
+            filters={
+                "wing": query.wing,
+                "room": query.room,
+                "contributor": query.contributor,
+            },
         )
         if sanitized["was_sanitized"]:
             resp.query_sanitized = True

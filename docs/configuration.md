@@ -94,6 +94,12 @@ The CLI now auto-creates and auto-loads `~/.swampcastle/config.json` on first us
 swampcastle wizard
 ```
 
+The same runtime directory may also contain:
+- `entity_registry.json` — your self identity plus known people/projects
+- `aaak_entities.md` — AAAK-oriented entity aliases derived from the registry
+
+Project-local mining config lives separately in `.swampcastle.yaml`. That file can include a shared `team` list used for contributor tagging during ingest.
+
 ## Recommended backend routing
 
 Use `factory_from_settings()` rather than importing a backend directly when you want configuration-driven behavior:

@@ -29,13 +29,17 @@ On first use, SwampCastle creates a default global runtime config at `~/.swampca
 swampcastle wizard
 ```
 
+`wizard` can also store your self identity (`name`, `nickname`, `facts`) in `~/.swampcastle/entity_registry.json` for contributor resolution during ingest.
+
 ### 1. Prepare project structure
 
 ```bash
-swampcastle project ~/projects/myapp
+swampcastle project ~/projects/myapp --team dekoza sarah
 ```
 
 `project` writes `.swampcastle.yaml` for the target project. It prepares room routing for ingest but does not ingest files by itself. If a legacy `swampcastle.yaml` exists, it is migrated automatically.
+
+If you pass `--team`, SwampCastle stores shared contributor identifiers in the project config so later ingest can tag drawers with a best-effort `contributor` value.
 
 ### 2. Ingest project files
 
@@ -56,6 +60,7 @@ swampcastle gather ~/projects/myapp --include-ignored docs/generated
 ```bash
 swampcastle seek "auth migration"
 swampcastle seek "billing retry policy" --wing myapp --room billing
+swampcastle seek "auth migration" --contributor dekoza
 ```
 
 ### 4. Inspect the current shape
@@ -71,6 +76,8 @@ Conversation mining uses the same command with `--mode convos`:
 ```bash
 swampcastle gather ~/chat-exports --mode convos --wing myapp
 ```
+
+If the source directory also contains `.swampcastle.yaml` with a `team` list, conversation ingest uses the same best-effort contributor tagging as project-file ingest.
 
 If you want broader extraction instead of exchange-pair chunking:
 

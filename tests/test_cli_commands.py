@@ -411,3 +411,31 @@ def test_cmd_parley_uses_config_dir_for_identity(tmp_path):
 def test_cmd_ni_prints_easter_egg(capsys):
     commands.cmd_ni(SimpleNamespace())
     assert "Ni!" in capsys.readouterr().out
+
+
+def test_cmd_seek_prints_contributor_filter_and_hit(capsys):
+    hit = SimpleNamespace(
+        wing="proj",
+        room="auth",
+        similarity=0.9,
+        text="hello world",
+        contributor="dekoza",
+    )
+    result = SimpleNamespace(results=[hit])
+    args = SimpleNamespace(
+        query="hello",
+        wing=None,
+        room=None,
+        contributor="dekoza",
+        results=5,
+        palace=None,
+        backend=None,
+    )
+
+    with patch("swampcastle.castle.Castle", lambda s, f: DummyCastle(s, f, search=result)):
+        with patch("swampcastle.cli.commands.factory_from_settings", return_value=object()):
+            commands.cmd_seek(args)
+
+    out = capsys.readouterr().out
+    assert "Contributor: dekoza" in out
+    assert "by dekoza" in out

@@ -76,13 +76,17 @@ Before doing anything else, SwampCastle will create a default global runtime con
 swampcastle wizard
 ```
 
+The wizard can also store your own identity in `~/.swampcastle/entity_registry.json` so SwampCastle can recognize you by name or nickname during ingest.
+
 ### 1. Prepare a project
 
 ```bash
-swampcastle project ~/projects/myapp
+swampcastle project ~/projects/myapp --team dekoza sarah
 ```
 
 `project` creates project-local mining config in `.swampcastle.yaml`. It does not ingest files by itself. If an older `swampcastle.yaml` exists, SwampCastle will migrate it to the hidden filename and tell you.
+
+The optional `team` list lets ingest tag drawers with a best-effort `contributor` identity from git history.
 
 ### 2. Ingest files
 
@@ -101,6 +105,7 @@ swampcastle gather ~/chat-exports --mode convos --wing myapp
 ```bash
 swampcastle seek "why did we switch auth providers"
 swampcastle seek "pricing" --wing myapp --room billing
+swampcastle seek "auth migration" --contributor dekoza
 ```
 
 ### 4. Inspect the castle

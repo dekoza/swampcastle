@@ -30,6 +30,7 @@ class SearchQuery(BaseModel):
     limit: int = Field(default=5, ge=1, le=100)
     wing: Optional[str] = Field(default=None, description="Filter by wing")
     room: Optional[str] = Field(default=None, description="Filter by room")
+    contributor: Optional[str] = Field(default=None, description="Filter by contributor")
     context: Optional[str] = Field(default=None, description="Background context, not embedded")
 
 
@@ -39,6 +40,7 @@ class SearchHit(BaseModel):
     room: str
     similarity: float
     source_file: Optional[str] = None
+    contributor: Optional[str] = None
 
 
 class SearchResponse(BaseModel):

@@ -8,6 +8,7 @@ Identify:
 - the semantic query
 - optional wing filter
 - optional room filter
+- optional contributor filter
 
 ## 2. Prefer MCP when available
 
@@ -22,7 +23,7 @@ Use these tools in roughly this order:
 ## 3. CLI fallback
 
 ```bash
-swampcastle seek "query" [--wing X] [--room Y] [--results N]
+swampcastle seek "query" [--wing X] [--room Y] [--contributor NAME] [--results N]
 ```
 
 Alias:
@@ -36,6 +37,7 @@ swampcastle search "query"
 Include:
 - wing
 - room
+- contributor when present
 - similarity
 - short quoted excerpt
 

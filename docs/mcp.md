@@ -92,6 +92,7 @@ At startup the server:
 | `limit` | integer | no |
 | `wing` | string | no |
 | `room` | string | no |
+| `contributor` | string | no |
 | `context` | string | no |
 
 ### add drawer

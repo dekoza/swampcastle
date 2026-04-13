@@ -18,9 +18,9 @@ def col():
         ],
         ids=["1", "2", "3"],
         metadatas=[
-            {"wing": "backend", "room": "database"},
-            {"wing": "backend", "room": "auth"},
-            {"wing": "api", "room": "design"},
+            {"wing": "backend", "room": "database", "contributor": "dekoza"},
+            {"wing": "backend", "room": "auth", "contributor": "sarah"},
+            {"wing": "api", "room": "design", "contributor": "dekoza"},
         ],
     )
     return c
@@ -104,3 +104,13 @@ class TestCheckDuplicate:
             )
         )
         assert r.is_duplicate is False
+
+    def test_contributor_filter(self, svc):
+        r = svc.search(SearchQuery(query="api", contributor="dekoza"))
+        assert r.filters["contributor"] == "dekoza"
+        assert r.results
+        assert all(h.contributor == "dekoza" for h in r.results)
+
+    def test_search_hit_exposes_contributor(self, svc):
+        r = svc.search(SearchQuery(query="auth"))
+        assert r.results[0].contributor in {"dekoza", "sarah"}

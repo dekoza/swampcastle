@@ -19,10 +19,11 @@ Filters:
 ```bash
 swampcastle seek "billing retries" --wing myapp
 swampcastle seek "token rotation" --wing myapp --room auth
+swampcastle seek "recent auth work" --contributor dekoza
 swampcastle seek "postgres" --results 10
 ```
 
-The CLI prints verbatim text plus wing / room / similarity.
+The CLI prints verbatim text plus wing / room / similarity, and includes contributor when present.
 
 ## Python API
 
@@ -39,11 +40,17 @@ factory = factory_from_settings(settings)
 
 with Castle(settings, factory) as castle:
     result = castle.search.search(
-        SearchQuery(query="auth migration", wing="myapp", room="auth", limit=5)
+        SearchQuery(
+            query="auth migration",
+            wing="myapp",
+            room="auth",
+            contributor="dekoza",
+            limit=5,
+        )
     )
 
 for hit in result.results:
-    print(hit.wing, hit.room, hit.similarity, hit.text[:120])
+    print(hit.wing, hit.room, hit.contributor, hit.similarity, hit.text[:120])
 ```
 
 ## Duplicate checks
@@ -70,6 +77,7 @@ MCP exposes the same flow through `swampcastle_check_duplicate`.
 | `limit` | `int` | `5` |
 | `wing` | `str \| None` | `None` |
 | `room` | `str \| None` | `None` |
+| `contributor` | `str \| None` | `None` |
 | `context` | `str \| None` | `None` |
 
 `context` is background context for callers. The search embedding is built from `query`, not from the extra context.
@@ -88,7 +96,7 @@ At a high level:
 
 1. the query is embedded
 2. the collection backend searches nearest neighbors
-3. optional `wing` / `room` filters narrow the candidate set
+3. optional `wing` / `room` / `contributor` filters narrow the candidate set
 4. results are returned as `SearchHit` models
 
 The concrete ANN implementation depends on the active backend:

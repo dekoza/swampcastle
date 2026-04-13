@@ -83,6 +83,7 @@ def main():
     p.add_argument("query", nargs="?", default="")
     p.add_argument("--wing", default=None)
     p.add_argument("--room", default=None)
+    p.add_argument("--contributor", default=None)
     p.add_argument("--results", type=int, default=5)
 
     # survey (status)

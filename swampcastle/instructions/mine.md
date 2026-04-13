@@ -17,6 +17,12 @@ Clarify whether the source is:
 swampcastle gather <dir>
 ```
 
+If they want contributor tagging, make sure the project has `.swampcastle.yaml` with a `team` list, usually created via:
+
+```bash
+swampcastle project <dir> --team dekoza sarah
+```
+
 ### Conversation exports
 
 ```bash
@@ -53,5 +59,6 @@ swampcastle cleave <dir> --dry-run
 
 Recommend:
 - `swampcastle seek "query"`
+- `swampcastle seek "query" --contributor dekoza`
 - `swampcastle survey`
 - additional ingest from more sources

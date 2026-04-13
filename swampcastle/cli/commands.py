@@ -9,6 +9,14 @@ from swampcastle.settings import CastleSettings
 from swampcastle.storage import factory_from_settings
 
 
+def _print_section(title: str) -> None:
+    print(f"  SwampCastle {title}")
+
+
+def _print_kv(label: str, value) -> None:
+    print(f"  {label}: {value}")
+
+
 def _settings(args) -> CastleSettings:
     kwargs = {}
     palace = getattr(args, "palace", None)
@@ -26,11 +34,12 @@ def cmd_survey(args):
     settings = _settings(args)
     with Castle(settings, factory_from_settings(settings)) as castle:
         s = castle.catalog.status()
-        print(f"  SwampCastle — {s.total_drawers} drawers")
+        _print_section("Survey")
+        _print_kv("Drawers", s.total_drawers)
         if s.wings:
-            print(f"  Wings: {', '.join(sorted(s.wings.keys()))}")
+            _print_kv("Wings", ", ".join(sorted(s.wings.keys())))
         if s.rooms:
-            print(f"  Rooms: {', '.join(sorted(s.rooms.keys()))}")
+            _print_kv("Rooms", ", ".join(sorted(s.rooms.keys())))
 
 
 def cmd_seek(args):
@@ -47,9 +56,16 @@ def cmd_seek(args):
                 limit=args.results,
             )
         )
+        _print_section("Seek")
+        _print_kv("Query", args.query or "")
+        if args.wing:
+            _print_kv("Wing", args.wing)
+        if args.room:
+            _print_kv("Room", args.room)
         if not result.results:
             print("  No results found.")
             return
+        _print_kv("Results", len(result.results))
         for i, hit in enumerate(result.results, 1):
             print(f"\n  [{i}] {hit.wing} / {hit.room}  (match: {hit.similarity})")
             print(f"      {hit.text[:200]}")
@@ -85,6 +101,13 @@ def cmd_gather(args):
     storage_factory = None
     if not args.dry_run:
         storage_factory = factory_from_settings(settings)
+
+    _print_section("Gather")
+    _print_kv("Mode", args.mode)
+    _print_kv("Source", project_dir)
+    _print_kv("Castle", palace_path)
+    if args.wing:
+        _print_kv("Wing", args.wing)
 
     if args.mode == "convos":
         from swampcastle.mining.convo import mine_convos
@@ -280,15 +303,15 @@ def cmd_parley(args):
         vv_path = os.path.join(str(settings.castle_path), "version_vector.json")
         engine = SyncEngine(castle._collection, identity=identity, vv_path=vv_path)
         client = SyncClient(args.server)
-        print(f"  Syncing with {args.server}...")
+        _print_section("Sync")
+        _print_kv("Server", args.server)
+        _print_kv("Castle", settings.castle_path)
         if args.dry_run:
             print("  DRY RUN — no changes.")
             return
         result = client.sync(engine)
-        print(
-            f"  Done. Pushed: {result.get('push', {}).get('sent', 0)}, "
-            f"Pulled: {result.get('pull', {}).get('received', 0)}"
-        )
+        _print_kv("Pushed", result.get("push", {}).get("sent", 0))
+        _print_kv("Pulled", result.get("pull", {}).get("received", 0))
 
 
 def cmd_ni(args):

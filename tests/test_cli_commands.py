@@ -55,7 +55,8 @@ def test_cmd_survey_prints_status(capsys):
             commands.cmd_survey(SimpleNamespace(palace=None, backend=None))
 
     out = capsys.readouterr().out
-    assert "3 drawers" in out
+    assert "SwampCastle Survey" in out
+    assert "Drawers: 3" in out
     assert "a" in out
     assert "r" in out
 
@@ -70,7 +71,9 @@ def test_cmd_seek_prints_no_results(capsys):
         with patch("swampcastle.cli.commands.factory_from_settings", return_value=object()):
             commands.cmd_seek(args)
 
-    assert "No results" in capsys.readouterr().out
+    out = capsys.readouterr().out
+    assert "SwampCastle Seek" in out
+    assert "No results" in out
 
 
 def test_cmd_seek_prints_hits(capsys):
@@ -85,6 +88,8 @@ def test_cmd_seek_prints_hits(capsys):
             commands.cmd_seek(args)
 
     out = capsys.readouterr().out
+    assert "SwampCastle Seek" in out
+    assert "Results: 1" in out
     assert "proj / auth" in out
     assert "hello world" in out
 
@@ -132,7 +137,7 @@ def test_cmd_build_calls_real_room_detector_signature(tmp_path, capsys):
     assert " rooms in " in out
 
 
-def test_cmd_gather_projects_uses_miner(tmp_path):
+def test_cmd_gather_projects_uses_miner(tmp_path, capsys):
     target = tmp_path / "proj"
     target.mkdir()
     args = SimpleNamespace(
@@ -152,6 +157,8 @@ def test_cmd_gather_projects_uses_miner(tmp_path):
         with patch("swampcastle.mining.miner.mine") as mock_mine:
             commands.cmd_gather(args)
 
+    out = capsys.readouterr().out
+    assert "SwampCastle Gather" in out
     assert mock_mine.call_args.kwargs["storage_factory"] == "factory"
     assert mock_mine.call_args.kwargs["include_ignored"] == ["*.log"]
 
@@ -339,7 +346,8 @@ def test_cmd_parley_dry_run(capsys):
                         )
 
     out = capsys.readouterr().out
-    assert "Syncing with http://x" in out
+    assert "SwampCastle Sync" in out
+    assert "Server: http://x" in out
     assert "DRY RUN" in out
     mock_client.assert_called_once_with("http://x")
 
@@ -364,7 +372,11 @@ def test_cmd_parley_live_prints_summary(capsys):
                             )
                         )
 
-    assert "Pushed: 2, Pulled: 3" in capsys.readouterr().out
+    out = capsys.readouterr().out
+    assert "SwampCastle Sync" in out
+    assert "Server: http://x" in out
+    assert "Pushed: 2" in out
+    assert "Pulled: 3" in out
 
 
 def test_cmd_parley_uses_config_dir_for_identity(tmp_path):

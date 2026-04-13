@@ -218,7 +218,7 @@ def test_migrate_imports_into_target_factory_and_copies_sidecars(tmp_path):
 
 def test_migrate_refuses_existing_nonempty_target(tmp_path):
     source_palace = tmp_path / "legacy" / "palace"
-    _write_chroma_sqlite(source_palace, [])
+    _write_chroma_sqlite(source_palace, [{"id": "d1", "document": "x", "metadata": {}}])
 
     target_castle = tmp_path / "swampcastle" / "castle"
     target_castle.mkdir(parents=True)
@@ -231,3 +231,54 @@ def test_migrate_refuses_existing_nonempty_target(tmp_path):
             dry_run=False,
             target_factory=InMemoryStorageFactory(),
         )
+
+
+def test_migrate_raises_for_empty_source(tmp_path):
+    source_palace = tmp_path / "legacy" / "palace"
+    _write_chroma_sqlite(source_palace, [])  # empty
+
+    with pytest.raises(ValueError, match="No drawers found"):
+        migrate(
+            source_palace=str(source_palace),
+            target_castle=str(tmp_path / "castle"),
+            dry_run=False,
+            target_factory=InMemoryStorageFactory(),
+        )
+
+
+def test_migrate_cleans_up_sidecars_on_upsert_failure(tmp_path):
+    """If upsert fails, sidecars should be cleaned up along with castle dir."""
+    source_root = tmp_path / "legacy"
+    source_palace = source_root / "palace"
+    _write_chroma_sqlite(
+        source_palace,
+        [{"id": "d1", "document": "content", "metadata": {"wing": "test"}}],
+    )
+    (source_root / "identity.txt").write_text("identity")
+    (source_root / "node_id").write_text("node123")
+
+    target_castle = tmp_path / "swampcastle" / "castle"
+    target_root = target_castle.parent
+
+    class FailingFactory:
+        def open_collection(self, name):
+            return FailingCollection()
+        def close(self):
+            pass
+
+    class FailingCollection:
+        def upsert(self, **kwargs):
+            raise RuntimeError("Simulated upsert failure")
+
+    with pytest.raises(RuntimeError, match="Simulated upsert failure"):
+        migrate(
+            source_palace=str(source_palace),
+            target_castle=str(target_castle),
+            dry_run=False,
+            target_factory=FailingFactory(),
+        )
+
+    # Verify cleanup: castle dir and sidecars should NOT exist
+    assert not target_castle.exists(), "Castle dir should be cleaned up"
+    assert not (target_root / "identity.txt").exists(), "Sidecar should be cleaned up"
+    assert not (target_root / "node_id").exists(), "Sidecar should be cleaned up"

@@ -260,15 +260,26 @@ def migrate(
         _print_summary(report, drawers)
         return report
 
+    # NOTE: Migration is NOT atomic. If upsert fails partway, some drawers may
+    # be written while others are not. The source palace is never modified.
     target_root = target_path.parent
     target_root.mkdir(parents=True, exist_ok=True)
     target_path.mkdir(parents=True, exist_ok=True)
 
-    created_targets: list[Path] = []
+    created_targets: list[Path] = [target_path]
     own_factory = target_factory is None
     factory = target_factory or _default_target_factory(target_path)
 
     try:
+        # Copy sidecars FIRST so they're tracked for cleanup on error
+        report.sidecars_copied = _copy_sidecars(source_root, target_root)
+        for name in report.sidecars_copied:
+            if name == "wal/":
+                created_targets.append(target_root / "wal")
+            else:
+                created_targets.append(target_root / name)
+
+        # Now perform the upsert operations
         collection = factory.open_collection(COLLECTION_NAME)
         for start in range(0, len(drawers), BATCH_SIZE):
             batch = drawers[start : start + BATCH_SIZE]
@@ -278,16 +289,10 @@ def migrate(
                 metadatas=[drawer["metadata"] for drawer in batch],
             )
             report.drawers_migrated += len(batch)
-
-        report.sidecars_copied = _copy_sidecars(source_root, target_root)
-        created_targets.extend(target_root / name for name in report.sidecars_copied if name != "wal/")
-        if "wal/" in report.sidecars_copied:
-            created_targets.append(target_root / "wal")
     except Exception:
         if own_factory:
             factory.close()
-        if not target_factory:
-            shutil.rmtree(target_path, ignore_errors=True)
+        # Clean up all created resources in reverse order
         for created in reversed(created_targets):
             if created.is_dir():
                 shutil.rmtree(created, ignore_errors=True)

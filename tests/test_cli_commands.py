@@ -12,8 +12,9 @@ from swampcastle.cli import commands
 
 
 @pytest.fixture(autouse=True)
-def restore_castle_env(monkeypatch):
+def restore_castle_env(monkeypatch, tmp_path):
     original = os.environ.get("SWAMPCASTLE_CASTLE_PATH")
+    monkeypatch.setattr("swampcastle.runtime_config.Path.home", lambda: tmp_path)
     yield
     if original is None:
         monkeypatch.delenv("SWAMPCASTLE_CASTLE_PATH", raising=False)
@@ -40,11 +41,12 @@ class DummyCastle:
         return None
 
 
-def test_settings_uses_palace_and_backend():
+def test_settings_uses_palace_and_backend(tmp_path):
     args = SimpleNamespace(palace="/tmp/castle", backend="postgres")
     settings = commands._settings(args)
     assert str(settings.castle_path) == "/tmp/castle"
     assert settings.backend == "postgres"
+    assert (tmp_path / ".swampcastle" / "config.json").exists()
 
 
 def test_cmd_survey_prints_status(capsys):

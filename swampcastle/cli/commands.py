@@ -5,6 +5,7 @@ import shlex
 import sys
 from pathlib import Path
 
+from swampcastle.runtime_config import ensure_runtime_config
 from swampcastle.settings import CastleSettings
 from swampcastle.storage import factory_from_settings
 
@@ -25,7 +26,8 @@ def _settings(args) -> CastleSettings:
     backend = getattr(args, "backend", None)
     if backend:
         kwargs["backend"] = backend
-    return CastleSettings(_env_file=None, **kwargs)
+    config_path = ensure_runtime_config()
+    return CastleSettings(_env_file=None, _json_file=str(config_path), **kwargs)
 
 
 def cmd_survey(args):

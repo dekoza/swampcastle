@@ -188,18 +188,18 @@ This command performs one sync exchange per invocation. There is no built-in con
 
 ## hook run (internal)
 
-Internal hook bridge used by shell / harness integrations.
+Internal hook bridge used by shell / harness integrations. This command is gated and requires an explicit env guard.
 
 ```bash
-swampcastle hook run --hook {session-start,stop,precompact} --harness {claude-code,codex}
+SWAMPCASTLE_INTERNAL=1 swampcastle hook run --hook {session-start,stop,precompact} --harness {claude-code,codex}
 ```
 
 ## instructions (internal)
 
-Print packaged instruction text.
+Print packaged instruction text. This command is gated and requires an explicit env guard.
 
 ```bash
-swampcastle instructions {init,search,mine,help,status}
+SWAMPCASTLE_INTERNAL=1 swampcastle instructions {init,search,mine,help,status}
 ```
 
 ## ni

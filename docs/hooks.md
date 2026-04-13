@@ -21,7 +21,7 @@ The hook parser does **not** currently accept `gemini` as a built-in harness nam
 ## Internal CLI bridge
 
 ```bash
-swampcastle hook run --hook stop --harness claude-code
+SWAMPCASTLE_INTERNAL=1 swampcastle hook run --hook stop --harness claude-code
 ```
 
 This command reads JSON from stdin and prints JSON to stdout.
@@ -30,7 +30,7 @@ Example:
 
 ```bash
 echo '{"session_id":"abc","stop_hook_active":false,"transcript_path":"/tmp/session.jsonl"}' \
-  | swampcastle hook run --hook stop --harness claude-code
+  | SWAMPCASTLE_INTERNAL=1 swampcastle hook run --hook stop --harness claude-code
 ```
 
 ## What the hooks do

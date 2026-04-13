@@ -162,7 +162,17 @@ class TestNi:
 
 
 class TestHook:
-    def test_dispatches(self):
+    def test_requires_internal_guard(self, monkeypatch, capsys):
+        monkeypatch.delenv("SWAMPCASTLE_INTERNAL", raising=False)
+        with patch(
+            "sys.argv", ["swampcastle", "hook", "run", "--hook", "stop", "--harness", "claude-code"]
+        ):
+            with pytest.raises(SystemExit, match="2"):
+                main()
+        assert "internal command" in capsys.readouterr().out.lower()
+
+    def test_dispatches_with_internal_guard(self, monkeypatch):
+        monkeypatch.setenv("SWAMPCASTLE_INTERNAL", "1")
         with patch(
             "sys.argv", ["swampcastle", "hook", "run", "--hook", "stop", "--harness", "claude-code"]
         ):
@@ -172,7 +182,15 @@ class TestHook:
 
 
 class TestInstructions:
-    def test_dispatches(self):
+    def test_requires_internal_guard(self, monkeypatch, capsys):
+        monkeypatch.delenv("SWAMPCASTLE_INTERNAL", raising=False)
+        with patch("sys.argv", ["swampcastle", "instructions", "help"]):
+            with pytest.raises(SystemExit, match="2"):
+                main()
+        assert "internal command" in capsys.readouterr().out.lower()
+
+    def test_dispatches_with_internal_guard(self, monkeypatch):
+        monkeypatch.setenv("SWAMPCASTLE_INTERNAL", "1")
         with patch("sys.argv", ["swampcastle", "instructions", "help"]):
             with patch("swampcastle.cli.commands.cmd_instructions") as mock:
                 main()

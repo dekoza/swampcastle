@@ -27,7 +27,7 @@ pip install swampcastle
 SwampCastle provides dynamic instructions via the CLI. To get instructions for any operation:
 
 ```bash
-swampcastle instructions <command>
+SWAMPCASTLE_INTERNAL=1 swampcastle instructions <command>
 ```
 
 Where `<command>` is one of: `help`, `init`, `mine`, `search`, `status`.

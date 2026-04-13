@@ -9,5 +9,5 @@ allowed-tools: Bash, Read, Glob, Grep
 Run the following command and follow the returned instructions step by step:
 
 ```bash
-swampcastle instructions mine
+SWAMPCASTLE_INTERNAL=1 swampcastle instructions mine
 ```

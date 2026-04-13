@@ -1,6 +1,8 @@
 """SwampCastle CLI — argparse setup + dispatch."""
 
 import argparse
+import os
+import sys
 
 from swampcastle.version import __version__
 
@@ -19,6 +21,17 @@ def _hide_subparser(subparsers, *hidden_names: str) -> None:
     ]
     visible_names = [name for name in subparsers._name_parser_map if name not in hidden]
     subparsers.metavar = "{" + ",".join(visible_names) + "}"
+
+
+def _require_internal_access(command: str) -> None:
+    """Require an explicit env guard for internal commands."""
+    if os.environ.get("SWAMPCASTLE_INTERNAL") == "1":
+        return
+    print(
+        f"  Error: '{command}' is an internal command. "
+        "Set SWAMPCASTLE_INTERNAL=1 if you intentionally need it."
+    )
+    sys.exit(2)
 
 
 def main():
@@ -157,6 +170,7 @@ def main():
         return
 
     if args.command == "hook":
+        _require_internal_access("hook")
         if not getattr(args, "hook_action", None):
             p_hook.print_help()
             return
@@ -164,6 +178,7 @@ def main():
         return
 
     if args.command == "instructions":
+        _require_internal_access("instructions")
         name = getattr(args, "instructions_name", None)
         if not name:
             p_instr.print_help()

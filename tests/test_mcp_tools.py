@@ -1,6 +1,8 @@
 """Tests for swampcastle.mcp — rebuilt MCP server."""
 
+import io
 import json
+from types import SimpleNamespace
 
 import pytest
 
@@ -80,6 +82,35 @@ class TestToolDispatch:
     def test_aaak_spec(self, tools):
         result = tools["swampcastle_get_aaak_spec"].handler()
         assert "AAAK" in result
+
+
+class TestMcpMain:
+    def test_main_uses_factory_from_settings(self, monkeypatch, tmp_path):
+        from swampcastle.mcp import server
+
+        used = {}
+
+        class DummyCastle:
+            def __init__(self, settings, factory):
+                used["settings"] = settings
+                used["factory"] = factory
+
+            def __enter__(self):
+                return self
+
+            def __exit__(self, *exc):
+                return None
+
+        factory = object()
+        monkeypatch.setattr(server, "Castle", DummyCastle)
+        monkeypatch.setattr(server, "create_handler", lambda castle: lambda request: None)
+        monkeypatch.setattr("swampcastle.storage.factory_from_settings", lambda settings: factory)
+        monkeypatch.setattr("sys.stdin", io.StringIO(""))
+
+        server.main()
+
+        assert used["factory"] is factory
+        assert used["settings"].collection_name == "swampcastle_chests"
 
 
 class TestJsonRpcHandler:

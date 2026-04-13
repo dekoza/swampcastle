@@ -6,7 +6,7 @@ import sys
 from pathlib import Path
 
 from swampcastle.settings import CastleSettings
-from swampcastle.storage.memory import InMemoryStorageFactory
+from swampcastle.storage import factory_from_settings
 
 
 def _settings(args) -> CastleSettings:
@@ -14,21 +14,16 @@ def _settings(args) -> CastleSettings:
     palace = getattr(args, "palace", None)
     if palace:
         kwargs["castle_path"] = palace
+    backend = getattr(args, "backend", None)
+    if backend:
+        kwargs["backend"] = backend
     return CastleSettings(_env_file=None, **kwargs)
-
-
-def _factory(settings):
-    try:
-        from swampcastle.storage.lance import LocalStorageFactory
-        return LocalStorageFactory(settings.castle_path)
-    except (ImportError, Exception):
-        return InMemoryStorageFactory()
 
 
 def cmd_survey(args):
     from swampcastle.castle import Castle
     settings = _settings(args)
-    with Castle(settings, _factory(settings)) as castle:
+    with Castle(settings, factory_from_settings(settings)) as castle:
         s = castle.catalog.status()
         print(f"  SwampCastle — {s.total_drawers} drawers")
         if s.wings:
@@ -41,7 +36,7 @@ def cmd_seek(args):
     from swampcastle.castle import Castle
     from swampcastle.models import SearchQuery
     settings = _settings(args)
-    with Castle(settings, _factory(settings)) as castle:
+    with Castle(settings, factory_from_settings(settings)) as castle:
         result = castle.search.search(SearchQuery(
             query=args.query, wing=args.wing, room=args.room, limit=args.results,
         ))
@@ -103,7 +98,7 @@ def cmd_herald(args):
     """Wake-up context (L0+L1)."""
     from swampcastle.castle import Castle
     settings = _settings(args)
-    with Castle(settings, _factory(settings)) as castle:
+    with Castle(settings, factory_from_settings(settings)) as castle:
         s = castle.catalog.status()
         print(s.protocol)
         if s.wings:
@@ -138,7 +133,7 @@ def cmd_distill(args):
     dialect = Dialect.from_config(config_path) if config_path else Dialect()
 
     from swampcastle.castle import Castle
-    with Castle(settings, _factory(settings)) as castle:
+    with Castle(settings, factory_from_settings(settings)) as castle:
         s = castle.catalog.status()
         if s.total_drawers == 0:
             print("  No drawers to distill.")
@@ -226,7 +221,7 @@ def cmd_parley(args):
     from swampcastle.sync_meta import NodeIdentity
 
     settings = _settings(args)
-    with Castle(settings, _factory(settings)) as castle:
+    with Castle(settings, factory_from_settings(settings)) as castle:
         identity = NodeIdentity()
         vv_path = os.path.join(str(settings.castle_path), "version_vector.json")
         engine = SyncEngine(castle._collection, identity=identity, vv_path=vv_path)

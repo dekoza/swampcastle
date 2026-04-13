@@ -14,6 +14,12 @@ def main():
     )
     parser.add_argument("--palace", "--castle", default=None, dest="palace",
                         help="Path to castle directory")
+    parser.add_argument(
+        "--backend",
+        choices=["lance", "postgres", "chroma"],
+        default=None,
+        help="Storage backend override",
+    )
     parser.add_argument("--version", action="version", version=f"swampcastle {__version__}")
 
     sub = parser.add_subparsers(dest="command")

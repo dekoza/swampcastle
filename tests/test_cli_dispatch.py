@@ -1,11 +1,7 @@
 """Tests for swampcastle.cli — rebuilt thin dispatcher."""
 
-import os
-import sys
-from pathlib import Path
-from unittest.mock import patch, MagicMock
-
-import pytest
+from types import SimpleNamespace
+from unittest.mock import patch
 
 from swampcastle.cli.main import main
 
@@ -27,6 +23,31 @@ class TestSurvey:
         with patch("sys.argv", ["swampcastle", "status"]):
             main()
         assert "drawers" in capsys.readouterr().out.lower()
+
+    def test_backend_flag_passed_to_settings(self):
+        class DummyCastle:
+            def __init__(self, settings, factory):
+                self.catalog = SimpleNamespace(status=lambda: SimpleNamespace(
+                    total_drawers=0, wings={}, rooms={}
+                ))
+
+            def __enter__(self):
+                return self
+
+            def __exit__(self, *exc):
+                return None
+
+        with patch("sys.argv", ["swampcastle", "--backend", "postgres", "survey"]):
+            with patch("swampcastle.cli.commands.CastleSettings") as mock_settings:
+                mock_settings.return_value = SimpleNamespace(
+                    castle_path="/tmp/castle",
+                    backend="postgres",
+                )
+                with patch("swampcastle.cli.commands.factory_from_settings", return_value=object()):
+                    with patch("swampcastle.castle.Castle", DummyCastle):
+                        main()
+
+        assert mock_settings.call_args.kwargs["backend"] == "postgres"
 
 
 class TestSeek:

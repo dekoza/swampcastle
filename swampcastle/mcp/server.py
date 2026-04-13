@@ -114,17 +114,12 @@ def _error(req_id, code: int, message: str) -> dict:
 def main():
     """Run MCP server on stdin/stdout."""
     from swampcastle.settings import CastleSettings
-    from swampcastle.storage.memory import InMemoryStorageFactory
+    from swampcastle.storage import factory_from_settings
 
     logging.basicConfig(level=logging.INFO, format="%(message)s", stream=sys.stderr)
 
     settings = CastleSettings(_env_file=None)
-
-    try:
-        from swampcastle.storage.lance import LanceBackend
-        factory = _create_local_factory(settings)
-    except ImportError:
-        factory = InMemoryStorageFactory()
+    factory = factory_from_settings(settings)
 
     with Castle(settings, factory) as castle:
         handler = create_handler(castle)
@@ -140,10 +135,3 @@ def main():
             if response is not None:
                 sys.stdout.write(json.dumps(response) + "\n")
                 sys.stdout.flush()
-
-
-def _create_local_factory(settings):
-    """Try to create a LocalStorageFactory, fall back to InMemory."""
-    # Placeholder — Wave 8 will provide LocalStorageFactory
-    from swampcastle.storage.memory import InMemoryStorageFactory
-    return InMemoryStorageFactory()

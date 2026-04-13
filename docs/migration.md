@@ -22,7 +22,7 @@ Common command mapping:
 
 | MemPalace | SwampCastle |
 |---|---|
-| `mempalace init <dir>` | `swampcastle build <dir>` or `swampcastle init <dir>` |
+| `mempalace init <dir>` | `swampcastle project <dir>` |
 | `mempalace mine <dir>` | `swampcastle gather <dir>` or `swampcastle mine <dir>` |
 | `mempalace search ...` | `swampcastle seek ...` or `swampcastle search ...` |
 | `mempalace status` | `swampcastle survey` or `swampcastle status` |

@@ -10,7 +10,7 @@ from pathlib import Path
 
 INSTRUCTIONS_DIR = Path(__file__).parent / "instructions"
 
-AVAILABLE = ["init", "search", "mine", "help", "status"]
+AVAILABLE = ["project", "search", "mine", "help", "status"]
 
 
 def run_instructions(name: str):

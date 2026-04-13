@@ -120,7 +120,7 @@ def main():
     # instructions (internal)
     p_instr = sub.add_parser("instructions", help=argparse.SUPPRESS)
     instr_sub = p_instr.add_subparsers(dest="instructions_name")
-    for n in ["init", "search", "mine", "help", "status"]:
+    for n in ["project", "search", "mine", "help", "status"]:
         instr_sub.add_parser(n)
 
     # raise (migrate)

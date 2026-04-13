@@ -9,7 +9,7 @@ from swampcastle.instructions_cli import AVAILABLE, INSTRUCTIONS_DIR, run_instru
 
 def test_run_instructions_valid_name(capsys):
     """Valid name prints the .md file content."""
-    name = "init"
+    name = "project"
     expected = (INSTRUCTIONS_DIR / f"{name}.md").read_text()
     run_instructions(name)
     captured = capsys.readouterr()

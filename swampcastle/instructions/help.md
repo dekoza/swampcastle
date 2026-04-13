@@ -4,7 +4,7 @@ Local memory for AI assistants.
 
 ## Recommended flow
 
-1. `swampcastle build <dir>` — preview rooms and entity candidates
+1. `swampcastle project <dir>` — create project-local .swampcastle.yaml
 2. `swampcastle gather <dir>` — ingest project files or conversation exports
 3. `swampcastle seek "query"` — search stored memory
 4. `swampcastle survey` — inspect current wings / rooms / drawer counts
@@ -48,7 +48,7 @@ Agent diary:
 User-facing commands:
 
 ```text
-swampcastle build <dir>
+swampcastle project <dir>
 swampcastle gather <dir>
 swampcastle seek "query"
 swampcastle survey
@@ -60,7 +60,7 @@ swampcastle sync --server http://host:7433
 ```
 
 Compatibility aliases still exist:
-- `init` → `build`
+- `project` → project-local setup
 - `mine` → `gather`
 - `search` → `seek`
 - `status` → `survey`

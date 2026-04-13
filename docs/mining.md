@@ -80,15 +80,15 @@ swampcastle gather ~/exports --mode convos --extract general
 
 `general` classifies chunks into broader memory types instead of keeping only exchange-pair structure.
 
-## Room detection
+## Project setup
 
-`swampcastle build` / `swampcastle init` is the preview step for room and entity detection:
+`swampcastle project` prepares a directory for mining by writing `.swampcastle.yaml`:
 
 ```bash
-swampcastle build ~/projects/myapp
+swampcastle project ~/projects/myapp
 ```
 
-That command helps you inspect the inferred structure before you ingest anything.
+That command helps you inspect and save the inferred structure before you ingest anything.
 
 ## Splitting mega-files
 

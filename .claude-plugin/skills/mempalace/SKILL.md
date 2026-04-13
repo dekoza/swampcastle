@@ -30,6 +30,6 @@ SwampCastle provides dynamic instructions via the CLI. To get instructions for a
 SWAMPCASTLE_INTERNAL=1 swampcastle instructions <command>
 ```
 
-Where `<command>` is one of: `help`, `init`, `mine`, `search`, `status`.
+Where `<command>` is one of: `help`, `project`, `mine`, `search`, `status`.
 
 Run the appropriate instructions command, then follow the returned instructions step by step.

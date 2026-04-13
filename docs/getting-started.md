@@ -23,13 +23,13 @@ pip install 'swampcastle[chroma]'    # legacy migration tooling only
 
 ## First local castle
 
-### 1. Preview project structure
+### 1. Prepare project structure
 
 ```bash
-swampcastle build ~/projects/myapp
+swampcastle project ~/projects/myapp
 ```
 
-`build` (alias: `init`) scans folder names and file contents to suggest rooms and entities. It is a discovery step, not an ingest step.
+`project` writes `.swampcastle.yaml` for the target project. It prepares room routing for ingest but does not ingest files by itself.
 
 ### 2. Ingest project files
 

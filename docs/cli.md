@@ -6,21 +6,20 @@ Global options:
 swampcastle [--palace PATH] [--backend {lance,postgres,chroma}] <command> ...
 ```
 
-Aliases are important in v4: the castle-themed verbs are primary, and the older MemPalace-style verbs remain as aliases.
+Aliases are important in v4 for some commands, but project setup now has one public name.
 
-## build / init
+## project
 
-Preview room and entity detection for a project directory.
+Create or update project-local mining config for a directory.
 
 ```bash
-swampcastle build <dir> [--yes]
-swampcastle init <dir> [--yes]
+swampcastle project <dir> [--yes]
 ```
 
 Current behavior:
-- scans folder names to infer rooms
+- detects project rooms
+- writes `.swampcastle.yaml`
 - scans content to infer people / projects
-- prints what it found
 - does **not** ingest files on its own
 
 ## gather / mine
@@ -199,7 +198,7 @@ SWAMPCASTLE_INTERNAL=1 swampcastle hook run --hook {session-start,stop,precompac
 Print packaged instruction text. This command is gated and requires an explicit env guard.
 
 ```bash
-SWAMPCASTLE_INTERNAL=1 swampcastle instructions {init,search,mine,help,status}
+SWAMPCASTLE_INTERNAL=1 swampcastle instructions {project,search,mine,help,status}
 ```
 
 ## ni

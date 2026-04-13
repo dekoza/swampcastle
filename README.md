@@ -70,13 +70,13 @@ pip install 'swampcastle[chroma]'    # legacy ChromaDB tooling for migration onl
 
 ## Quick start
 
-### 1. Inspect a project
+### 1. Prepare a project
 
 ```bash
-swampcastle build ~/projects/myapp
+swampcastle project ~/projects/myapp
 ```
 
-`build`/`init` previews detected rooms and entity candidates. It does not populate storage by itself.
+`project` creates project-local mining config in `.swampcastle.yaml`. It does not ingest files by itself.
 
 ### 2. Ingest files
 
@@ -202,7 +202,7 @@ The source palace is left untouched. Drawer data is imported into LanceDB, and c
 
 The core ingest / search / MCP / sync path is working:
 
-- `build` / `init`
+- `project`
 - `gather` / `mine`
 - `seek` / `search`
 - `survey` / `status`

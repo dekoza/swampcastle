@@ -18,8 +18,6 @@ Local, searchable memory for AI assistants.
 
 ---
 
-> **⚠ Important:** Fake SwampCastle websites are distributing malware. Only trust [GitHub](https://github.com/dekoza/swampcastle) and [PyPI](https://pypi.org/project/swampcastle/). See [NOTICES.md](NOTICES.md).
-
 ## What SwampCastle is
 
 SwampCastle v4 stores verbatim memory in a collection backend and structured facts in a graph backend.
@@ -57,6 +55,7 @@ pip install swampcastle
 ```
 
 **Requirements**
+
 - Python 3.11+
 - first-run ONNX model download for the default embedder (~87 MB, cached locally)
 

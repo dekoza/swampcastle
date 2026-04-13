@@ -119,6 +119,19 @@ def test_cmd_build_prints_detection_summary(tmp_path, capsys):
     assert "Detected 1 people, 2 projects" in out
 
 
+def test_cmd_build_calls_real_room_detector_signature(tmp_path, capsys):
+    project = tmp_path / "project"
+    (project / "backend").mkdir(parents=True)
+    args = SimpleNamespace(dir=str(project), yes=True, palace=None, backend=None)
+
+    with patch("swampcastle.entity_detector.scan_for_detection", return_value=[]):
+        commands.cmd_build(args)
+
+    out = capsys.readouterr().out
+    assert "Detected " in out
+    assert " rooms in " in out
+
+
 def test_cmd_gather_projects_uses_miner(tmp_path):
     target = tmp_path / "proj"
     target.mkdir()

@@ -64,7 +64,7 @@ def cmd_build(args):
         print(f"  Error: {project_dir} is not a directory")
         sys.exit(1)
 
-    rooms = detect_rooms_from_folders(project_dir, auto_accept=args.yes)
+    rooms = detect_rooms_from_folders(project_dir)
     print(f"  Detected {len(rooms)} rooms in {project_dir}")
 
     candidates = scan_for_detection(project_dir)

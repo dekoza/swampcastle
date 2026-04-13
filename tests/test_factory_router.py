@@ -55,6 +55,8 @@ class TestFactoryRouter:
             factory_from_settings(settings)
 
     def test_postgres_backend_returns_postgres_factory(self, tmp_path, monkeypatch):
+        from swampcastle.storage.postgres import PostgresStorageFactory
+
         settings = CastleSettings(
             castle_path=tmp_path / "castle",
             backend="postgres",
@@ -62,15 +64,44 @@ class TestFactoryRouter:
             _env_file=None,
         )
 
-        class FakePostgresStorageFactory:
-            def __init__(self, database_url):
-                self.database_url = database_url
+        class DummyCursor:
+            def __enter__(self):
+                return self
 
-        def fake_import_module(name):
-            return SimpleNamespace(PostgresStorageFactory=FakePostgresStorageFactory)
+            def __exit__(self, *exc):
+                return None
 
-        monkeypatch.setattr("swampcastle.storage.import_module", fake_import_module)
+            def execute(self, sql, params=None):
+                return None
+
+        class DummyConnection:
+            def cursor(self):
+                return DummyCursor()
+
+            def commit(self):
+                return None
+
+        class DummyPool:
+            def __init__(self, **kwargs):
+                self.kwargs = kwargs
+
+            def connection(self):
+                class _Context:
+                    def __enter__(self_inner):
+                        return DummyConnection()
+
+                    def __exit__(self_inner, *exc):
+                        return None
+
+                return _Context()
+
+            def close(self):
+                return None
+
+        monkeypatch.setattr("swampcastle.storage.postgres.ConnectionPool", DummyPool)
+        monkeypatch.setattr("swampcastle.storage.postgres.register_vector", lambda conn: None)
+        monkeypatch.setattr("swampcastle.storage.postgres.Vector", lambda value: value)
 
         factory = factory_from_settings(settings)
-        assert isinstance(factory, FakePostgresStorageFactory)
-        assert factory.database_url == "postgresql://localhost/swampcastle"
+        assert isinstance(factory, PostgresStorageFactory)
+        assert factory._database_url == "postgresql://localhost/swampcastle"

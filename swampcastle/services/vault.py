@@ -147,19 +147,34 @@ class VaultService:
             entries=entries[:query.last_n],
         )
 
-    def distill(self, wing: str = None, room: str = None, dry_run: bool = False) -> int:
+    def distill(
+        self,
+        wing: str = None,
+        room: str = None,
+        dry_run: bool = False,
+        config_path: str = None,
+    ) -> int:
         """Compute and store AAAK Dialect summaries in drawer metadata.
 
         AAAK Dialect is a lossy compressed symbolic format that extracts
         entities, topics, key quotes, emotions, and flags from plain text.
         These summaries are stored in the 'aaak' metadata field.
 
+        Args:
+            wing: Filter to specific wing.
+            room: Filter to specific room.
+            dry_run: If True, compute count but don't persist.
+            config_path: Path to entities.json for custom Dialect config.
+
         Returns:
             Number of drawers processed.
         """
         from swampcastle.dialect import Dialect
 
-        dialect = Dialect()  # TODO: load custom entities
+        if config_path:
+            dialect = Dialect.from_config(config_path)
+        else:
+            dialect = Dialect()
         where = {}
         if wing:
             where["wing"] = wing

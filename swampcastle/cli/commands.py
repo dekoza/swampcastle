@@ -127,11 +127,14 @@ def cmd_distill(args):
     from swampcastle.storage import factory_from_settings
     settings = _settings(args)
 
+    config_path = getattr(args, "config", None)
+
     with Castle(settings, factory_from_settings(settings)) as castle:
         count = castle.vault.distill(
             wing=args.wing,
             room=args.room,
             dry_run=args.dry_run,
+            config_path=config_path,
         )
         if count == 0:
             print("  No drawers to distill.")
@@ -194,6 +197,14 @@ def cmd_reforge(args):
     from swampcastle.storage import factory_from_settings
     settings = _settings(args)
 
+    # Override embedder settings if specified
+    embedder = getattr(args, "embedder", None)
+    device = getattr(args, "device", None)
+    if embedder:
+        settings.embedder = embedder
+    if device:
+        settings.embedder_device = device
+
     with Castle(settings, factory_from_settings(settings)) as castle:
         count = castle.vault.reforge(
             wing=args.wing,
@@ -207,7 +218,8 @@ def cmd_reforge(args):
         if args.dry_run:
             print(f"  DRY RUN — would reforge {count} drawers.")
         else:
-            print(f"  Reforged {count} drawers with new embeddings.")
+            embedder_info = embedder or settings.embedder
+            print(f"  Reforged {count} drawers with {embedder_info} embedder.")
 
 
 def cmd_armory(args):

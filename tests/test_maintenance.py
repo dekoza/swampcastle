@@ -69,3 +69,52 @@ def test_reforge_recomputes_embeddings(castle):
     # 2. Verify drawers still exist
     results = castle.vault._col.get(include=["documents"])
     assert len(results["ids"]) == 2
+
+
+def test_distill_with_wing_filter(castle):
+    """Distill should respect wing filter."""
+    # Add drawer in different wing
+    castle.vault.add_drawer(AddDrawerCommand(wing="other", room="r1", content="Other wing"))
+
+    count = castle.vault.distill(wing="test")
+    assert count == 2  # Only original two in 'test' wing
+
+
+def test_distill_with_room_filter(castle):
+    """Distill should respect room filter."""
+    # Add drawer in different room
+    castle.vault.add_drawer(AddDrawerCommand(wing="test", room="r2", content="Other room"))
+
+    count = castle.vault.distill(room="r1")
+    assert count == 2  # Only original two in 'r1' room
+
+
+def test_distill_dry_run_does_not_modify(castle):
+    """Dry-run distill should count but not modify metadata."""
+    count = castle.vault.distill(dry_run=True)
+    assert count == 2
+
+    # Verify metadata NOT modified
+    results = castle.vault._col.get(include=["metadatas"])
+    for meta in results["metadatas"]:
+        assert "aaak" not in meta
+
+
+def test_reforge_with_wing_filter(castle):
+    """Reforge should respect wing filter."""
+    castle.vault.add_drawer(AddDrawerCommand(wing="other", room="r1", content="Other wing"))
+
+    count = castle.vault.reforge(wing="test")
+    assert count == 2
+
+
+def test_reforge_dry_run_does_not_modify(castle):
+    """Dry-run reforge should count but not upsert."""
+    # Get count before
+    before_count = castle.vault._col.count()
+
+    count = castle.vault.reforge(dry_run=True)
+    assert count == 2
+
+    # Count should be same
+    assert castle.vault._col.count() == before_count

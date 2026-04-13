@@ -59,7 +59,8 @@ def main():
         help="Create or update project-local mining config (.swampcastle.yaml)",
     )
     p.add_argument("dir", help="Project directory")
-    p.add_argument("--yes", action="store_true", help="Auto-accept detected entities")
+    p.add_argument("--yes", action="store_true", help="Auto-accept without prompts")
+    p.add_argument("--wing", default=None, help="Override wing name")
 
     # wizard
     sub.add_parser("wizard", help="Configure global runtime settings")

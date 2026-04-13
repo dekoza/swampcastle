@@ -170,12 +170,12 @@ def test_print_proposed_structure(capsys):
         {"name": "frontend", "description": "UI files"},
         {"name": "general", "description": "Everything else"},
     ]
-    print_proposed_structure("myapp", rooms, 42, "folder structure")
+    print_proposed_structure("myapp", rooms, 42)
     out = capsys.readouterr().out
     assert "myapp" in out
     assert "frontend" in out
     assert "42 files" in out
-    assert "folder structure" in out
+    assert "Project Setup" in out
 
 
 # ── get_user_approval ─────────────────────────────────────────────────
@@ -183,9 +183,17 @@ def test_print_proposed_structure(capsys):
 
 def test_get_user_approval_accept_all():
     rooms = [{"name": "frontend", "description": "UI"}]
-    with patch("builtins.input", return_value=""):
-        result = get_user_approval(rooms)
+    with patch("builtins.input", side_effect=["", ""]):
+        result, wing = get_user_approval(rooms, "myapp")
     assert result == rooms
+    assert wing == "myapp"
+
+
+def test_get_user_approval_cancel():
+    rooms = [{"name": "frontend", "description": "UI"}]
+    with patch("builtins.input", side_effect=["", "c"]):
+        result, wing = get_user_approval(rooms, "myapp")
+    assert result == []
 
 
 def test_get_user_approval_edit_remove():
@@ -193,9 +201,8 @@ def test_get_user_approval_edit_remove():
         {"name": "frontend", "description": "UI"},
         {"name": "backend", "description": "Server"},
     ]
-    with patch("builtins.input", side_effect=["edit", "1", "n"]):
-        result = get_user_approval(rooms)
-    # Room 1 (frontend) removed
+    with patch("builtins.input", side_effect=["", "e", "1", "n"]):
+        result, wing = get_user_approval(rooms, "myapp")
     assert len(result) == 1
     assert result[0]["name"] == "backend"
 
@@ -205,13 +212,16 @@ def test_get_user_approval_add_room():
     with patch(
         "builtins.input",
         side_effect=[
-            "add",
+            "",
+            "e",
+            "",
+            "y",
             "custom_room",
             "My custom room",
             "",
         ],
     ):
-        result = get_user_approval(rooms)
+        result, wing = get_user_approval(rooms, "myapp")
     names = [r["name"] for r in result]
     assert "custom_room" in names
 
@@ -257,8 +267,12 @@ def test_detect_rooms_local_interactive(tmp_path):
         patch.dict("sys.modules", {"swampcastle.miner": mock_miner}),
         patch(
             "swampcastle.mining.rooms.get_user_approval",
-            return_value=[{"name": "general", "description": "All files", "keywords": []}],
+            return_value=(
+                [{"name": "general", "description": "All files", "keywords": []}],
+                "test_proj",
+            ),
         ),
+        patch("builtins.input", return_value="y"),
     ):
         detect_rooms_local(str(tmp_path), yes=False)
     assert (tmp_path / ".swampcastle.yaml").exists()

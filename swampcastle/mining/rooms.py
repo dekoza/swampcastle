@@ -206,68 +206,93 @@ def detect_rooms_from_files(project_dir: str) -> list:
     return rooms
 
 
-def print_proposed_structure(project_name: str, rooms: list, total_files: int, source: str):
+def print_proposed_structure(project_name: str, rooms: list, total_files: int):
     print(f"\n{'=' * 55}")
-    print("  SwampCastle Init — Local setup")
+    print("  SwampCastle Project Setup")
     print(f"{'=' * 55}")
-    print(f"\n  WING: {project_name}")
-    print(f"  ({total_files} files found, rooms detected from {source})\n")
-    for room in rooms:
-        print(f"    ROOM: {room['name']}")
-        print(f"          {room['description']}")
-    print(f"\n{'─' * 55}")
+    print()
+    print("  SwampCastle organises your project files into labelled")
+    print("  groups called 'rooms' under a project label called a")
+    print("  'wing'. This config tells 'swampcastle gather' how to")
+    print("  classify your files during ingest.")
+    print("  You can redo this at any time by rerunning this command.")
+    print(f"\n  Proposed wing: {project_name}")
+    print(f"  ({total_files} files found)\n")
+    print("  Proposed rooms:\n")
+    for i, room in enumerate(rooms, 1):
+        desc = room["description"]
+        print(f"    {i}. {room['name']:20s} <- {desc}")
+    print(f"\n{'-' * 55}")
 
 
-def get_user_approval(rooms: list) -> list:
-    """Same approval flow as AI version."""
-    print("  Review the proposed rooms above.")
-    print("  Options:")
-    print("    [enter]  Accept all rooms")
-    print("    [edit]   Remove or rename rooms")
-    print("    [add]    Add a room manually")
+def get_user_approval(rooms: list, project_name: str) -> tuple[list, str]:
+    """Interactive approval of proposed rooms and wing name.
+
+    Returns (approved_rooms, wing_name). Empty rooms list means cancelled.
+    """
+    wing = input(f"  Change wing name? [enter to keep '{project_name}']: ").strip()
+    if not wing:
+        wing = project_name
+    else:
+        wing = wing.lower().replace(" ", "_").replace("-", "_")
+
+    print("\n  Options:")
+    print("    [A]ccept   Accept proposed rooms")
+    print("    [E]dit     Remove or add rooms")
+    print("    [C]ancel   Abort without writing config")
     print()
 
-    choice = input("  Your choice [enter/edit/add]: ").strip().lower()
+    choice = input("  Your choice [A/e/c]: ").strip().lower()
 
-    if choice in ("", "y", "yes"):
-        return rooms
+    if choice in ("c", "cancel"):
+        print("  Cancelled. No config written.")
+        return [], wing
 
-    if choice == "edit":
+    if choice in ("e", "edit"):
         print("\n  Current rooms:")
         for i, room in enumerate(rooms):
-            print(f"    {i + 1}. {room['name']} — {room['description']}")
+            print(f"    {i + 1}. {room['name']} -- {room['description']}")
         remove = input("\n  Room numbers to REMOVE (comma-separated, or enter to skip): ").strip()
         if remove:
             to_remove = {int(x.strip()) - 1 for x in remove.split(",") if x.strip().isdigit()}
             rooms = [r for i, r in enumerate(rooms) if i not in to_remove]
 
-    if choice == "add" or input("\n  Add any missing rooms? [y/N]: ").strip().lower() == "y":
-        while True:
-            new_name = (
-                input("  New room name (or enter to stop): ").strip().lower().replace(" ", "_")
-            )
-            if not new_name:
-                break
-            new_desc = input(f"  Description for '{new_name}': ").strip()
-            rooms.append({"name": new_name, "description": new_desc, "keywords": [new_name]})
-            print(f"  Added: {new_name}")
+        if input("\n  Add any missing rooms? [y/N]: ").strip().lower() == "y":
+            while True:
+                new_name = (
+                    input("  New room name (or enter to stop): ").strip().lower().replace(" ", "_")
+                )
+                if not new_name:
+                    break
+                new_desc = (
+                    input(f"  Description for '{new_name}': ").strip() or f"Files for {new_name}"
+                )
+                rooms.append({"name": new_name, "description": new_desc, "keywords": [new_name]})
+                print(f"  Added: {new_name}")
 
-    return rooms
+    return rooms, wing
 
 
-def save_config(project_dir: str, project_name: str, rooms: list):
+def save_config(project_dir: str, project_name: str, rooms: list, force: bool = False) -> bool:
     config = {
         "wing": project_name,
         "rooms": [
             {
                 "name": r["name"],
                 "description": r["description"],
-                "keywords": r.get("keywords", [r["name"]]),
+                "keywords": sorted(set(r.get("keywords", [r["name"]]))),
             }
             for r in rooms
         ],
     }
     config_path = project_config_path(project_dir)
+
+    if config_path.exists() and not force:
+        overwrite = input(f"  {config_path} already exists. Overwrite? [y/N]: ").strip().lower()
+        if overwrite not in ("y", "yes"):
+            print("  Cancelled. Existing config preserved.")
+            return False
+
     with open(config_path, "w") as f:
         yaml.dump(config, f, default_flow_style=False, sort_keys=False)
 
@@ -275,39 +300,44 @@ def save_config(project_dir: str, project_name: str, rooms: list):
     print("\n  Next step:")
     print(f"    swampcastle gather {project_dir}")
     print(f"\n{'=' * 55}\n")
+    return True
 
 
-def detect_rooms_local(project_dir: str, yes: bool = False):
-    """Main entry point for local setup."""
+def detect_rooms_local(project_dir: str, yes: bool = False, wing: str | None = None):
+    """Main entry point for local project setup."""
     project_path = Path(project_dir).expanduser().resolve()
-    project_name = project_path.name.lower().replace(" ", "_").replace("-", "_")
+    project_name = wing or project_path.name.lower().replace(" ", "_").replace("-", "_")
 
     if not project_path.exists():
         print(f"ERROR: Directory not found: {project_dir}")
         sys.exit(1)
 
-    # Count files
     from .miner import scan_project
 
     files = scan_project(project_dir)
 
-    # Try folder structure first
     rooms = detect_rooms_from_folders(project_dir)
-    source = "folder structure"
-
-    # If only "general" found, try filename patterns
     if len(rooms) <= 1:
         rooms = detect_rooms_from_files(project_dir)
-        source = "filename patterns"
-
-    # If still nothing, just use general
     if not rooms:
         rooms = [{"name": "general", "description": "All project files", "keywords": []}]
-        source = "fallback (flat project)"
 
-    print_proposed_structure(project_name, rooms, len(files), source)
+    print_proposed_structure(project_name, rooms, len(files))
+
     if yes:
         approved_rooms = rooms
+        final_wing = project_name
     else:
-        approved_rooms = get_user_approval(rooms)
-    save_config(project_dir, project_name, approved_rooms)
+        approved_rooms, final_wing = get_user_approval(rooms, project_name)
+        if not approved_rooms:
+            return
+
+        print("\n  Final config:")
+        print(f"    Wing: {final_wing}")
+        print(f"    Rooms: {', '.join(r['name'] for r in approved_rooms)}")
+        confirm = input("\n  Write .swampcastle.yaml? [Y/n]: ").strip().lower()
+        if confirm in ("n", "no"):
+            print("  Cancelled. No config written.")
+            return
+
+    save_config(project_dir, final_wing, approved_rooms, force=yes)

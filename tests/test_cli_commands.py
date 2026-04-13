@@ -107,7 +107,7 @@ def test_cmd_project_exits_for_missing_dir(capsys):
 def test_cmd_project_prints_detection_summary(tmp_path, capsys):
     project = tmp_path / "project"
     project.mkdir()
-    args = SimpleNamespace(dir=str(project), yes=False, palace=None, backend=None)
+    args = SimpleNamespace(dir=str(project), yes=False, palace=None, backend=None, wing=None)
 
     with patch("swampcastle.mining.rooms.detect_rooms_local") as mock_detect_rooms:
         with patch("swampcastle.entity_detector.scan_for_detection", return_value=["file1"]):
@@ -121,7 +121,7 @@ def test_cmd_project_prints_detection_summary(tmp_path, capsys):
                 ):
                     commands.cmd_project(args)
 
-    mock_detect_rooms.assert_called_once_with(str(project), yes=False)
+    mock_detect_rooms.assert_called_once_with(str(project), yes=False, wing=None)
     out = capsys.readouterr().out
     assert "Detected 1 people, 2 projects" in out
 
@@ -130,7 +130,7 @@ def test_cmd_project_calls_real_room_detector_signature(tmp_path, capsys):
     project = tmp_path / "project"
     (project / "backend").mkdir(parents=True)
     (project / "backend" / "app.py").write_text("print('hello')\n")
-    args = SimpleNamespace(dir=str(project), yes=True, palace=None, backend=None)
+    args = SimpleNamespace(dir=str(project), yes=True, palace=None, backend=None, wing=None)
 
     with patch("swampcastle.entity_detector.scan_for_detection", return_value=[]):
         commands.cmd_project(args)
@@ -144,7 +144,7 @@ def test_cmd_project_creates_swampcastle_yaml(tmp_path):
     project = tmp_path / "project"
     (project / "backend").mkdir(parents=True)
     (project / "backend" / "app.py").write_text("print('hello')\n")
-    args = SimpleNamespace(dir=str(project), yes=True, palace=None, backend=None)
+    args = SimpleNamespace(dir=str(project), yes=True, palace=None, backend=None, wing=None)
 
     with patch("swampcastle.entity_detector.scan_for_detection", return_value=[]):
         commands.cmd_project(args)

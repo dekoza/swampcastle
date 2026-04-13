@@ -2,6 +2,7 @@ import re
 from pathlib import Path
 
 from swampcastle import __version__
+from swampcastle.version import PackageNotFoundError, _version_from_pyproject, get_version
 
 
 def _expected_version() -> str:
@@ -14,3 +15,15 @@ def _expected_version() -> str:
 
 def test_package_version_matches_pyproject():
     assert __version__ == _expected_version()
+
+
+def test_version_helper_reads_pyproject():
+    assert _version_from_pyproject() == _expected_version()
+
+
+def test_get_version_falls_back_to_pyproject(monkeypatch):
+    def missing(_name: str) -> str:
+        raise PackageNotFoundError
+
+    monkeypatch.setattr("swampcastle.version.metadata_version", missing)
+    assert get_version() == _expected_version()

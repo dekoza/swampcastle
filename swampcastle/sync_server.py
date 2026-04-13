@@ -17,8 +17,9 @@ from contextlib import asynccontextmanager
 
 from .settings import CastleSettings as CastleConfig
 from .storage import factory_from_settings
-from .sync import SyncEngine, ChangeSet, SyncRecord
+from .sync import ChangeSet, SyncEngine, SyncRecord
 from .sync_meta import get_identity
+from .version import __version__
 
 logger = logging.getLogger("swampcastle.sync_server")
 
@@ -111,7 +112,7 @@ def create_app():
 
     app = FastAPI(
         title="Swamp Castle Sync Server",
-        version="1.0.0",
+        version=__version__,
         lifespan=_lifespan,
     )
 

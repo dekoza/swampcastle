@@ -8,6 +8,27 @@ This project follows a simple versioned changelog format.
 
 - No unreleased changes yet.
 
+## [4.0.2] - 2026-04-13
+
+CLI and configuration cleanup release.
+
+### Added
+- Added `swampcastle wizard` for global runtime configuration.
+- Added automatic creation of `~/.swampcastle/config.json` on first use.
+- Added dedicated project-config helpers and tests for legacy filename migration.
+
+### Changed
+- Replaced public `build` / `init` project setup with `swampcastle project <dir>`.
+- Switched project-local config from `swampcastle.yaml` to `.swampcastle.yaml`.
+- Made `pyproject.toml` the single source of package version truth.
+- Normalized output for core CLI commands.
+
+### Fixed
+- Fixed `gather` / project setup guidance so users are pointed at the correct command.
+- Removed fake sync loop flags and hardened internal command access.
+- Scoped sync CLI identity data to the active castle configuration.
+- Stopped `cleave` from mutating process-global `sys.argv`.
+
 ## [4.0.0] - 2026-04-13
 
 First full SwampCastle v4 release after the MemPalace → SwampCastle rebuild.
@@ -41,5 +62,6 @@ First full SwampCastle v4 release after the MemPalace → SwampCastle rebuild.
 - PostgreSQL integration tests passing.
 - Coverage gate passing (`86.42%`, required `85%`).
 
-[Unreleased]: https://github.com/dekoza/swampcastle/compare/v4.0.0...HEAD
+[Unreleased]: https://github.com/dekoza/swampcastle/compare/v4.0.2...HEAD
+[4.0.2]: https://github.com/dekoza/swampcastle/releases/tag/v4.0.2
 [4.0.0]: https://github.com/dekoza/swampcastle/releases/tag/v4.0.0

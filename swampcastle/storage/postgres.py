@@ -17,10 +17,12 @@ from swampcastle.storage import StorageFactory
 from swampcastle.storage.base import CollectionStore, GraphStore
 
 try:
+    import psycopg
     from pgvector import Vector
     from pgvector.psycopg import register_vector
     from psycopg_pool import ConnectionPool
 except ImportError as exc:  # pragma: no cover - exercised via router/integration envs
+    psycopg = None
     Vector = None
     register_vector = None
     ConnectionPool = None
@@ -35,7 +37,7 @@ _NUMERIC_FIELDS = {"seq"}
 
 
 def _require_postgres_dependencies() -> None:
-    if ConnectionPool is None or register_vector is None or Vector is None:
+    if psycopg is None or ConnectionPool is None or register_vector is None or Vector is None:
         raise ImportError(
             "PostgreSQL backend requires optional dependencies. "
             "Install with: pip install 'swampcastle[postgres]'"
@@ -299,11 +301,25 @@ class PostgresCollectionStore(CollectionStore):
                     (self._table_name, index_name),
                 )
                 if cur.fetchone() is None:
-                    cur.execute(
-                        f"CREATE INDEX IF NOT EXISTS {index_name} ON {self._table_name} "
-                        "USING hnsw (embedding vector_cosine_ops)"
-                    )
-                    conn.commit()
+                    try:
+                        cur.execute(
+                            f"CREATE INDEX IF NOT EXISTS {index_name} ON {self._table_name} "
+                            "USING hnsw (embedding vector_cosine_ops)"
+                        )
+                        conn.commit()
+                    except Exception as exc:
+                        duplicate_index_errors = []
+                        if psycopg is not None:
+                            for name in ["UniqueViolation", "DuplicateObject", "DuplicateTable"]:
+                                err = getattr(psycopg.errors, name, None)
+                                if err is not None:
+                                    duplicate_index_errors.append(err)
+                        if any(isinstance(exc, err) for err in duplicate_index_errors):
+                            rollback = getattr(conn, "rollback", None)
+                            if rollback is not None:
+                                rollback()
+                            return
+                        raise
 
     def add(self, *, documents, ids, metadatas=None) -> None:
         self.upsert(documents=documents, ids=ids, metadatas=metadatas)
@@ -839,13 +855,15 @@ class PostgresStorageFactory(StorageFactory):
             conninfo=database_url,
             min_size=min_size,
             max_size=max_size,
-            open=True,
+            open=False,
             configure=self._configure_connection,
         )
-        with self._pool.connection() as conn:
+        with psycopg.connect(database_url) as conn:
             with conn.cursor() as cur:
                 cur.execute("CREATE EXTENSION IF NOT EXISTS vector")
             conn.commit()
+        self._pool.open()
+        self._pool.wait()
 
     def _configure_connection(self, conn) -> None:
         register_vector(conn)

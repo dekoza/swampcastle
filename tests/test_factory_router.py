@@ -85,6 +85,12 @@ class TestFactoryRouter:
             def __init__(self, **kwargs):
                 self.kwargs = kwargs
 
+            def open(self):
+                return None
+
+            def wait(self):
+                return None
+
             def connection(self):
                 class _Context:
                     def __enter__(self_inner):
@@ -98,9 +104,22 @@ class TestFactoryRouter:
             def close(self):
                 return None
 
+        class DummyPsycopg:
+            @staticmethod
+            def connect(dsn):
+                class _Context:
+                    def __enter__(self_inner):
+                        return DummyConnection()
+
+                    def __exit__(self_inner, *exc):
+                        return None
+
+                return _Context()
+
         monkeypatch.setattr("swampcastle.storage.postgres.ConnectionPool", DummyPool)
         monkeypatch.setattr("swampcastle.storage.postgres.register_vector", lambda conn: None)
         monkeypatch.setattr("swampcastle.storage.postgres.Vector", lambda value: value)
+        monkeypatch.setattr("swampcastle.storage.postgres.psycopg", DummyPsycopg)
 
         factory = factory_from_settings(settings)
         assert isinstance(factory, PostgresStorageFactory)

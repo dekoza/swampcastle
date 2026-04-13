@@ -84,10 +84,18 @@ class RecordingPool:
         self.conn = conn or RecordingConnection()
         self.kwargs = kwargs
         self.closed = False
+        self.opened = False
+        self.waited = False
 
     @contextmanager
     def connection(self):
         yield self.conn
+
+    def open(self):
+        self.opened = True
+
+    def wait(self):
+        self.waited = True
 
     def close(self):
         self.closed = True
@@ -241,20 +249,31 @@ class TestPostgresGraphStore:
 class TestPostgresStorageFactory:
     def test_is_storage_factory(self, monkeypatch):
         fake_pool = RecordingPool()
+        raw_conn = RecordingConnection()
 
         def fake_connection_pool(**kwargs):
             fake_pool.kwargs = kwargs
             return fake_pool
 
+        @contextmanager
+        def fake_connect(dsn):
+            assert dsn == "postgresql://localhost/swampcastle"
+            yield raw_conn
+
         monkeypatch.setattr("swampcastle.storage.postgres.ConnectionPool", fake_connection_pool)
         monkeypatch.setattr("swampcastle.storage.postgres.register_vector", lambda conn: None)
         monkeypatch.setattr("swampcastle.storage.postgres.Vector", lambda value: value)
+        monkeypatch.setattr("swampcastle.storage.postgres.psycopg", type("P", (), {"connect": staticmethod(fake_connect)}))
 
         factory = PostgresStorageFactory("postgresql://localhost/swampcastle", embedder=FakeEmbedder())
 
         assert isinstance(factory, StorageFactory)
         assert factory._pool is fake_pool
         assert fake_pool.kwargs["conninfo"] == "postgresql://localhost/swampcastle"
+        assert fake_pool.kwargs["open"] is False
+        assert fake_pool.opened is True
+        assert fake_pool.waited is True
+        assert raw_conn.executed[0][1] == "CREATE EXTENSION IF NOT EXISTS vector"
 
     def test_requires_database_url(self):
         with pytest.raises(ValueError, match="database_url"):
@@ -262,9 +281,15 @@ class TestPostgresStorageFactory:
 
     def test_open_collection_and_graph(self, monkeypatch):
         fake_pool = RecordingPool()
+
+        @contextmanager
+        def fake_connect(dsn):
+            yield RecordingConnection()
+
         monkeypatch.setattr("swampcastle.storage.postgres.ConnectionPool", lambda **kwargs: fake_pool)
         monkeypatch.setattr("swampcastle.storage.postgres.register_vector", lambda conn: None)
         monkeypatch.setattr("swampcastle.storage.postgres.Vector", lambda value: value)
+        monkeypatch.setattr("swampcastle.storage.postgres.psycopg", type("P", (), {"connect": staticmethod(fake_connect)}))
 
         factory = PostgresStorageFactory("postgresql://localhost/swampcastle", embedder=FakeEmbedder())
 
@@ -276,9 +301,15 @@ class TestPostgresStorageFactory:
 
     def test_close_shuts_pool(self, monkeypatch):
         fake_pool = RecordingPool()
+
+        @contextmanager
+        def fake_connect(dsn):
+            yield RecordingConnection()
+
         monkeypatch.setattr("swampcastle.storage.postgres.ConnectionPool", lambda **kwargs: fake_pool)
         monkeypatch.setattr("swampcastle.storage.postgres.register_vector", lambda conn: None)
         monkeypatch.setattr("swampcastle.storage.postgres.Vector", lambda value: value)
+        monkeypatch.setattr("swampcastle.storage.postgres.psycopg", type("P", (), {"connect": staticmethod(fake_connect)}))
 
         factory = PostgresStorageFactory("postgresql://localhost/swampcastle", embedder=FakeEmbedder())
         factory.close()

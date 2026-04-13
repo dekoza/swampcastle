@@ -61,6 +61,9 @@ def main():
     p.add_argument("dir", help="Project directory")
     p.add_argument("--yes", action="store_true", help="Auto-accept detected entities")
 
+    # wizard
+    sub.add_parser("wizard", help="Configure global runtime settings")
+
     # gather (mine)
     p = sub.add_parser("gather", aliases=["mine"], help="Gather files into the castle")
     p.add_argument("dir", help="Directory to gather")
@@ -192,6 +195,7 @@ def main():
 
     dispatch = {
         "project": cmd.cmd_project,
+        "wizard": cmd.cmd_wizard,
         "gather": cmd.cmd_gather,
         "mine": cmd.cmd_gather,
         "seek": cmd.cmd_seek,

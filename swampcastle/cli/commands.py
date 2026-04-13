@@ -190,6 +190,12 @@ def cmd_distill(args):
             print(f"  Distilled {count} drawers with AAAK dialect.")
 
 
+def cmd_wizard(args):
+    from swampcastle.wizard import run_wizard
+
+    run_wizard()
+
+
 def cmd_drawbridge_setup(args):
     base_cmd = "swampcastle drawbridge run"
     palace = getattr(args, "palace", None)

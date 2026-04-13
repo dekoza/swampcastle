@@ -268,6 +268,12 @@ def test_cmd_distill_passes_config_and_dry_run(capsys):
     assert "DRY RUN" in capsys.readouterr().out
 
 
+def test_cmd_wizard_runs_runtime_wizard():
+    with patch("swampcastle.wizard.run_wizard") as mock:
+        commands.cmd_wizard(SimpleNamespace())
+    mock.assert_called_once_with()
+
+
 def test_cmd_drawbridge_setup_prints_examples(capsys):
     commands.cmd_drawbridge_setup(SimpleNamespace(palace=None))
     out = capsys.readouterr().out

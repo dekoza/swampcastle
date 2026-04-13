@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 from pathlib import Path
+from typing import Any
 
 RUNTIME_CONFIG_DIRNAME = ".swampcastle"
 RUNTIME_CONFIG_FILENAME = "config.json"
@@ -38,14 +39,25 @@ def _has_legacy_mempalace_remnants(home: Path | None = None) -> bool:
     )
 
 
+def load_runtime_config() -> dict[str, Any]:
+    config_path = ensure_runtime_config()
+    return json.loads(config_path.read_text(encoding="utf-8"))
+
+
+def save_runtime_config(config: dict[str, Any]) -> Path:
+    config_path = runtime_config_path()
+    config_path.parent.mkdir(parents=True, exist_ok=True)
+    config_path.write_text(json.dumps(config, indent=2) + "\n", encoding="utf-8")
+    return config_path
+
+
 def ensure_runtime_config() -> Path:
     """Create the default runtime config on first use and return its path."""
     config_path = runtime_config_path()
     if config_path.exists():
         return config_path
 
-    config_path.parent.mkdir(parents=True, exist_ok=True)
-    config_path.write_text(json.dumps(_default_runtime_config(), indent=2) + "\n", encoding="utf-8")
+    save_runtime_config(_default_runtime_config())
 
     print(f"  Created default runtime config: {config_path}")
     print("  Backend: lance")

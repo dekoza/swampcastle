@@ -131,6 +131,14 @@ class TestGather:
                 mock.assert_called_once()
 
 
+class TestWizard:
+    def test_dispatches(self):
+        with patch("sys.argv", ["swampcastle", "wizard"]):
+            with patch("swampcastle.cli.commands.cmd_wizard") as mock:
+                main()
+                mock.assert_called_once()
+
+
 class TestCleave:
     def test_dispatches(self, tmp_path):
         with patch("sys.argv", ["swampcastle", "cleave", str(tmp_path)]):

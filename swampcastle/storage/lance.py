@@ -6,6 +6,7 @@ import os
 from typing import Any, Dict, List, Optional
 
 from .base import CollectionStore
+from . import StorageFactory
 
 logger = logging.getLogger("swampcastle")
 
@@ -349,7 +350,7 @@ class LanceBackend:
         return LanceCollection(db, collection_name, embedder, sync_identity=sync_identity)
 
 
-class LocalStorageFactory:
+class LocalStorageFactory(StorageFactory):
     """LanceDB + SQLite factory. Zero infrastructure."""
 
     def __init__(self, castle_path, embedder=None):

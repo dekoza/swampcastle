@@ -1,10 +1,13 @@
 """Storage layer for SwampCastle.
 
-Provides StorageFactory ABC and backend detection.
+Provides StorageFactory ABC, backend detection, and settings-based routing.
 """
 
 import os
 from abc import ABC, abstractmethod
+from importlib import import_module
+
+from swampcastle.settings import CastleSettings
 
 from .base import CollectionStore, GraphStore
 
@@ -13,6 +16,7 @@ __all__ = [
     "GraphStore",
     "StorageFactory",
     "detect_backend",
+    "factory_from_settings",
 ]
 
 
@@ -47,3 +51,30 @@ def detect_backend(castle_path: str) -> str:
         return "chroma"
 
     return "lance"
+
+
+def factory_from_settings(settings: CastleSettings) -> StorageFactory:
+    """Create the configured storage factory for a Castle instance."""
+    if settings.backend == "lance":
+        from .lance import LocalStorageFactory
+
+        return LocalStorageFactory(settings.castle_path)
+
+    if settings.backend == "postgres":
+        if not settings.database_url:
+            raise ValueError("SWAMPCASTLE_DATABASE_URL required for postgres backend")
+        try:
+            module = import_module("swampcastle.storage.postgres")
+        except ImportError as exc:
+            raise ImportError(
+                "PostgreSQL backend requires optional dependencies. "
+                "Install with: pip install 'swampcastle[postgres]'"
+            ) from exc
+        return module.PostgresStorageFactory(settings.database_url)
+
+    if settings.backend == "chroma":
+        raise NotImplementedError(
+            "ChromaDB backend removed in v4; use 'swampcastle raise' to convert"
+        )
+
+    raise ValueError(f"Unknown backend: {settings.backend}")

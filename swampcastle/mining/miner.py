@@ -15,6 +15,7 @@ from pathlib import Path
 from datetime import datetime
 from collections import defaultdict
 
+from ..project_config import PROJECT_CONFIG_NAME, resolve_project_config
 from ..settings import CastleSettings
 from ..storage import StorageFactory, factory_from_settings
 
@@ -298,19 +299,14 @@ def is_force_included(path: Path, project_path: Path, include_paths: set) -> boo
 
 
 def load_config(project_dir: str) -> dict:
-    """Load swampcastle.yaml from project directory (falls back to swampcastle.yaml)."""
+    """Load project-local mining config, migrating legacy filename if needed."""
     import yaml
 
-    config_path = Path(project_dir).expanduser().resolve() / "swampcastle.yaml"
-    if not config_path.exists():
-        # Fallback to legacy name
-        legacy_path = Path(project_dir).expanduser().resolve() / "swampcastle.yaml"
-        if legacy_path.exists():
-            config_path = legacy_path
-        else:
-            print(f"ERROR: No swampcastle.yaml found in {project_dir}")
-            print(f"Run: swampcastle build {project_dir}")
-            sys.exit(1)
+    config_path = resolve_project_config(project_dir)
+    if config_path is None:
+        print(f"ERROR: No {PROJECT_CONFIG_NAME} found in {project_dir}")
+        print(f"Run: swampcastle project {project_dir}")
+        sys.exit(1)
     with open(config_path) as f:
         return yaml.safe_load(f)
 

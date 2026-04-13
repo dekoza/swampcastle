@@ -9,11 +9,14 @@ Two ways to define rooms without calling any AI:
 No internet. No API key. Your files stay on your machine.
 """
 
+from collections import defaultdict
+from pathlib import Path
 import os
 import sys
+
 import yaml
-from pathlib import Path
-from collections import defaultdict
+
+from swampcastle.project_config import project_config_path
 
 # Common room patterns — detected from folder names and filenames
 # Format: {folder_keyword: room_name}
@@ -264,7 +267,7 @@ def save_config(project_dir: str, project_name: str, rooms: list):
             for r in rooms
         ],
     }
-    config_path = Path(project_dir).expanduser().resolve() / "swampcastle.yaml"
+    config_path = project_config_path(project_dir)
     with open(config_path, "w") as f:
         yaml.dump(config, f, default_flow_style=False, sort_keys=False)
 

@@ -147,7 +147,7 @@ def test_cmd_project_creates_swampcastle_yaml(tmp_path):
     with patch("swampcastle.entity_detector.scan_for_detection", return_value=[]):
         commands.cmd_project(args)
 
-    assert (project / "swampcastle.yaml").exists()
+    assert (project / ".swampcastle.yaml").exists()
 
 
 def test_cmd_gather_projects_uses_miner(tmp_path, capsys):

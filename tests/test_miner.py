@@ -34,7 +34,7 @@ def test_project_mining():
         write_file(
             project_root / "backend" / "app.py", "def main():\n    print('hello world')\n" * 20
         )
-        with open(project_root / "swampcastle.yaml", "w") as f:
+        with open(project_root / ".swampcastle.yaml", "w") as f:
             yaml.dump(
                 {
                     "wing": "test_project",
@@ -64,7 +64,7 @@ def test_project_mining_accepts_storage_factory():
         write_file(
             project_root / "backend" / "app.py", "def main():\n    print('hello world')\n" * 20
         )
-        with open(project_root / "swampcastle.yaml", "w") as f:
+        with open(project_root / ".swampcastle.yaml", "w") as f:
             yaml.dump(
                 {
                     "wing": "test_project",

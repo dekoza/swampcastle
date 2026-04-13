@@ -8,7 +8,9 @@ from swampcastle.storage.sqlite_graph import SQLiteGraph
 class TestSQLiteGraph:
     @pytest.fixture
     def graph(self, tmp_path):
-        return SQLiteGraph(str(tmp_path / "kg.sqlite3"))
+        graph = SQLiteGraph(str(tmp_path / "kg.sqlite3"))
+        yield graph
+        graph.close()
 
     def test_add_entity(self, graph):
         eid = graph.add_entity(name="Kai", entity_type="person")

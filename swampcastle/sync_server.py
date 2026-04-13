@@ -14,8 +14,9 @@ import logging
 import os
 
 from .settings import CastleSettings as CastleConfig
+from .storage import factory_from_settings
 from .sync import SyncEngine, ChangeSet, SyncRecord
-from .sync_meta import NodeIdentity
+from .sync_meta import get_identity
 
 logger = logging.getLogger("swampcastle.sync_server")
 
@@ -31,24 +32,24 @@ def _get_engine() -> SyncEngine:
         _config = CastleConfig(_env_file=None)
         palace_path = _config.castle_path
 
-        from .storage import detect_backend
-        from .storage.lance import LanceBackend
-
-        if detect_backend(palace_path) == "chroma":
+        try:
+            factory = factory_from_settings(_config)
+        except NotImplementedError as exc:
             raise RuntimeError(
                 f"Castle at {palace_path} uses ChromaDB. "
-                "Sync requires LanceDB. Run: swampcastle migrate"
-            )
+                "Sync does not support ChromaDB. Run: swampcastle raise"
+            ) from exc
 
-        col = LanceBackend().get_collection(palace_path, "swampcastle_chests", create=True)
-
-        identity = NodeIdentity()
-        vv_path = os.path.join(palace_path, "version_vector.json")
+        os.makedirs(str(palace_path), exist_ok=True)
+        col = factory.open_collection(_config.collection_name)
+        identity = get_identity(str(_config.config_dir))
+        vv_path = os.path.join(str(palace_path), "version_vector.json")
 
         _engine = SyncEngine(col, identity=identity, vv_path=vv_path)
         logger.info(
-            "Sync engine initialised — node=%s palace=%s",
+            "Sync engine initialised — node=%s backend=%s castle=%s",
             identity.node_id,
+            _config.backend,
             palace_path,
         )
     return _engine

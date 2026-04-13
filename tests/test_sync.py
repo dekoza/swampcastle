@@ -2,6 +2,7 @@
 
 import json
 import os
+from types import SimpleNamespace
 
 import pytest
 
@@ -620,6 +621,104 @@ class TestTwoNodeSync:
 
         r = col_b.get(ids=["a1"], include=["documents"])
         assert r["documents"][0] == "from client A"
+
+
+# ── sync_server factory routing ───────────────────────────────────────────────
+
+
+class TestSyncServerFactoryRouting:
+    def setup_method(self):
+        import swampcastle.sync_server as ss
+
+        ss._engine = None
+        ss._config = None
+
+    def teardown_method(self):
+        import swampcastle.sync_server as ss
+
+        ss._engine = None
+        ss._config = None
+
+    def test_get_engine_uses_factory_from_settings(self, tmp_path, monkeypatch):
+        import swampcastle.sync_server as ss
+
+        collection = object()
+        calls = {}
+
+        class DummyFactory:
+            def open_collection(self, name):
+                calls["collection_name"] = name
+                return collection
+
+        settings = SimpleNamespace(
+            castle_path=tmp_path / "castle",
+            config_dir=tmp_path / "config",
+            collection_name="custom_chests",
+            backend="postgres",
+        )
+
+        def fake_get_identity(config_dir=None):
+            calls["config_dir"] = str(config_dir)
+            return SimpleNamespace(node_id="server-node")
+
+        monkeypatch.setattr(ss, "CastleConfig", lambda _env_file=None: settings)
+        monkeypatch.setattr(ss, "factory_from_settings", lambda s: DummyFactory())
+        monkeypatch.setattr(ss, "get_identity", fake_get_identity)
+
+        engine = ss._get_engine()
+
+        assert engine._col is collection
+        assert engine._identity.node_id == "server-node"
+        assert calls["collection_name"] == "custom_chests"
+        assert calls["config_dir"] == str(settings.config_dir)
+        assert engine._vv._path == os.path.join(str(settings.castle_path), "version_vector.json")
+
+    def test_get_engine_reuses_cached_engine(self, tmp_path, monkeypatch):
+        import swampcastle.sync_server as ss
+
+        calls = {"factory": 0}
+
+        class DummyFactory:
+            def open_collection(self, name):
+                calls["factory"] += 1
+                return object()
+
+        settings = SimpleNamespace(
+            castle_path=tmp_path / "castle",
+            config_dir=tmp_path / "config",
+            collection_name="swampcastle_chests",
+            backend="lance",
+        )
+
+        monkeypatch.setattr(ss, "CastleConfig", lambda _env_file=None: settings)
+        monkeypatch.setattr(ss, "factory_from_settings", lambda s: DummyFactory())
+        monkeypatch.setattr(ss, "get_identity", lambda config_dir=None: SimpleNamespace(node_id="node"))
+
+        engine_a = ss._get_engine()
+        engine_b = ss._get_engine()
+
+        assert engine_a is engine_b
+        assert calls["factory"] == 1
+
+    def test_get_engine_rejects_chroma_backend(self, tmp_path, monkeypatch):
+        import swampcastle.sync_server as ss
+
+        settings = SimpleNamespace(
+            castle_path=tmp_path / "castle",
+            config_dir=tmp_path / "config",
+            collection_name="swampcastle_chests",
+            backend="chroma",
+        )
+
+        monkeypatch.setattr(ss, "CastleConfig", lambda _env_file=None: settings)
+        monkeypatch.setattr(
+            ss,
+            "factory_from_settings",
+            lambda s: (_ for _ in ()).throw(NotImplementedError("ChromaDB backend removed in v4")),
+        )
+
+        with pytest.raises(RuntimeError, match="Sync does not support ChromaDB"):
+            ss._get_engine()
 
 
 # ── MEMPALACE_BACKEND env var ─────────────────────────────────────────────────

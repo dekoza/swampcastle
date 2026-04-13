@@ -231,7 +231,7 @@ def split_file(filepath, output_dir, dry_run=False):
     return written
 
 
-def main():
+def main(argv: list[str] | None = None):
     parser = argparse.ArgumentParser(
         description="Split concatenated transcript mega-files into per-session files"
     )
@@ -259,7 +259,7 @@ def main():
         default=None,
         help="Split a single specific file instead of scanning dir",
     )
-    args = parser.parse_args()
+    args = parser.parse_args(argv)
 
     src_dir = Path(args.source) if args.source else LUMI_DIR
     output_dir = args.output_dir or None  # None = same dir as file

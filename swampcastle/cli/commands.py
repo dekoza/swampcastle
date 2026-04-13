@@ -131,14 +131,14 @@ def cmd_herald(args):
 def cmd_cleave(args):
     from swampcastle.split_mega_files import main as split_main
 
-    sys.argv = ["swampcastle", args.dir]
+    argv = [args.dir]
     if args.output_dir:
-        sys.argv.extend(["--output-dir", args.output_dir])
+        argv.extend(["--output-dir", args.output_dir])
     if args.dry_run:
-        sys.argv.append("--dry-run")
+        argv.append("--dry-run")
     if args.min_sessions:
-        sys.argv.extend(["--min-sessions", str(args.min_sessions)])
-    split_main()
+        argv.extend(["--min-sessions", str(args.min_sessions)])
+    split_main(argv)
 
 
 def cmd_distill(args):

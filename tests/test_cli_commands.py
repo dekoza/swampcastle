@@ -190,22 +190,24 @@ def test_cmd_herald_prints_protocol_and_totals(capsys):
     assert "Total: 5 drawers" in out
 
 
-def test_cmd_cleave_builds_sys_argv(tmp_path):
+def test_cmd_cleave_passes_argv_without_mutating_sys_argv(tmp_path):
     args = SimpleNamespace(dir=str(tmp_path), output_dir="/tmp/out", dry_run=True, min_sessions=4)
+    original_argv = list(os.sys.argv)
 
     with patch("swampcastle.split_mega_files.main") as mock_main:
         commands.cmd_cleave(args)
 
-    assert os.sys.argv == [
-        "swampcastle",
-        str(tmp_path),
-        "--output-dir",
-        "/tmp/out",
-        "--dry-run",
-        "--min-sessions",
-        "4",
-    ]
-    mock_main.assert_called_once()
+    assert os.sys.argv == original_argv
+    mock_main.assert_called_once_with(
+        [
+            str(tmp_path),
+            "--output-dir",
+            "/tmp/out",
+            "--dry-run",
+            "--min-sessions",
+            "4",
+        ]
+    )
 
 
 def test_cmd_distill_prints_no_drawers(capsys):

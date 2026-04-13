@@ -18,6 +18,7 @@ from collections import defaultdict
 from ..project_config import PROJECT_CONFIG_NAME, resolve_project_config
 from ..settings import CastleSettings
 from ..storage import StorageFactory, factory_from_settings
+from .contributor import detect_contributor
 
 SKIP_DIRS = {
     ".git",
@@ -412,7 +413,14 @@ def chunk_text(content: str, source_file: str) -> list:
 
 
 def add_drawer(
-    collection, wing: str, room: str, content: str, source_file: str, chunk_index: int, agent: str
+    collection,
+    wing: str,
+    room: str,
+    content: str,
+    source_file: str,
+    chunk_index: int,
+    agent: str,
+    contributor: str | None = None,
 ):
     """Add one drawer to the palace."""
     drawer_id = f"drawer_{wing}_{room}_{hashlib.sha256((source_file + str(chunk_index)).encode()).hexdigest()[:24]}"
@@ -425,6 +433,8 @@ def add_drawer(
             "added_by": agent,
             "filed_at": datetime.now().isoformat(),
         }
+        if contributor:
+            metadata["contributor"] = contributor
         # Store file mtime so we can detect modifications later.
         try:
             metadata["source_mtime"] = os.path.getmtime(source_file)
@@ -453,6 +463,8 @@ def process_file(
     rooms: list,
     agent: str,
     dry_run: bool,
+    team: list[str] | None = None,
+    registry=None,
 ) -> tuple:
     """Read, chunk, route, and file one file. Returns (drawer_count, room_name)."""
 
@@ -472,6 +484,8 @@ def process_file(
 
     room = detect_room(filepath, content, rooms, project_path)
     chunks = chunk_text(content, source_file)
+
+    contributor = detect_contributor(filepath, project_path, team=team, registry=registry)
 
     if dry_run:
         print(f"    [DRY RUN] {filepath.name} → room:{room} ({len(chunks)} drawers)")
@@ -497,6 +511,7 @@ def process_file(
             source_file=source_file,
             chunk_index=chunk["chunk_index"],
             agent=agent,
+            contributor=contributor,
         )
         if added:
             drawers_added += 1
@@ -596,6 +611,17 @@ def mine(
 
     wing = wing or config["wing"]
     rooms = config.get("rooms", [{"name": "general", "description": "All project files"}])
+    team = config.get("team")
+
+    # Load entity registry for contributor resolution (best-effort)
+    registry = None
+    if team:
+        try:
+            from ..entity_registry import EntityRegistry
+
+            registry = EntityRegistry.load()
+        except Exception:
+            pass
 
     files = scan_project(
         project_dir,
@@ -641,6 +667,8 @@ def mine(
             rooms=rooms,
             agent=agent,
             dry_run=dry_run,
+            team=team,
+            registry=registry,
         )
         if drawers == 0 and not dry_run:
             files_skipped += 1

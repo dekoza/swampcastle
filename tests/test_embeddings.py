@@ -262,7 +262,7 @@ def test_list_embedders_returns_list():
 
 def test_embedding_model_stored_in_metadata(tmp_path):
     """Verify the embedding model name is stored in each record's metadata."""
-    from swampcastle.backends import open_collection
+    from swampcastle.storage.lance import LanceBackend; open_collection = lambda path, **kw: LanceBackend().get_collection(path, "swampcastle_chests", create=True, embedder=kw.get("embedder"))
 
     col = open_collection(str(tmp_path / "palace"), backend="lance")
     col.upsert(
@@ -280,7 +280,7 @@ def test_embedding_model_stored_in_metadata(tmp_path):
 
 def test_lance_dimension_mismatch_guard(tmp_path):
     """Reopening a LanceDB collection with a different embedder dimension must fail."""
-    from swampcastle.backends import open_collection
+    from swampcastle.storage.lance import LanceBackend; open_collection = lambda path, **kw: LanceBackend().get_collection(path, "swampcastle_chests", create=True, embedder=kw.get("embedder"))
 
     class FakeEmbedder384:
         model_name = "fake-384"
@@ -305,7 +305,7 @@ def test_lance_dimension_mismatch_guard(tmp_path):
 
 def test_lance_node_id_seq_are_filterable_columns(tmp_path):
     """node_id and seq must be top-level LanceDB columns, not buried in metadata_json."""
-    from swampcastle.backends import open_collection
+    from swampcastle.storage.lance import LanceBackend; open_collection = lambda path, **kw: LanceBackend().get_collection(path, "swampcastle_chests", create=True, embedder=kw.get("embedder"))
 
     palace = str(tmp_path / "palace")
     col = open_collection(palace, backend="lance")

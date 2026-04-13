@@ -13,7 +13,7 @@ Endpoints:
 import logging
 import os
 
-from .config import CastleConfig
+from .settings import CastleSettings as CastleConfig
 from .sync import SyncEngine, ChangeSet, SyncRecord
 from .sync_meta import NodeIdentity
 
@@ -28,18 +28,19 @@ _config = None
 def _get_engine() -> SyncEngine:
     global _engine, _config
     if _engine is None:
-        _config = CastleConfig()
-        palace_path = _config.palace_path
+        _config = CastleConfig(_env_file=None)
+        palace_path = _config.castle_path
 
-        from .backends import open_collection, detect_backend
+        from .storage import detect_backend
+        from .storage.lance import LanceBackend
 
         if detect_backend(palace_path) == "chroma":
             raise RuntimeError(
-                f"Palace at {palace_path} uses ChromaDB. "
+                f"Castle at {palace_path} uses ChromaDB. "
                 "Sync requires LanceDB. Run: swampcastle migrate"
             )
 
-        col = open_collection(palace_path, backend="lance")
+        col = LanceBackend().get_collection(palace_path, "swampcastle_chests", create=True)
 
         identity = NodeIdentity()
         vv_path = os.path.join(palace_path, "version_vector.json")

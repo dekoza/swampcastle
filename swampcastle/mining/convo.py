@@ -16,7 +16,20 @@ from datetime import datetime
 from collections import defaultdict
 
 from .normalize import normalize
-from ..palace import SKIP_DIRS, get_collection, file_already_mined
+from ..storage.lance import LocalStorageFactory  # mining uses storage directly
+
+SKIP_DIRS = {
+    ".git", "node_modules", "__pycache__", ".venv", "venv", "env",
+    "dist", "build", ".next", "coverage", ".swampcastle",
+}
+
+
+def _file_already_mined(collection, source_file: str) -> bool:
+    try:
+        results = collection.get(where={"source_file": source_file}, limit=1)
+        return bool(results.get("ids"))
+    except Exception:
+        return False
 
 
 # File types that might contain conversations
@@ -264,7 +277,10 @@ def mine_convos(
         print("  DRY RUN — nothing will be filed")
     print(f"{'-' * 55}\n")
 
-    collection = get_collection(palace_path) if not dry_run else None
+    collection = None
+    if not dry_run:
+        factory = LocalStorageFactory(palace_path)
+        collection = factory.open_collection("swampcastle_chests")
 
     total_drawers = 0
     files_skipped = 0
@@ -274,7 +290,7 @@ def mine_convos(
         source_file = str(filepath)
 
         # Skip if already filed
-        if not dry_run and file_already_mined(collection, source_file):
+        if not dry_run and _file_already_mined(collection, source_file):
             files_skipped += 1
             continue
 
@@ -375,6 +391,6 @@ if __name__ == "__main__":
     if len(sys.argv) < 2:
         print("Usage: python convo_miner.py <convo_dir> [--palace PATH] [--limit N] [--dry-run]")
         sys.exit(1)
-    from ..config import CastleConfig
+    from ..settings import CastleSettings as CastleConfig
 
-    mine_convos(sys.argv[1], palace_path=CastleConfig().palace_path)
+    mine_convos(sys.argv[1], palace_path=CastleConfig(_env_file=None).castle_path)

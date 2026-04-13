@@ -479,7 +479,7 @@ def test_try_normalize_json_valid_but_unknown_schema():
 
 def test_messages_to_transcript_basic():
     msgs = [("user", "Q"), ("assistant", "A")]
-    with patch("swampcastle.normalize.spellcheck_user_text", side_effect=lambda x: x, create=True):
+    with patch("swampcastle.mining.normalize.spellcheck_user_text", side_effect=lambda x: x, create=True):
         result = _messages_to_transcript(msgs, spellcheck=False)
     assert "> Q" in result
     assert "A" in result
@@ -503,7 +503,7 @@ def test_messages_to_transcript_assistant_first():
 
 def test_normalize_rejects_large_file():
     """Files over 500 MB should raise IOError before reading."""
-    with patch("swampcastle.normalize.os.path.getsize", return_value=600 * 1024 * 1024):
+    with patch("swampcastle.mining.normalize.os.path.getsize", return_value=600 * 1024 * 1024):
         try:
             normalize("/fake/huge_file.txt")
             assert False, "Should have raised IOError"

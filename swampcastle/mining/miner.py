@@ -15,7 +15,33 @@ from pathlib import Path
 from datetime import datetime
 from collections import defaultdict
 
-from ..palace import SKIP_DIRS, get_collection, file_already_mined
+from ..storage.lance import LocalStorageFactory  # mining uses storage directly
+
+SKIP_DIRS = {
+    ".git", "node_modules", "__pycache__", ".venv", "venv", "env",
+    "dist", "build", ".next", "coverage", ".swampcastle", ".ruff_cache",
+    ".mypy_cache", ".pytest_cache", ".cache", ".tox", ".nox", ".idea",
+    ".vscode", ".ipynb_checkpoints", ".eggs", "htmlcov", "target",
+}
+
+
+def _file_already_mined(collection, source_file: str, check_mtime: bool = False) -> bool:
+    try:
+        results = collection.get(where={"source_file": source_file}, limit=1)
+        if not results.get("ids"):
+            return False
+        if check_mtime:
+            stored_meta = results.get("metadatas", [{}])[0]
+            stored_mtime = stored_meta.get("source_mtime")
+            if stored_mtime is None:
+                return False
+            import os
+            current_mtime = os.path.getmtime(source_file)
+            return abs(float(stored_mtime) - current_mtime) < 0.001
+        return True
+    except Exception:
+        return False
+
 
 READABLE_EXTENSIONS = {
     ".txt",
@@ -415,7 +441,7 @@ def process_file(
 
     # Skip if already filed
     source_file = str(filepath)
-    if not dry_run and file_already_mined(collection, source_file, check_mtime=True):
+    if not dry_run and _file_already_mined(collection, source_file, check_mtime=True):
         return 0, None
 
     try:
@@ -577,7 +603,8 @@ def mine(
     print(f"{'─' * 55}\n")
 
     if not dry_run:
-        collection = get_collection(palace_path)
+        factory = LocalStorageFactory(palace_path)
+        collection = factory.open_collection("swampcastle_chests")
     else:
         collection = None
 
@@ -623,7 +650,8 @@ def mine(
 def status(palace_path: str):
     """Show what's been filed in the palace."""
     try:
-        col = get_collection(palace_path)
+        factory = LocalStorageFactory(palace_path)
+        col = factory.open_collection("swampcastle_chests")
         if col.count() == 0:
             raise Exception("Empty palace")
     except Exception:

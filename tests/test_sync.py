@@ -5,7 +5,11 @@ import os
 
 import pytest
 
-from swampcastle.backends import open_collection, LanceCollection
+from swampcastle.storage.lance import LanceBackend, LanceCollection
+
+
+def open_collection(path, **kw):
+    return LanceBackend().get_collection(path, "swampcastle_chests", create=True)
 from swampcastle.sync import SyncEngine, ChangeSet, SyncRecord, VersionVector
 from swampcastle.sync_meta import NodeIdentity
 

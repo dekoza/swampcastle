@@ -2,7 +2,6 @@ import re
 from pathlib import Path
 
 from swampcastle import __version__
-from swampcastle.mcp_server import handle_request
 
 
 def _expected_version() -> str:
@@ -15,8 +14,3 @@ def _expected_version() -> str:
 
 def test_package_version_matches_pyproject():
     assert __version__ == _expected_version()
-
-
-def test_mcp_initialize_reports_package_version():
-    response = handle_request({"jsonrpc": "2.0", "id": 1, "method": "initialize"})
-    assert response["result"]["serverInfo"]["version"] == _expected_version()

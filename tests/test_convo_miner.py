@@ -1,7 +1,8 @@
 import os
 import tempfile
 import shutil
-from swampcastle.palace import get_collection as _get_test_collection
+from swampcastle.storage.lance import LanceBackend
+_get_test_collection = lambda path, name="swampcastle_chests": LanceBackend().get_collection(path, name, create=True)
 from swampcastle.mining.convo import mine_convos
 
 

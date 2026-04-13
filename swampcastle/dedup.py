@@ -41,9 +41,9 @@ MIN_DRAWERS_TO_CHECK = 5
 def _get_palace_path():
     """Resolve palace path from config."""
     try:
-        from .config import CastleConfig
+        from .settings import CastleSettings as CastleConfig
 
-        return CastleConfig().palace_path
+        return CastleConfig(_env_file=None).castle_path
     except Exception:
         return os.path.join(os.path.expanduser("~"), ".swampcastle", "palace")
 

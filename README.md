@@ -4,7 +4,7 @@
 
 # SwampCastle
 
-Built on the ruins of [MemPalace](https://github.com/MemPalace/mempalace).
+Built on the foundations of [MemPalace](https://github.com/MemPalace/mempalace).
 
 **The fourth one stayed up.**
 

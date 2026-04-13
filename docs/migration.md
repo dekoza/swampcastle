@@ -65,15 +65,37 @@ with Castle(settings, factory) as castle:
     result = castle.search.search(SearchQuery(query="auth decisions"))
 ```
 
-## Storage migration reality check
+## Storage migration command
 
-This part is still in flux and the docs will not lie about it.
+SwampCastle now ships a real ChromaDB → v4 local castle migration command:
 
-- `swampcastle raise` / `swampcastle migrate` is the new CLI entry point name
-- the current CLI command only prints guidance
-- the legacy standalone `swampcastle.migrate` module still contains older Chroma-oriented recovery logic and is being replaced
+```bash
+swampcastle raise --source-palace ~/.mempalace/palace
+```
 
-So if you are migrating old Chroma-backed data, treat the migration path as **in progress**, not as a polished one-command v4 workflow.
+Dry-run first if you want a summary without writing anything:
+
+```bash
+swampcastle raise --source-palace ~/.mempalace/palace --dry-run
+```
+
+Custom target castle path:
+
+```bash
+swampcastle raise \
+  --source-palace ~/.mempalace/palace \
+  --target-castle ~/.swampcastle/castle
+```
+
+What it does:
+- reads legacy drawer data directly from `chroma.sqlite3`
+- writes the new target in LanceDB layout
+- leaves the source palace untouched
+- copies common sidecar files when present (`knowledge_graph.sqlite3`, `identity.txt`, `node_id`, `seq`, `wal/`)
+
+What it does **not** do:
+- it does not migrate into PostgreSQL
+- it does not overwrite a non-empty target castle
 
 ## Path rename
 

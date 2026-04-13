@@ -122,14 +122,23 @@ Honest status: this command is still thin in v4. It reports what would be proces
 
 ## raise / migrate
 
-Migration entry point.
+Raise a legacy ChromaDB palace into the v4 local castle layout.
 
 ```bash
-swampcastle raise
-swampcastle migrate
+swampcastle raise --source-palace ~/.mempalace/palace
+swampcastle migrate --source-palace ~/.mempalace/palace
 ```
 
-Honest status: the CLI command currently prints migration guidance. The legacy standalone `swampcastle.migrate` module still contains old Chroma-oriented recovery logic and is being replaced.
+Options:
+- `--source-palace PATH` — legacy Chroma palace directory (containing `chroma.sqlite3`)
+- `--target-castle PATH` — target v4 castle directory (defaults to configured `castle_path`)
+- `--dry-run` — inspect what would be migrated without writing anything
+
+Behavior:
+- reads legacy drawer data directly from Chroma's SQLite store
+- writes the target in LanceDB layout
+- preserves the source palace untouched
+- copies common sidecar files (`knowledge_graph.sqlite3`, `identity.txt`, `node_id`, `seq`, `wal/`) when present
 
 ## reforge / reindex
 

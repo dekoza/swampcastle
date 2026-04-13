@@ -181,6 +181,24 @@ SwampCastle sync now works against the configured collection backend. Version ve
 
 See [docs/sync.md](docs/sync.md).
 
+## Legacy Chroma migration
+
+SwampCastle can raise a legacy ChromaDB palace into the v4 local castle layout:
+
+```bash
+swampcastle raise --source-palace ~/.mempalace/palace
+```
+
+By default the target is your configured `castle_path` (usually `~/.swampcastle/castle`).
+You can override it:
+
+```bash
+swampcastle raise --source-palace ~/.mempalace/palace --target-castle /tmp/swampcastle/castle
+swampcastle raise --source-palace ~/.mempalace/palace --dry-run
+```
+
+The source palace is left untouched. Drawer data is imported into LanceDB, and common sidecar files such as the knowledge graph and sync identity files are copied when present.
+
 ## Current state of the CLI
 
 The core ingest / search / MCP / sync path is working:
@@ -194,7 +212,6 @@ The core ingest / search / MCP / sync path is working:
 
 Some maintenance commands are still being rebuilt and are intentionally thin right now:
 
-- `raise` / `migrate`
 - `reforge` / `reindex`
 - `distill` / `compress`
 

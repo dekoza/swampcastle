@@ -26,7 +26,7 @@ This package is the v4 implementation.
 | `sync_meta.py` | node identity + seq metadata |
 | `dialect.py` | AAAK experimental compression / summary format |
 | `dedup.py` | backend-agnostic duplicate cleanup utility |
-| `migrate.py` | legacy migration / recovery tooling under replacement |
+| `migrate.py` | legacy ChromaDB → v4 local castle migration |
 | `hooks_cli.py` | hook protocol implementation |
 | `instructions_cli.py` | packaged instruction text output |
 

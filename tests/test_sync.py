@@ -9,7 +9,10 @@ from swampcastle.storage.lance import LanceBackend, LanceCollection
 
 
 def open_collection(path, **kw):
-    return LanceBackend().get_collection(path, "swampcastle_chests", create=True)
+    return LanceBackend().get_collection(
+        path, "swampcastle_chests", create=True,
+        sync_identity=kw.get("sync_identity"),
+    )
 from swampcastle.sync import SyncEngine, ChangeSet, SyncRecord, VersionVector
 from swampcastle.sync_meta import NodeIdentity
 

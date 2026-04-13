@@ -161,7 +161,7 @@ def test_utcnow_iso_format():
 
 def test_sync_meta_in_lance_records(tmp_path):
     """Verify that upsert injects node_id/seq/updated_at into stored metadata."""
-    from swampcastle.storage.lance import LanceBackend; open_collection = lambda path, **kw: LanceBackend().get_collection(path, "swampcastle_chests", create=True)
+    from swampcastle.storage.lance import LanceBackend; open_collection = lambda path, **kw: LanceBackend().get_collection(path, "swampcastle_chests", create=True, sync_identity=kw.get("sync_identity"))
     from swampcastle.sync_meta import NodeIdentity
 
     ni = NodeIdentity(config_dir=str(tmp_path / "config"))

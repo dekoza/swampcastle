@@ -3,8 +3,6 @@
 test-unit: ## Run fast unit tests on host
 	uv run pytest tests/ \
 		--ignore=tests/benchmarks \
-		--ignore=tests/test_dedup.py \
-		--ignore=tests/test_repair.py \
 		-k 'not TestSyncServer and not test_detect_rooms_local_interactive' \
 		-m 'not integration and not postgres' -x
 

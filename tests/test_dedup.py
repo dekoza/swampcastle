@@ -1,9 +1,31 @@
 """Tests for swampcastle.dedup — near-duplicate drawer detection and removal."""
 
-from unittest.mock import MagicMock, patch
-
+from unittest.mock import MagicMock
 
 from swampcastle import dedup
+from swampcastle.storage.memory import InMemoryStorageFactory
+
+
+def _seed_factory(factory: InMemoryStorageFactory, *, wing: str = "proj"):
+    col = factory.open_collection(dedup.COLLECTION_NAME)
+    col.upsert(
+        ids=["d1", "d2", "d3", "d4", "d5"],
+        documents=[
+            "auth token rotation policy for api gateway and session refresh",
+            "auth token rotation policy for api gateway and session refresh",
+            "auth token rotation policy for api gateway and session refresh",
+            "billing retry strategy for failed invoices and payment recovery",
+            "deployment notes for blue green rollouts and rollback strategy",
+        ],
+        metadatas=[
+            {"wing": wing, "room": "auth", "source_file": "src/auth.py"},
+            {"wing": wing, "room": "auth", "source_file": "src/auth.py"},
+            {"wing": wing, "room": "auth", "source_file": "src/auth.py"},
+            {"wing": wing, "room": "billing", "source_file": "src/auth.py"},
+            {"wing": wing, "room": "deploy", "source_file": "src/auth.py"},
+        ],
+    )
+    return col
 
 
 # ── get_source_groups ─────────────────────────────────────────────────
@@ -30,6 +52,7 @@ def test_get_source_groups_basic():
     assert len(groups["a.txt"]) == 5
 
 
+
 def test_get_source_groups_below_min():
     col = MagicMock()
     col.count.return_value = 2
@@ -45,6 +68,7 @@ def test_get_source_groups_below_min():
     ]
     groups = dedup.get_source_groups(col, min_count=5)
     assert len(groups) == 0
+
 
 
 def test_get_source_groups_source_filter():
@@ -69,6 +93,7 @@ def test_get_source_groups_source_filter():
     assert "other.txt" not in groups
 
 
+
 def test_get_source_groups_wing_filter():
     col = MagicMock()
     col.count.return_value = 5
@@ -86,9 +111,9 @@ def test_get_source_groups_wing_filter():
         {"ids": []},
     ]
     dedup.get_source_groups(col, min_count=5, wing="my_wing")
-    # Verify where filter was passed
     first_call = col.get.call_args_list[0]
     assert first_call.kwargs.get("where") == {"wing": "my_wing"}
+
 
 
 def test_get_source_groups_missing_source_file():
@@ -113,15 +138,20 @@ def test_dedup_source_group_all_unique():
     col.get.return_value = {
         "ids": ["d1", "d2"],
         "documents": ["long document one content here", "different document two here"],
-        "metadatas": [{"wing": "a"}, {"wing": "a"}],
+        "metadatas": [
+            {"wing": "a", "source_file": "a.txt"},
+            {"wing": "a", "source_file": "a.txt"},
+        ],
     }
     col.query.return_value = {
         "ids": [["d1"]],
-        "distances": [[0.8]],  # far apart = unique
+        "distances": [[0.8]],
     }
     kept, deleted = dedup.dedup_source_group(col, ["d1", "d2"], threshold=0.15, dry_run=True)
     assert len(kept) == 2
     assert len(deleted) == 0
+    assert col.query.call_args.kwargs["where"] == {"source_file": "a.txt"}
+
 
 
 def test_dedup_source_group_with_duplicate():
@@ -132,26 +162,34 @@ def test_dedup_source_group_with_duplicate():
             "long document content that is fairly long",
             "long document content that is fairly long",
         ],
-        "metadatas": [{"wing": "a"}, {"wing": "a"}],
+        "metadatas": [
+            {"wing": "a", "source_file": "a.txt"},
+            {"wing": "a", "source_file": "a.txt"},
+        ],
     }
     col.query.return_value = {
         "ids": [["d1"]],
-        "distances": [[0.05]],  # very close = duplicate
+        "distances": [[0.05]],
     }
     kept, deleted = dedup.dedup_source_group(col, ["d1", "d2"], threshold=0.15, dry_run=True)
     assert len(kept) == 1
     assert len(deleted) == 1
 
 
+
 def test_dedup_source_group_short_docs_deleted():
     col = MagicMock()
     col.get.return_value = {
         "ids": ["d1", "d2"],
-        "documents": ["long enough document to keep in the palace", "tiny"],
-        "metadatas": [{"wing": "a"}, {"wing": "a"}],
+        "documents": ["long enough document to keep in the castle", "tiny"],
+        "metadatas": [
+            {"wing": "a", "source_file": "a.txt"},
+            {"wing": "a", "source_file": "a.txt"},
+        ],
     }
     kept, deleted = dedup.dedup_source_group(col, ["d1", "d2"], threshold=0.15, dry_run=True)
-    assert "d2" in deleted  # too short
+    assert "d2" in deleted
+
 
 
 def test_dedup_source_group_empty_doc_deleted():
@@ -159,10 +197,14 @@ def test_dedup_source_group_empty_doc_deleted():
     col.get.return_value = {
         "ids": ["d1", "d2"],
         "documents": ["real document content here that is long enough", None],
-        "metadatas": [{"wing": "a"}, {"wing": "a"}],
+        "metadatas": [
+            {"wing": "a", "source_file": "a.txt"},
+            {"wing": "a", "source_file": "a.txt"},
+        ],
     }
     kept, deleted = dedup.dedup_source_group(col, ["d1", "d2"], threshold=0.15, dry_run=True)
     assert "d2" in deleted
+
 
 
 def test_dedup_source_group_live_deletes():
@@ -170,7 +212,10 @@ def test_dedup_source_group_live_deletes():
     col.get.return_value = {
         "ids": ["d1", "d2"],
         "documents": ["long document content here enough", "long document content here enough"],
-        "metadatas": [{"wing": "a"}, {"wing": "a"}],
+        "metadatas": [
+            {"wing": "a", "source_file": "a.txt"},
+            {"wing": "a", "source_file": "a.txt"},
+        ],
     }
     col.query.return_value = {
         "ids": [["d1"]],
@@ -178,6 +223,9 @@ def test_dedup_source_group_live_deletes():
     }
     kept, deleted = dedup.dedup_source_group(col, ["d1", "d2"], threshold=0.15, dry_run=False)
     col.delete.assert_called_once()
+    assert kept == ["d1"]
+    assert deleted == ["d2"]
+
 
 
 def test_dedup_source_group_query_failure_keeps():
@@ -188,85 +236,60 @@ def test_dedup_source_group_query_failure_keeps():
             "long document one content here enough",
             "long document two content here enough",
         ],
-        "metadatas": [{"wing": "a"}, {"wing": "a"}],
+        "metadatas": [
+            {"wing": "a", "source_file": "a.txt"},
+            {"wing": "a", "source_file": "a.txt"},
+        ],
     }
     col.query.side_effect = Exception("query failed")
     kept, deleted = dedup.dedup_source_group(col, ["d1", "d2"], threshold=0.15, dry_run=True)
-    assert len(kept) == 2  # both kept on error
+    assert len(kept) == 2
+    assert len(deleted) == 0
 
 
-# ── show_stats ────────────────────────────────────────────────────────
+# ── show_stats / dedup_palace ────────────────────────────────────────
 
 
-@patch("swampcastle.dedup.chromadb")
-def test_show_stats(mock_chromadb, tmp_path):
-    mock_col = MagicMock()
-    mock_col.count.return_value = 5
-    mock_col.get.side_effect = [
-        {
-            "ids": ["d1", "d2", "d3", "d4", "d5"],
-            "metadatas": [
-                {"source_file": "a.txt"},
-                {"source_file": "a.txt"},
-                {"source_file": "a.txt"},
-                {"source_file": "a.txt"},
-                {"source_file": "a.txt"},
-            ],
-        },
-        {"ids": []},
-    ]
-    mock_client = MagicMock()
-    mock_client.get_collection.return_value = mock_col
-    mock_chromadb.PersistentClient.return_value = mock_client
+def test_show_stats_uses_storage_factory(capsys):
+    factory = InMemoryStorageFactory()
+    _seed_factory(factory)
 
-    dedup.show_stats(palace_path=str(tmp_path))  # should not raise
+    dedup.show_stats(storage_factory=factory)
+
+    out = capsys.readouterr().out
+    assert "Sources with 5+ drawers: 1" in out
+    assert "src/auth.py" in out
 
 
-# ── dedup_palace ──────────────────────────────────────────────────────
+
+def test_dedup_palace_dry_run_keeps_records(capsys):
+    factory = InMemoryStorageFactory()
+    col = _seed_factory(factory)
+
+    dedup.dedup_palace(dry_run=True, storage_factory=factory)
+
+    assert col.count() == 5
+    out = capsys.readouterr().out
+    assert "DRY RUN" in out
 
 
-@patch("swampcastle.dedup.dedup_source_group")
-@patch("swampcastle.dedup.get_source_groups")
-@patch("swampcastle.dedup.chromadb")
-def test_dedup_palace_dry_run(mock_chromadb, mock_groups, mock_dedup_group, tmp_path):
-    mock_col = MagicMock()
-    mock_col.count.return_value = 10
-    mock_client = MagicMock()
-    mock_client.get_collection.return_value = mock_col
-    mock_chromadb.PersistentClient.return_value = mock_client
 
-    mock_groups.return_value = {"a.txt": ["d1", "d2", "d3", "d4", "d5"]}
-    mock_dedup_group.return_value = (["d1", "d2", "d3"], ["d4", "d5"])
+def test_dedup_palace_live_run_deletes_duplicates():
+    factory = InMemoryStorageFactory()
+    col = _seed_factory(factory)
 
-    dedup.dedup_palace(palace_path=str(tmp_path), dry_run=True)
-    mock_dedup_group.assert_called_once()
+    dedup.dedup_palace(dry_run=False, storage_factory=factory)
+
+    assert col.count() < 5
 
 
-@patch("swampcastle.dedup.dedup_source_group")
-@patch("swampcastle.dedup.get_source_groups")
-@patch("swampcastle.dedup.chromadb")
-def test_dedup_palace_with_wing(mock_chromadb, mock_groups, mock_dedup_group, tmp_path):
-    mock_col = MagicMock()
-    mock_col.count.return_value = 10
-    mock_client = MagicMock()
-    mock_client.get_collection.return_value = mock_col
-    mock_chromadb.PersistentClient.return_value = mock_client
 
-    mock_groups.return_value = {}
-    dedup.dedup_palace(palace_path=str(tmp_path), wing="test_wing", dry_run=True)
-    mock_groups.assert_called_once_with(mock_col, 5, None, wing="test_wing")
+def test_dedup_palace_with_wing_filter_only_dedups_target_wing():
+    factory = InMemoryStorageFactory()
+    target = _seed_factory(factory, wing="target")
+    _seed_factory(factory, wing="other")
 
+    dedup.dedup_palace(dry_run=False, wing="target", storage_factory=factory)
 
-@patch("swampcastle.dedup.dedup_source_group")
-@patch("swampcastle.dedup.get_source_groups")
-@patch("swampcastle.dedup.chromadb")
-def test_dedup_palace_no_groups(mock_chromadb, mock_groups, mock_dedup_group, tmp_path):
-    mock_col = MagicMock()
-    mock_col.count.return_value = 3
-    mock_client = MagicMock()
-    mock_client.get_collection.return_value = mock_col
-    mock_chromadb.PersistentClient.return_value = mock_client
-
-    mock_groups.return_value = {}
-    dedup.dedup_palace(palace_path=str(tmp_path), dry_run=True)
-    mock_dedup_group.assert_not_called()
+    result = target.get(where={"wing": "other"}, include=["documents", "metadatas"])
+    assert len(result["ids"]) == 5

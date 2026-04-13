@@ -2,21 +2,22 @@
 
 from __future__ import annotations
 
-from unittest.mock import MagicMock
-
 import pytest
 
 from swampcastle.castle import Castle
 from swampcastle.models.drawer import AddDrawerCommand
+from swampcastle.settings import CastleSettings
 from swampcastle.storage.memory import InMemoryStorageFactory
 
 
 @pytest.fixture
-def castle():
+def castle(tmp_path):
     factory = InMemoryStorageFactory()
-    # Mock settings
-    settings = MagicMock()
-    settings.castle_path = "/tmp/castle"
+    # Use real CastleSettings to verify settings validation works
+    settings = CastleSettings(
+        _env_file=None,
+        castle_path=tmp_path / "castle",
+    )
     
     with Castle(settings, factory) as c:
         # Add some initial data

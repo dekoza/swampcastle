@@ -1,163 +1,112 @@
 # Migrating from MemPalace
 
-SwampCastle v4 is a full rewrite of MemPalace v3. Data is compatible — your palace files work — but package names, CLI commands, config paths, and MCP tool names have all changed.
+SwampCastle v4 is a rebuild, not a cosmetic rename.
 
-## Quick migration
+The major changes are:
+- package name: `mempalace` → `swampcastle`
+- CLI naming: castle-themed verbs with compatibility aliases
+- architecture: module-level helpers → `Castle` + services + storage factories
+- default backend: local LanceDB + SQLite
+- optional server backend: PostgreSQL + pgvector
+
+## Package and command rename
+
+Install the new package:
 
 ```bash
-# 1. Uninstall mempalace, install swampcastle
 pip uninstall mempalace
 pip install swampcastle
-
-# 2. Copy your data
-cp -r ~/.mempalace ~/.swampcastle
-
-# 3. Update your MCP client
-claude mcp remove mempalace
-claude mcp add swampcastle -- swampcastle-mcp
 ```
 
-That's it for basic usage. Details below for specific configurations.
-
-## Data directory
+Common command mapping:
 
 | MemPalace | SwampCastle |
-|-----------|-------------|
-| `~/.mempalace/` | `~/.swampcastle/` |
-| `~/.mempalace/palace/` | `~/.swampcastle/castle/` |
-| `~/.mempalace/knowledge_graph.sqlite3` | `~/.swampcastle/knowledge_graph.sqlite3` |
-| `~/.mempalace/identity.txt` | `~/.swampcastle/identity.txt` |
-| `~/.mempalace/wal/` | `~/.swampcastle/wal/` |
-| `~/.mempalace/node_id` | `~/.swampcastle/node_id` |
-| `~/.mempalace/config.json` | `~/.swampcastle/config.json` |
+|---|---|
+| `mempalace init <dir>` | `swampcastle build <dir>` or `swampcastle init <dir>` |
+| `mempalace mine <dir>` | `swampcastle gather <dir>` or `swampcastle mine <dir>` |
+| `mempalace search ...` | `swampcastle seek ...` or `swampcastle search ...` |
+| `mempalace status` | `swampcastle survey` or `swampcastle status` |
+| `mempalace mcp` | `swampcastle drawbridge` or `swampcastle mcp` |
+| `python -m mempalace.mcp_server` | `swampcastle-mcp` or `swampcastle drawbridge run` |
+| `mempalace serve` | `swampcastle serve` |
+| `mempalace sync` | `swampcastle sync` |
 
-Copy the entire directory. The LanceDB palace files and SQLite knowledge graph are binary-compatible.
+## MCP tool rename
 
-### Config file changes
+All public tool names moved from `mempalace_*` to `swampcastle_*`.
 
-In `~/.swampcastle/config.json`, update `palace_path` if it references the old directory:
+Examples:
+- `mempalace_search` → `swampcastle_search`
+- `mempalace_status` → `swampcastle_status`
+- `mempalace_kg_query` → `swampcastle_kg_query`
+- `mempalace_diary_write` → `swampcastle_diary_write`
 
-```json
-{
-  "palace_path": "/home/user/.swampcastle/castle"
-}
+## Python API migration
+
+Old style:
+
+```python
+# old MemPalace-era style
+from mempalace.searcher import search_memories
 ```
 
-## Environment variables
+v4 style:
 
-| MemPalace | SwampCastle |
-|-----------|-------------|
-| `MEMPALACE_PALACE_PATH` | `SWAMPCASTLE_CASTLE_PATH` |
-| `MEMPALACE_BACKEND` | `SWAMPCASTLE_BACKEND` |
-| `MEMPALACE_ONNX_CACHE` | `SWAMPCASTLE_ONNX_CACHE` |
-| `MEMPALACE_SOURCE_DIR` | `SWAMPCASTLE_SOURCE_DIR` |
+```python
+from swampcastle.castle import Castle
+from swampcastle.models import SearchQuery
+from swampcastle.settings import CastleSettings
+from swampcastle.storage import factory_from_settings
 
-## CLI commands
+settings = CastleSettings(_env_file=None)
+factory = factory_from_settings(settings)
 
-| MemPalace | SwampCastle | Alias |
-|-----------|-------------|-------|
-| `mempalace init <dir>` | `swampcastle init <dir>` | — |
-| `mempalace mine <dir>` | `swampcastle mine <dir>` | — |
-| `mempalace search "query"` | `swampcastle seek "query"` | `search` |
-| `mempalace status` | `swampcastle survey` | `status` |
-| `mempalace mcp` | `swampcastle drawbridge` | `mcp` |
-| `python -m mempalace.mcp_server` | `swampcastle-mcp` | `swampcastle drawbridge run` |
-| `mempalace serve` | `swampcastle serve` | — |
-| `mempalace sync` | `swampcastle sync` | — |
+with Castle(settings, factory) as castle:
+    result = castle.search.search(SearchQuery(query="auth decisions"))
+```
 
-Old aliases (`search`, `status`, `mcp`) still work for convenience.
+## Storage migration reality check
 
-## MCP setup
+This part is still in flux and the docs will not lie about it.
 
-### Claude Code
+- `swampcastle raise` / `swampcastle migrate` is the new CLI entry point name
+- the current CLI command only prints guidance
+- the legacy standalone `swampcastle.migrate` module still contains older Chroma-oriented recovery logic and is being replaced
+
+So if you are migrating old Chroma-backed data, treat the migration path as **in progress**, not as a polished one-command v4 workflow.
+
+## Path rename
+
+The v4 defaults use `~/.swampcastle/` and `~/.swampcastle/castle`.
+
+If you are carrying forward local artifacts from an older setup, the most important paths to audit are:
+- castle / palace directory
+- WAL directory
+- sync metadata files
+- MCP client configuration
+
+## Client reconfiguration
+
+Claude Code:
 
 ```bash
-# Remove old
 claude mcp remove mempalace
-
-# Add new
 claude mcp add swampcastle -- swampcastle-mcp
 ```
 
-### Gemini CLI
+Gemini CLI:
 
 ```bash
 gemini mcp remove mempalace
 gemini mcp add swampcastle swampcastle-mcp --scope user
 ```
 
-## MCP tool names
+## Practical advice
 
-All 19 tools renamed from `mempalace_*` to `swampcastle_*`:
+Migrate in this order:
 
-| MemPalace | SwampCastle |
-|-----------|-------------|
-| `mempalace_status` | `swampcastle_status` |
-| `mempalace_search` | `swampcastle_search` |
-| `mempalace_add_drawer` | `swampcastle_add_drawer` |
-| `mempalace_delete_drawer` | `swampcastle_delete_drawer` |
-| `mempalace_kg_query` | `swampcastle_kg_query` |
-| `mempalace_kg_add` | `swampcastle_kg_add` |
-| `mempalace_kg_invalidate` | `swampcastle_kg_invalidate` |
-| `mempalace_kg_timeline` | `swampcastle_kg_timeline` |
-| `mempalace_kg_stats` | `swampcastle_kg_stats` |
-| `mempalace_list_wings` | `swampcastle_list_wings` |
-| `mempalace_list_rooms` | `swampcastle_list_rooms` |
-| `mempalace_get_taxonomy` | `swampcastle_get_taxonomy` |
-| `mempalace_check_duplicate` | `swampcastle_check_duplicate` |
-| `mempalace_get_aaak_spec` | `swampcastle_get_aaak_spec` |
-| `mempalace_traverse` | `swampcastle_traverse` |
-| `mempalace_find_tunnels` | `swampcastle_find_tunnels` |
-| `mempalace_graph_stats` | `swampcastle_graph_stats` |
-| `mempalace_diary_write` | `swampcastle_diary_write` |
-| `mempalace_diary_read` | `swampcastle_diary_read` |
-
-## Python imports
-
-| MemPalace | SwampCastle |
-|-----------|-------------|
-| `from mempalace.searcher import search_memories` | `from swampcastle.services.search import SearchService` |
-| `from mempalace.knowledge_graph import KnowledgeGraph` | `from swampcastle.storage.sqlite_graph import SQLiteGraph` |
-| `from mempalace.config import MempalaceConfig` | `from swampcastle.settings import CastleSettings` |
-| `from mempalace.palace import get_collection` | `from swampcastle.storage.lance import LocalStorageFactory` |
-| `from mempalace.layers import MemoryStack` | `from swampcastle.castle import Castle` |
-| `from mempalace.mcp_server import handle_request` | `from swampcastle.mcp.server import create_handler` |
-
-The v4 API uses the `Castle` context object instead of calling modules directly:
-
-```python
-from swampcastle.castle import Castle
-from swampcastle.settings import CastleSettings
-from swampcastle.storage.lance import LocalStorageFactory
-
-settings = CastleSettings(castle_path="~/.swampcastle/castle")
-factory = LocalStorageFactory(settings.castle_path)
-
-with Castle(settings, factory) as castle:
-    result = castle.search.search(SearchQuery(query="auth decisions"))
-    castle.vault.add_drawer(AddDrawerCommand(wing="proj", room="auth", content="..."))
-    castle.graph.kg_add(subject="Kai", predicate="works_on", obj="Orion")
-```
-
-## Hooks
-
-Update hook scripts to reference `swampcastle` instead of `mempalace`:
-
-```bash
-# In mempal_save_hook.sh / mempal_precompact_hook.sh
-# Change:
-python3 -m mempalace mine "$MEMPAL_DIR"
-# To:
-python3 -m swampcastle mine "$MEMPAL_DIR"
-```
-
-## LanceDB collection name
-
-MemPalace used `mempalace_drawers`. SwampCastle uses `swampcastle_chests`. Your existing LanceDB data will work — the collection name is just a table name within the database. If you need to access old data:
-
-```python
-factory = LocalStorageFactory(castle_path)
-old_col = factory._backend.get_collection(castle_path, "mempalace_drawers", create=False)
-```
-
-Or rename the table directory inside your castle path from `mempalace_drawers.lance/` to `swampcastle_chests.lance/`.
+1. install `swampcastle`
+2. reconfigure your MCP client
+3. switch your Python imports to `Castle` + services + factories
+4. validate ingest / search on fresh data
+5. then handle old Chroma-era storage conversion deliberately

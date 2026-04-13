@@ -1,219 +1,106 @@
 # Knowledge graph
 
-SwampCastle includes a temporal knowledge graph for tracking entity relationships that change over time. Stored in SQLite at `~/.swampcastle/knowledge_graph.sqlite3`.
+SwampCastle keeps structured facts in a graph store separate from drawer search.
 
-## Concepts
+## Backends
 
-The knowledge graph stores **triples**: `subject → predicate → object`. Each triple has optional temporal validity (`valid_from`, `valid_to`), so you can query what was true at any point in time.
+- **Local mode:** `SQLiteGraph`
+- **PostgreSQL mode:** `PostgresGraphStore`
 
-```
-Kai → works_on → Orion        (valid_from: 2025-06-01, valid_to: NULL → current)
-Maya → assigned_to → auth     (valid_from: 2026-01-15, valid_to: 2026-02-01 → ended)
-```
+The high-level API is the same either way because `Castle.graph` sits on top of the `GraphStore` contract.
 
-Entities are auto-created when you add triples. Entity IDs are derived from the name (`lowercased`, spaces replaced with `_`).
-
-## Python API
+## Recommended API: Castle.graph
 
 ```python
-from swampcastle.knowledge_graph import KnowledgeGraph
+from swampcastle.castle import Castle
+from swampcastle.settings import CastleSettings
+from swampcastle.storage import factory_from_settings
+
+settings = CastleSettings(_env_file=None)
+factory = factory_from_settings(settings)
+
+with Castle(settings, factory) as castle:
+    castle.graph.kg_add(subject="Kai", predicate="works_on", obj="Orion")
+    facts = castle.graph.kg_query(entity="Kai")
+    print(facts.facts)
 ```
 
-### KnowledgeGraph(db_path=None)
+### Available high-level operations
 
-Create or connect to a knowledge graph.
+- `kg_add(subject, predicate, obj, valid_from=None, source_closet=None)`
+- `kg_query(entity, as_of=None, direction="both")`
+- `kg_invalidate(subject, predicate, obj, ended=None)`
+- `kg_timeline(entity=None)`
+- `kg_stats()`
+- `traverse(start_room, max_hops=2)`
+- `find_tunnels(wing_a=None, wing_b=None)`
+- `graph_stats()`
 
-| Parameter | Type | Default | Description |
-|-----------|------|---------|-------------|
-| `db_path` | `str` | `~/.swampcastle/knowledge_graph.sqlite3` | Path to SQLite database |
+## Direct low-level stores
+
+### SQLiteGraph
 
 ```python
-kg = KnowledgeGraph()
-kg = KnowledgeGraph(db_path="/tmp/test_kg.sqlite3")
+from swampcastle.storage.sqlite_graph import SQLiteGraph
+
+graph = SQLiteGraph("/tmp/knowledge_graph.sqlite3")
+graph.add_triple(subject="Kai", predicate="works_on", obj="Orion")
 ```
 
-### add_triple(subject, predicate, obj, ...)
+### PostgresGraphStore
 
-Add a relationship. Entities are auto-created if they don't exist. If an identical active triple already exists (same subject, predicate, object, and `valid_to` is NULL), returns the existing triple's ID.
+Open it through `PostgresStorageFactory` rather than constructing it by hand unless you already own the pool.
 
-```python
-triple_id = kg.add_triple(
-    "Kai", "works_on", "Orion",
-    valid_from="2025-06-01",
-)
+## Graph model
+
+Facts are stored as triples:
+
+```text
+subject → predicate → object
 ```
 
-| Parameter | Type | Default | Description |
-|-----------|------|---------|-------------|
-| `subject` | `str` | required | Entity doing/being something |
-| `predicate` | `str` | required | Relationship type |
-| `obj` | `str` | required | Connected entity |
-| `valid_from` | `str` | `None` | When this became true (YYYY-MM-DD or partial) |
-| `valid_to` | `str` | `None` | When this stopped being true |
-| `confidence` | `float` | `1.0` | Confidence score |
-| `source_closet` | `str` | `None` | Closet ID where this fact was found |
-| `source_file` | `str` | `None` | Source file reference |
+Example:
 
-**Returns:** `str` — the triple ID.
-
-### invalidate(subject, predicate, obj, ended=None)
-
-Mark a triple as no longer true by setting its `valid_to` date. Only affects triples where `valid_to` is currently NULL.
-
-```python
-kg.invalidate("Kai", "works_on", "Orion", ended="2026-03-01")
+```text
+Kai → works_on → Orion
 ```
 
-| Parameter | Type | Default | Description |
-|-----------|------|---------|-------------|
-| `subject` | `str` | required | Entity |
-| `predicate` | `str` | required | Relationship |
-| `obj` | `str` | required | Connected entity |
-| `ended` | `str` | today's date | When it stopped being true |
+Optional temporal fields:
+- `valid_from`
+- `valid_to`
 
-### add_entity(name, entity_type="unknown", properties=None)
+That lets you ask both:
+- what is true now?
+- what was true at a past date?
 
-Explicitly create or update an entity node. Usually unnecessary — `add_triple` creates entities automatically.
+## Duplicate handling
 
-```python
-kg.add_entity("Kai", entity_type="person", properties={"role": "engineer"})
-```
+Adding the exact same active fact twice does not create a second live triple. The stores check for an existing active triple with the same `subject + predicate + object`.
 
-### query_entity(name, as_of=None, direction="outgoing")
+## Time filtering
 
-Get all relationships for an entity.
+`as_of` keeps only facts valid at that moment:
 
-```python
-facts = kg.query_entity("Kai")
-facts = kg.query_entity("Kai", as_of="2026-01-15")
-facts = kg.query_entity("Kai", direction="both")
-```
-
-| Parameter | Type | Default | Description |
-|-----------|------|---------|-------------|
-| `name` | `str` | required | Entity name |
-| `as_of` | `str` | `None` | Only return facts valid at this date |
-| `direction` | `str` | `"outgoing"` | `outgoing` (entity→?), `incoming` (?→entity), or `both` |
-
-**Returns:** `list[dict]` — each dict contains:
-
-```python
-{
-    "direction": "outgoing",
-    "subject": "Kai",
-    "predicate": "works_on",
-    "object": "Orion",
-    "valid_from": "2025-06-01",
-    "valid_to": None,
-    "confidence": 1.0,
-    "source_closet": None,
-    "current": True,
-}
-```
-
-### query_relationship(predicate, as_of=None)
-
-Get all triples with a given relationship type.
-
-```python
-workers = kg.query_relationship("works_on")
-workers_jan = kg.query_relationship("works_on", as_of="2026-01-15")
-```
-
-### timeline(entity_name=None)
-
-Chronological list of all facts, optionally filtered to one entity. Limited to 100 results.
-
-```python
-all_events = kg.timeline()
-kai_history = kg.timeline("Kai")
-```
-
-**Returns:** `list[dict]` — ordered by `valid_from` ascending.
-
-### stats()
-
-Overview of the knowledge graph.
-
-```python
-kg.stats()
-# {
-#     "entities": 15,
-#     "triples": 47,
-#     "current_facts": 38,
-#     "expired_facts": 9,
-#     "relationship_types": ["child_of", "loves", "works_on", ...],
-# }
-```
-
-### close()
-
-Close the database connection. Called automatically on garbage collection, but explicit closing is cleaner.
+- `valid_from` is `NULL` or `<= as_of`
+- `valid_to` is `NULL` or `>= as_of`
 
 ## MCP tools
 
-The knowledge graph is also accessible via MCP:
+The graph is available through:
 
-| Tool | Maps to |
-|------|---------|
-| `swampcastle_kg_query` | `query_entity()` |
-| `swampcastle_kg_add` | `add_triple()` |
-| `swampcastle_kg_invalidate` | `invalidate()` |
-| `swampcastle_kg_timeline` | `timeline()` |
-| `swampcastle_kg_stats` | `stats()` |
+- `swampcastle_kg_query`
+- `swampcastle_kg_add`
+- `swampcastle_kg_invalidate`
+- `swampcastle_kg_timeline`
+- `swampcastle_kg_stats`
+- `swampcastle_traverse`
+- `swampcastle_find_tunnels`
+- `swampcastle_graph_stats`
 
-See [mcp.md](mcp.md) for parameter details.
+## Local SQLite schema
 
-## Schema
+The local graph store uses two tables:
+- `entities`
+- `triples`
 
-```sql
-CREATE TABLE entities (
-    id TEXT PRIMARY KEY,          -- lowercased, underscored name
-    name TEXT NOT NULL,           -- display name
-    type TEXT DEFAULT 'unknown',  -- person, project, tool, concept, animal, ...
-    properties TEXT DEFAULT '{}', -- JSON blob
-    created_at TEXT DEFAULT CURRENT_TIMESTAMP
-);
-
-CREATE TABLE triples (
-    id TEXT PRIMARY KEY,
-    subject TEXT NOT NULL,        -- → entities.id
-    predicate TEXT NOT NULL,      -- relationship type (lowercased, underscored)
-    object TEXT NOT NULL,         -- → entities.id
-    valid_from TEXT,              -- when this became true (ISO date)
-    valid_to TEXT,                -- when this stopped being true (NULL = current)
-    confidence REAL DEFAULT 1.0,
-    source_closet TEXT,           -- reference to palace closet
-    source_file TEXT,             -- reference to source file
-    extracted_at TEXT DEFAULT CURRENT_TIMESTAMP
-);
-```
-
-Indexes on `subject`, `object`, `predicate`, and `(valid_from, valid_to)`.
-
-The database uses WAL mode for concurrent read access.
-
-## Temporal queries
-
-The `as_of` parameter filters triples to those that were valid at a specific date:
-
-- A triple is valid at date `D` if:
-  - `valid_from` is NULL or `valid_from <= D`, AND
-  - `valid_to` is NULL or `valid_to >= D`
-
-This means:
-
-- Triples with no dates are always returned (assumed always-valid).
-- Triples with a `valid_from` in the future are excluded.
-- Triples with a `valid_to` in the past are excluded.
-
-```python
-# What's true right now? (valid_to is NULL)
-kg.query_entity("Kai")
-
-# What was true on January 15, 2026?
-kg.query_entity("Kai", as_of="2026-01-15")
-
-# Full history including expired facts
-kg.timeline("Kai")
-```
+See [`docs/schema.sql`](schema.sql) for a current SQLite schema snapshot.

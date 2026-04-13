@@ -1,11 +1,12 @@
--- MemPalace Knowledge Graph Schema
--- SQLite database at ~/.mempalace/knowledge_graph.db
+-- SwampCastle local knowledge-graph schema
+-- SQLite database at ~/.swampcastle/knowledge_graph.sqlite3
 
 CREATE TABLE IF NOT EXISTS entities (
     id TEXT PRIMARY KEY,
     name TEXT NOT NULL,
     type TEXT DEFAULT 'unknown',
-    properties TEXT DEFAULT '{}'
+    properties TEXT DEFAULT '{}',
+    created_at TEXT DEFAULT CURRENT_TIMESTAMP
 );
 
 CREATE TABLE IF NOT EXISTS triples (
@@ -17,19 +18,12 @@ CREATE TABLE IF NOT EXISTS triples (
     valid_to TEXT,
     confidence REAL DEFAULT 1.0,
     source_closet TEXT,
-    source_file TEXT
+    source_file TEXT,
+    extracted_at TEXT DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (subject) REFERENCES entities(id),
+    FOREIGN KEY (object) REFERENCES entities(id)
 );
 
-CREATE TABLE IF NOT EXISTS attributes (
-    entity_id TEXT NOT NULL,
-    key TEXT NOT NULL,
-    value TEXT,
-    valid_from TEXT,
-    valid_to TEXT,
-    PRIMARY KEY (entity_id, key, valid_from)
-);
-
--- Indexes
 CREATE INDEX IF NOT EXISTS idx_triples_subject ON triples(subject);
 CREATE INDEX IF NOT EXISTS idx_triples_object ON triples(object);
 CREATE INDEX IF NOT EXISTS idx_triples_predicate ON triples(predicate);

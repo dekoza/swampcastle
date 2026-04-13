@@ -1,69 +1,78 @@
 # SwampCastle Init
 
-Guide the user through a complete SwampCastle setup. Follow each step in order,
-stopping to report errors and attempt remediation before proceeding.
+Guide the user through a working v4 setup.
 
-## Step 1: Check Python version
+## Step 1: Check Python
 
-Run `python3 --version` (or `python --version` on Windows) and confirm the
-version is 3.9 or higher. If Python is not found or the version is too old,
-tell the user they need Python 3.9+ installed and stop.
+Confirm Python 3.11+.
 
-## Step 2: Check if swampcastle is already installed
+If it is older or missing, stop and say SwampCastle v4 requires Python 3.11 or newer.
 
-Run `pip show swampcastle` to see if the package is already present. If it is,
-report the installed version and skip to Step 4.
+## Step 2: Check installation
 
-## Step 3: Install swampcastle
+Run `pip show swampcastle`.
 
-Run `pip install swampcastle`.
+If not installed, install it:
 
-### Error handling -- pip failures
+```bash
+pip install swampcastle
+```
 
-If `pip install swampcastle` fails, try these fallbacks in order:
+## Step 3: Ask for the source directory
 
-1. Try `pip3 install swampcastle`
-2. Try `python -m pip install swampcastle` (or `python3 -m pip install swampcastle`)
-3. If the error mentions missing build tools or compilation failures (commonly
-   from chromadb or its native dependencies):
-   - On Linux/macOS: suggest `sudo apt-get install build-essential python3-dev`
-     (Debian/Ubuntu) or `xcode-select --install` (macOS)
-   - On Windows: suggest installing Microsoft C++ Build Tools from
-     https://visualstudio.microsoft.com/visual-cpp-build-tools/
-   - Then retry the install command
-4. If all attempts fail, report the error clearly and stop.
+Ask which directory they want to inspect / ingest.
 
-## Step 4: Ask for project directory
+## Step 4: Preview structure
 
-Ask the user which project directory they want to initialize with SwampCastle.
-Offer the current working directory as the default. Wait for their response
-before continuing.
+Run:
 
-## Step 5: Initialize the palace
+```bash
+swampcastle build <dir>
+```
 
-Run `swampcastle init <dir>` where `<dir>` is the directory from Step 4.
+Explain that `build` previews room and entity detection. It is not the ingest step.
 
-If this fails, report the error and stop.
+## Step 5: Ingest data
 
-## Step 6: Configure MCP server
+Run:
 
-Run the following command to register the SwampCastle MCP server with Claude:
+```bash
+swampcastle gather <dir>
+```
 
-    claude mcp add swampcastle -- python -m swampcastle.drawbridge
+If they want conversation exports instead:
 
-If this fails, report the error but continue to the next step (MCP
-configuration can be done manually later).
+```bash
+swampcastle gather <dir> --mode convos
+```
 
-## Step 7: Verify installation
+## Step 6: Verify the castle
 
-Run `swampcastle status` and confirm the output shows a healthy palace.
+Run:
 
-If the command fails or reports errors, walk the user through troubleshooting
-based on the output.
+```bash
+swampcastle survey
+```
+
+## Step 7: MCP setup
+
+Recommend:
+
+```bash
+claude mcp add swampcastle -- swampcastle-mcp
+```
+
+or:
+
+```bash
+swampcastle drawbridge
+```
+
+to print the setup command first.
 
 ## Step 8: Show next steps
 
-Tell the user setup is complete and suggest these next actions:
-
-- Use /swampcastle:mine to start adding data to their palace
-- Use /swampcastle:search to query their palace and retrieve stored knowledge
+Suggest:
+- `swampcastle seek "query"`
+- `swampcastle survey`
+- `swampcastle gather <another-dir>`

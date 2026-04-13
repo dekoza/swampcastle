@@ -2,147 +2,144 @@
 
 ## Prerequisites
 
-- Python 3.9 or later
-- ~200 MB disk space for LanceDB and embedding model
+- Python 3.11+
+- local disk space for your castle data
+- first-run ONNX model download for the default embedder (~87 MB, cached)
 
-## Installation
+## Install
 
 ```bash
 pip install swampcastle
 ```
 
-This installs SwampCastle and its dependencies (`lancedb`, `onnxruntime`, `tokenizers`, `pyyaml`). No API keys or accounts needed.
-
-On first run, the ONNX embedding model (~87 MB) is downloaded and cached at `~/.cache/swampcastle/`.
-
 Optional extras:
 
 ```bash
-pip install swampcastle[chroma]     # legacy ChromaDB backend (for migration)
-pip install swampcastle[gpu]         # GPU embeddings via sentence-transformers
-pip install swampcastle[server]      # sync server (FastAPI + uvicorn)
+pip install 'swampcastle[server]'    # sync server
+pip install 'swampcastle[postgres]'  # PostgreSQL backend
+pip install 'swampcastle[gpu]'       # sentence-transformers embedder support
+pip install 'swampcastle[chroma]'    # legacy migration tooling only
 ```
 
-To install from source:
+## First local castle
+
+### 1. Preview project structure
 
 ```bash
-git clone https://github.com/dekoza/swampcastle.git
-cd swampcastle
-pip install -e .
+swampcastle build ~/projects/myapp
 ```
 
-## Create your first palace
+`build` (alias: `init`) scans folder names and file contents to suggest rooms and entities. It is a discovery step, not an ingest step.
 
-### 1. Initialize
-
-Point `init` at a project directory. It scans the folder structure to detect rooms (topics) and optionally detects people and project names from file contents.
+### 2. Ingest project files
 
 ```bash
-swampcastle init ~/projects/myapp
+swampcastle gather ~/projects/myapp
 ```
 
-This creates:
-
-- `~/.swampcastle/config.json` — global configuration
-- `~/.swampcastle/palace/` — the LanceDB vector store (default location)
-- `~/projects/myapp/entities.json` — detected people and projects (if any found)
-
-The `init` command is interactive — it asks you to confirm detected entities. Use `--yes` to auto-accept everything.
-
-### 2. Mine project files
+Useful flags:
 
 ```bash
-swampcastle mine ~/projects/myapp
+swampcastle gather ~/projects/myapp --wing myapp
+swampcastle gather ~/projects/myapp --dry-run
+swampcastle gather ~/projects/myapp --include-ignored docs/generated
 ```
 
-This scans the directory for code, docs, markdown, text, and config files. Each file is chunked by paragraph and stored as drawers in the palace. Files matching `.gitignore` patterns are skipped by default.
-
-The wing name defaults to the directory name (`myapp`). Override with `--wing`:
+### 3. Search what you stored
 
 ```bash
-swampcastle mine ~/projects/myapp --wing my-web-app
+swampcastle seek "auth migration"
+swampcastle seek "billing retry policy" --wing myapp --room billing
 ```
 
-### 3. Mine conversations
-
-If you have conversation exports from Claude, ChatGPT, Slack, or Codex:
+### 4. Inspect the current shape
 
 ```bash
-swampcastle mine ~/chats/claude-sessions/ --mode convos --wing myapp
+swampcastle survey
 ```
 
-Conversation mining chunks by exchange pair (one user message + one assistant response). SwampCastle auto-detects the format — see [mining.md](mining.md) for supported formats.
+## Conversation ingest
 
-### 4. Search
+Conversation mining uses the same command with `--mode convos`:
 
 ```bash
-swampcastle search "why did we switch to GraphQL"
+swampcastle gather ~/chat-exports --mode convos --wing myapp
 ```
 
-Filter by wing or room:
+If you want broader extraction instead of exchange-pair chunking:
 
 ```bash
-swampcastle search "auth decisions" --wing myapp
-swampcastle search "pricing" --wing myapp --room billing
+swampcastle gather ~/chat-exports --mode convos --extract general --wing myapp
 ```
 
-### 5. Check what's stored
+If your exports contain multiple sessions per file:
 
 ```bash
-swampcastle status
+swampcastle cleave ~/chat-exports
 ```
 
-Shows total drawers, wings, and rooms in your palace.
-
-## Connect to your AI assistant
-
-SwampCastle is most useful when your AI assistant can access it directly via MCP.
+## Connect an AI client over MCP
 
 ### Claude Code
 
 ```bash
-claude mcp add swampcastle -- python -m swampcastle.drawbridge
+claude mcp add swampcastle -- swampcastle-mcp
 ```
-
-Restart Claude Code, then ask it anything about your past work. It calls `swampcastle_search` automatically.
 
 ### Gemini CLI
 
 ```bash
-gemini mcp add swampcastle /path/to/python -m swampcastle.drawbridge --scope user
+gemini mcp add swampcastle swampcastle-mcp --scope user
 ```
 
-Use the absolute path to your Python binary if using a virtual environment.
-
-### Other MCP-compatible tools
-
-Start the server directly:
+### Manual startup
 
 ```bash
-python -m swampcastle.drawbridge
+swampcastle drawbridge run
+# or
+swampcastle-mcp
 ```
 
-The MCP server communicates via JSON-RPC over stdin/stdout. See [mcp.md](mcp.md) for the full tool reference.
-
-### Local models (no MCP support)
-
-For models that don't speak MCP, generate a context file:
+To print the recommended setup command:
 
 ```bash
-swampcastle wake-up > context.txt
+swampcastle drawbridge
 ```
 
-Paste the contents into your model's system prompt. This gives it ~600–900 tokens of identity and key facts. For specific queries, search on demand:
+## Enable sync
+
+Hub:
 
 ```bash
-swampcastle search "auth decisions" > results.txt
+pip install 'swampcastle[server]'
+swampcastle serve --host 0.0.0.0 --port 7433
 ```
 
-## Next steps
+Client:
 
-- [Mining guide](mining.md) — conversation formats, general extraction, splitting mega-files
-- [MCP server](mcp.md) — full tool reference, integration patterns
-- [Knowledge graph](kg.md) — tracking facts that change over time
-- [Configuration](configuration.md) — customizing paths, wings, and identity
-- [Sync](sync.md) — multi-device replication
-- [Architecture](architecture.md) — how the palace model works
+```bash
+swampcastle sync --server http://homeserver:7433
+```
+
+The current CLI performs one sync exchange per invocation. The parser already accepts `--auto` and `--interval`, but that continuous loop is not wired yet.
+
+## PostgreSQL backend
+
+SwampCastle defaults to local LanceDB + SQLite. To route new Castle instances through PostgreSQL instead:
+
+```bash
+export SWAMPCASTLE_BACKEND=postgres
+export SWAMPCASTLE_DATABASE_URL=postgresql://user:pass@host:5432/swampcastle
+```
+
+Then the same high-level commands (`survey`, `seek`, MCP, sync server) use PostgreSQL-backed stores.
+
+## Next reading
+
+- [Architecture](architecture.md)
+- [CLI reference](cli.md)
+- [Configuration](configuration.md)
+- [Mining](mining.md)
+- [MCP server](mcp.md)
+- [Sync](sync.md)
+- [Python API](python-api.md)

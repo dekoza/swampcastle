@@ -1,158 +1,116 @@
 # Sync
 
-Multi-device replication for SwampCastle. Keep your palace synchronized across machines using a hub-and-spoke model over HTTP.
+SwampCastle sync is a hub-and-spoke replication layer built on top of `SyncEngine` and `SyncClient`.
 
-## Requirements
+## What sync operates on
 
-- **LanceDB backend** — sync requires LanceDB (the default since v4). ChromaDB palaces must be migrated first (`swampcastle migrate`).
-- **Server extras** — the hub needs `pip install swampcastle[server]` (FastAPI + uvicorn).
+Sync exchanges drawer records from the active `CollectionStore` backend.
 
-## Architecture
+Today that means:
+- local LanceDB collections
+- PostgreSQL / pgvector collections
 
-Sync uses a hub-and-spoke model:
+ChromaDB is still not a supported runtime sync backend.
 
-- **Hub** — a machine running `swampcastle serve`. Acts as the central relay. Any spoke's changes flow through the hub to other spokes.
-- **Spokes** — machines running `swampcastle sync`. Push local changes to the hub, pull remote changes from it.
+## Data carried with each record
 
+Each stored record includes sync metadata:
+
+- `node_id`
+- `seq`
+- `updated_at`
+
+These are used to compute version vectors and conflict resolution.
+
+## Version vectors
+
+Version vectors are persisted locally at:
+
+```text
+<castle_path>/version_vector.json
 ```
-  Laptop A (spoke)         Server (hub)           Laptop B (spoke)
-       │                      │                        │
-       ├── push ─────────────►│                        │
-       │                      ├── pull by B ──────────►│
-       │                      │◄── push by B ──────────┤
-       │◄── pull ─────────────┤                        │
-```
 
-### Identity
+That remains true even in PostgreSQL mode.
 
-Each machine gets a unique **node_id** — a 12-character hex string generated on first use and persisted at `~/.swampcastle/node_id`.
-
-### Sequence numbers
-
-Every write operation gets a monotonically increasing **seq** number (persisted at `~/.swampcastle/seq`). The combination of `node_id + seq` uniquely identifies every write across all machines. Sequence allocation uses file locking for thread safety.
-
-### Version vectors
-
-A **version vector** tracks the highest `seq` seen from each node. When syncing, a spoke sends its version vector to the hub, and the hub returns only records with `seq` values higher than what the spoke has seen.
-
-Version vectors are persisted at `<palace_path>/version_vector.json`.
-
-### Conflict resolution
+## Conflict resolution
 
 When the same drawer ID exists on both sides:
 
-1. **Last-writer-wins** — the record with the later `updated_at` timestamp wins.
-2. **Tiebreak** — on identical timestamps, the lexicographically higher `node_id` wins. This is arbitrary but deterministic — both sides reach the same conclusion without coordination.
+1. later `updated_at` wins
+2. if timestamps tie, lexicographically higher `node_id` wins
 
-New records (ID never seen locally) are accepted unconditionally.
+That rule is simple, deterministic, and already covered by tests.
 
-## Server setup
-
-Install server dependencies:
+## Start a sync server
 
 ```bash
-pip install swampcastle[server]
-```
-
-Start the sync server:
-
-```bash
+pip install 'swampcastle[server]'
 swampcastle serve --host 0.0.0.0 --port 7433
 ```
 
-| Flag | Default | Description |
-|------|---------|-------------|
-| `--host` | `127.0.0.1` | Bind address. Use `0.0.0.0` to accept remote connections. |
-| `--port` | `7433` | Port number. |
+Alias:
 
-### Endpoints
+```bash
+swampcastle garrison --host 0.0.0.0 --port 7433
+```
 
-| Method | Path | Description |
-|--------|------|-------------|
-| `GET` | `/health` | Health check (`{"status": "ok"}`) |
-| `GET` | `/sync/status` | Server's node_id, version vector, drawer count |
-| `POST` | `/sync/push` | Receive a changeset from a client |
-| `POST` | `/sync/pull` | Send records the client hasn't seen |
+Endpoints:
 
-## Client usage
+| Method | Path | Meaning |
+|---|---|---|
+| `GET` | `/health` | liveness check |
+| `GET` | `/sync/status` | node id, version vector, drawer count |
+| `POST` | `/sync/push` | accept a pushed change set |
+| `POST` | `/sync/pull` | return changes the caller has not seen |
 
-### One-time sync
+## Run a client sync
 
 ```bash
 swampcastle sync --server http://homeserver:7433
 ```
 
-This performs a full bidirectional sync:
-
-1. **Push** — send records the server hasn't seen.
-2. **Pull** — receive records the client hasn't seen, apply with conflict resolution.
-
-### Continuous sync
+Alias:
 
 ```bash
-swampcastle sync --server http://homeserver:7433 --auto --interval 300
+swampcastle parley --server http://homeserver:7433
 ```
 
-Repeats sync every 300 seconds (5 minutes). Runs until interrupted.
+`--dry-run` is wired.
 
-### Dry run
-
-```bash
-swampcastle sync --server http://homeserver:7433 --dry-run
-```
-
-Shows what would be synced without making changes.
-
-## Sync metadata
-
-Every record written to the palace includes three sync fields:
-
-| Field | Type | Description |
-|-------|------|-------------|
-| `node_id` | string | Which machine wrote this record |
-| `seq` | integer | Monotonic counter on that machine |
-| `updated_at` | string | ISO 8601 UTC timestamp |
-
-These fields are stored as indexed LanceDB columns (`node_id`, `seq`) for efficient filtering during sync. The sync engine uses `WHERE node_id = ? AND seq > ?` queries to find only new records.
+The parser also accepts `--auto` and `--interval`, but the continuous sync loop is not implemented yet. Do not pretend otherwise.
 
 ## Python API
 
 ```python
-from swampcastle.db import open_collection
+from swampcastle.castle import Castle
+from swampcastle.settings import CastleSettings
+from swampcastle.storage import factory_from_settings
 from swampcastle.sync import SyncEngine
-from swampcastle.sync_meta import NodeIdentity
 from swampcastle.sync_client import SyncClient
+from swampcastle.sync_meta import get_identity
 
-# Set up engine
-col = open_collection("~/.swampcastle/palace")
-identity = NodeIdentity()
-engine = SyncEngine(col, identity=identity, vv_path="path/to/version_vector.json")
+settings = CastleSettings(_env_file=None)
+factory = factory_from_settings(settings)
 
-# Manual push/pull
-changeset = engine.get_changes_since(remote_vv)  # records to send
-result = engine.apply_changes(changeset)          # apply received records
-
-# HTTP client
-client = SyncClient("http://homeserver:7433")
-if client.is_reachable():
-    result = client.sync(engine)  # full bidirectional sync
-    print(f"Push: {result['push']['sent']} sent, {result['push']['accepted']} accepted")
-    print(f"Pull: {result['pull']['received']} received, {result['pull']['accepted']} accepted")
+with Castle(settings, factory) as castle:
+    engine = SyncEngine(
+        castle._collection,
+        identity=get_identity(str(settings.config_dir)),
+        vv_path=str(settings.castle_path / "version_vector.json"),
+    )
+    client = SyncClient("http://homeserver:7433")
+    summary = client.sync(engine)
 ```
 
-## Security considerations
+## Security
 
-- Sync uses plain HTTP. For security over untrusted networks, use a reverse proxy with TLS or an SSH tunnel.
-- The server binds to `127.0.0.1` by default. Use `--host 0.0.0.0` only on trusted networks.
-- There is no authentication. Anyone who can reach the server can push and pull records.
-- All data stays on your machines — no cloud services are involved.
+The built-in sync server is plain HTTP with no authentication.
 
-## Migration from ChromaDB
+That means:
+- put it behind TLS / a reverse proxy on untrusted networks
+- or use an SSH tunnel
+- or keep it on a trusted LAN only
 
-Sync requires LanceDB. If your palace uses the ChromaDB backend:
+## Notes on backend routing
 
-```bash
-swampcastle migrate
-```
-
-This reads all drawers from ChromaDB, re-embeds them with the configured embedder, and writes them to a new LanceDB palace.
+The sync server now routes through `factory_from_settings()` instead of hardcoding LanceDB. That keeps sync aligned with the same backend configuration used by Castle, MCP, and the main CLI.

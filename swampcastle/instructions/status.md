@@ -1,49 +1,36 @@
 # SwampCastle Status
 
-Display the current state of the user's memory palace.
+Show the current state of the castle.
 
-## Step 1: Gather Palace Status
+## 1. Prefer MCP
 
-Check if MCP tools are available (look for swampcastle_status in available tools).
+If MCP is available, use:
+- `swampcastle_status`
+- optionally `swampcastle_kg_stats`
+- optionally `swampcastle_graph_stats`
 
-- If MCP is available: Call the swampcastle_status tool to retrieve palace state.
-- If MCP is not available: Run the CLI command: swampcastle status
+## 2. CLI fallback
 
-## Step 2: Display Wing/Room/Drawer Counts
+```bash
+swampcastle survey
+```
 
-Present the palace structure counts clearly:
-- Number of wings
-- Number of rooms
-- Number of drawers
-- Total memories stored
+Alias:
 
-Keep the output concise -- use a brief summary format, not verbose tables.
+```bash
+swampcastle status
+```
 
-## Step 3: Knowledge Graph Stats (MCP only)
+## 3. Summarize briefly
 
-If MCP tools are available, also call:
-- swampcastle_kg_stats -- for a knowledge graph overview (triple count, entity
-  count, relationship types)
-- swampcastle_graph_stats -- for connectivity information (connected components,
-  average connections per entity)
+Report:
+- total drawers
+- number of wings
+- number of rooms
+- optionally KG / graph stats when available
 
-Present these alongside the palace counts in a unified summary.
+## 4. Suggest the next action
 
-## Step 4: Suggest Next Actions
-
-Based on the current state, suggest one relevant action:
-
-- Empty palace (zero memories): Suggest "Try /swampcastle:mine to add data from
-  files, URLs, or text."
-- Has data but no knowledge graph (memories exist but KG stats show zero
-  triples): Suggest "Consider adding knowledge graph triples for richer
-  queries."
-- Healthy palace (has memories and KG data): Suggest "Use /swampcastle:search to
-  query your memories."
-
-## Output Style
-
-- Be concise and informative -- aim for a quick glance, not a report.
-- Use short labels and numbers, not prose paragraphs.
-- If any step fails or a tool is unavailable, note it briefly and continue
-  with what is available.
+Examples:
+- empty castle → suggest `swampcastle gather <dir>`
+- populated castle → suggest `swampcastle seek "query"`

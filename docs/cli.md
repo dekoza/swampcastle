@@ -1,230 +1,202 @@
 # CLI reference
 
-All commands accept `--palace PATH` to override the default palace location.
-
-## swampcastle init
-
-Detect rooms from a project's folder structure and set up the configuration.
+Global options:
 
 ```bash
+swampcastle [--palace PATH] [--backend {lance,postgres,chroma}] <command> ...
+```
+
+Aliases are important in v4: the castle-themed verbs are primary, and the older MemPalace-style verbs remain as aliases.
+
+## build / init
+
+Preview room and entity detection for a project directory.
+
+```bash
+swampcastle build <dir> [--yes]
 swampcastle init <dir> [--yes]
 ```
 
-| Argument | Description |
-|----------|-------------|
-| `<dir>` | Project directory to scan |
-| `--yes` | Auto-accept all detected entities (non-interactive) |
+Current behavior:
+- scans folder names to infer rooms
+- scans content to infer people / projects
+- prints what it found
+- does **not** ingest files on its own
 
-**What it does:**
+## gather / mine
 
-1. Scans files for people and project names (entity detection)
-2. Maps folders to room names using 70+ patterns
-3. Creates `~/.swampcastle/config.json` if it doesn't exist
-4. Saves detected entities to `<dir>/entities.json`
-
-## swampcastle mine
-
-Mine files into the palace.
+Ingest files into the configured collection backend.
 
 ```bash
+swampcastle gather <dir> [options]
 swampcastle mine <dir> [options]
 ```
 
-| Argument | Description |
-|----------|-------------|
-| `<dir>` | Directory to mine |
-| `--mode {projects,convos}` | Ingest mode (default: `projects`) |
-| `--wing NAME` | Wing name (default: directory name) |
-| `--extract {exchange,general}` | Extraction strategy for convos mode (default: `exchange`) |
-| `--no-gitignore` | Don't respect `.gitignore` files |
-| `--include-ignored PATHS` | Always scan these paths even if gitignored (comma-separated or repeated) |
-| `--agent NAME` | Your name, recorded on every drawer (default: `swampcastle`) |
-| `--limit N` | Max files to process (0 = all) |
-| `--dry-run` | Preview without filing |
+Options:
+- `--mode {projects,convos}`
+- `--wing NAME`
+- `--no-gitignore`
+- `--include-ignored PATH` (repeatable)
+- `--agent NAME`
+- `--limit N`
+- `--dry-run`
+- `--extract {exchange,general}` (conversation mode)
 
-**Examples:**
+Examples:
 
 ```bash
-swampcastle mine ~/projects/myapp
-swampcastle mine ~/chats/ --mode convos --wing myapp
-swampcastle mine ~/chats/ --mode convos --extract general
-swampcastle mine ~/projects/myapp --no-gitignore --include-ignored data/fixtures
-swampcastle mine ~/projects/myapp --dry-run --limit 10
+swampcastle gather ~/projects/myapp
+swampcastle gather ~/chat-exports --mode convos --wing myapp
+swampcastle gather ~/projects/myapp --dry-run --limit 10
 ```
 
-## swampcastle search
+## seek / search
 
-Semantic search across the palace.
+Semantic search.
 
 ```bash
-swampcastle search <query> [options]
+swampcastle seek <query> [--wing NAME] [--room NAME] [--results N]
+swampcastle search <query> [--wing NAME] [--room NAME] [--results N]
 ```
 
-| Argument | Description |
-|----------|-------------|
-| `<query>` | Search text |
-| `--wing NAME` | Filter by wing |
-| `--room NAME` | Filter by room |
-| `--results N` | Number of results (default: 5) |
+## survey / status
 
-**Examples:**
+Castle overview.
 
 ```bash
-swampcastle search "why did we switch to GraphQL"
-swampcastle search "auth decisions" --wing myapp
-swampcastle search "pricing" --wing myapp --room billing --results 10
-```
-
-## swampcastle split
-
-Split concatenated transcript files into per-session files. Run before `mine --mode convos` if your exports contain multiple sessions per file.
-
-```bash
-swampcastle split <dir> [options]
-```
-
-| Argument | Description |
-|----------|-------------|
-| `<dir>` | Directory containing transcript files |
-| `--output-dir DIR` | Write split files here (default: same as source) |
-| `--dry-run` | Preview without writing |
-| `--min-sessions N` | Only split files with at least N sessions (default: 2) |
-
-## swampcastle wake-up
-
-Show L0 (identity) + L1 (essential story) context. Output is designed to be pasted into an AI's system prompt.
-
-```bash
-swampcastle wake-up [--wing NAME]
-```
-
-| Argument | Description |
-|----------|-------------|
-| `--wing NAME` | Generate wake-up for a specific project/wing |
-
-## swampcastle compress
-
-Compress drawers using the AAAK dialect.
-
-```bash
-swampcastle compress [options]
-```
-
-| Argument | Description |
-|----------|-------------|
-| `--wing NAME` | Wing to compress (default: all) |
-| `--dry-run` | Preview without storing |
-| `--config PATH` | Entity config JSON (for AAAK entity codes) |
-
-Compressed drawers are stored in a separate `swampcastle_compressed` collection, not overwriting the raw originals.
-
-## swampcastle status
-
-Show palace overview: total drawers, wings, rooms.
-
-```bash
+swampcastle survey
 swampcastle status
 ```
 
-## swampcastle mcp
+Prints total drawers plus per-wing and per-room counts.
 
-Show the MCP setup command for connecting SwampCastle to your AI client.
+## drawbridge / mcp
+
+MCP entry point.
 
 ```bash
-swampcastle mcp [--palace PATH]
+swampcastle drawbridge
+swampcastle mcp
 ```
 
-## swampcastle repair
+Prints the recommended MCP setup command.
 
-Rebuild the palace vector index from stored data. Useful after ChromaDB corruption or segfaults.
+To actually run the JSON-RPC server:
 
 ```bash
-swampcastle repair
+swampcastle drawbridge run [--palace PATH]
+# or
+swampcastle-mcp
 ```
 
-Creates a backup at `<palace_path>.backup` before rebuilding.
+## herald / wake-up
 
-## swampcastle migrate
-
-Migrate the palace from ChromaDB to LanceDB.
+Print the protocol / status context for the current castle.
 
 ```bash
-swampcastle migrate [--dry-run]
+swampcastle herald [--wing NAME]
+swampcastle wake-up [--wing NAME]
 ```
 
-Reads all drawers from the ChromaDB palace, re-embeds them with the configured embedder, and stores them in a new LanceDB palace. The original ChromaDB data is preserved as a backup.
+Current behavior is status-oriented. The old layer-based wake-up stack no longer exists as the public architecture.
 
-## swampcastle reindex
+## cleave / split
 
-Re-embed all drawers with the current or a different embedder. Required after changing the embedding model.
+Split transcript mega-files into smaller session files.
 
 ```bash
-swampcastle reindex [options]
+swampcastle cleave <dir> [--output-dir DIR] [--dry-run] [--min-sessions N]
+swampcastle split <dir> [--output-dir DIR] [--dry-run] [--min-sessions N]
 ```
 
-| Argument | Description |
-|----------|-------------|
-| `--embedder NAME` | Embedder to use (default: from config) |
-| `--device DEVICE` | Device: `cpu`, `cuda`, `mps` |
-| `--ollama-model NAME` | Ollama model name (when `--embedder ollama`) |
-| `--ollama-url URL` | Ollama server URL |
-| `--dry-run` | Show current model distribution without changing anything |
+## distill / compress
 
-**Examples:**
+AAAK-related command.
 
 ```bash
-swampcastle reindex                                           # re-embed with configured model
-swampcastle reindex --embedder bge-small --device cuda        # switch to bge-small on GPU
-swampcastle reindex --embedder ollama --ollama-model nomic-embed-text  # use Ollama
-swampcastle reindex --dry-run                                 # check current state
+swampcastle distill [--wing NAME] [--dry-run] [--config PATH]
+swampcastle compress [--wing NAME] [--dry-run] [--config PATH]
 ```
 
-## swampcastle serve
+Honest status: this command is still thin in v4. It reports what would be processed, but it is not yet a finished end-to-end compression pipeline.
 
-Start the sync server for multi-device replication.
+## raise / migrate
+
+Migration entry point.
 
 ```bash
+swampcastle raise
+swampcastle migrate
+```
+
+Honest status: the CLI command currently prints migration guidance. The legacy standalone `swampcastle.migrate` module still contains old Chroma-oriented recovery logic and is being replaced.
+
+## reforge / reindex
+
+Embedding maintenance entry point.
+
+```bash
+swampcastle reforge [--embedder NAME] [--device DEVICE] [--dry-run]
+swampcastle reindex [--embedder NAME] [--device DEVICE] [--dry-run]
+```
+
+Honest status: this command is currently a scaffold. The full re-embed pipeline is not finished yet.
+
+## armory / embedders
+
+List known embedder configurations.
+
+```bash
+swampcastle armory
+swampcastle embedders
+```
+
+## garrison / serve
+
+Run the HTTP sync server.
+
+```bash
+swampcastle garrison [--host HOST] [--port PORT]
 swampcastle serve [--host HOST] [--port PORT]
 ```
 
-| Argument | Description |
-|----------|-------------|
-| `--host HOST` | Bind address (default: `127.0.0.1`) |
-| `--port PORT` | Port (default: `7433`) |
-
-Requires `pip install swampcastle[server]`.
-
-## swampcastle sync
-
-Sync the local palace with a remote server.
+Requires:
 
 ```bash
-swampcastle sync --server URL [options]
+pip install 'swampcastle[server]'
 ```
 
-| Argument | Description |
-|----------|-------------|
-| `--server URL` | Server URL (required, e.g. `http://homeserver:7433`) |
-| `--auto` | Repeat sync every `--interval` seconds |
-| `--interval N` | Seconds between syncs when `--auto` is set (default: 300) |
-| `--dry-run` | Show what would be synced without syncing |
+## parley / sync
 
-## swampcastle hook run
+Run one sync exchange against a server.
 
-Run hook logic programmatically (reads JSON from stdin, outputs JSON to stdout).
+```bash
+swampcastle parley --server URL [--dry-run]
+swampcastle sync --server URL [--dry-run]
+```
+
+Parser flags also exist for `--auto` and `--interval`, but they are not wired into a loop yet.
+
+## hook run (internal)
+
+Internal hook bridge used by shell / harness integrations.
 
 ```bash
 swampcastle hook run --hook {session-start,stop,precompact} --harness {claude-code,codex}
 ```
 
-Used by the hook shell scripts internally. Not typically called directly.
+## instructions (internal)
 
-## swampcastle instructions
-
-Output skill instructions for AI assistants.
+Print packaged instruction text.
 
 ```bash
 swampcastle instructions {init,search,mine,help,status}
 ```
 
-Prints structured instructions to stdout. Used by AI integrations to understand how to use SwampCastle.
+## ni
+
+Hidden easter egg.
+
+```bash
+swampcastle ni
+```

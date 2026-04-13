@@ -1,95 +1,127 @@
 # Architecture
 
-## Overview
+SwampCastle v4 is built around explicit boundaries:
 
-SwampCastle v4 uses a layered architecture: Castle context → Services → Storage backends.
-
+```text
+CLI / MCP / Sync
+      ↓
+   Castle
+      ├── CatalogService
+      ├── SearchService
+      ├── VaultService
+      └── GraphService
+      ↓
+CollectionStore + GraphStore + WalWriter
 ```
-User → CLI / MCP Server → Castle (context)
-                            ├── CatalogService → CollectionStore
-                            ├── SearchService  → CollectionStore
-                            ├── VaultService   → CollectionStore + WalWriter
-                            └── GraphService   → GraphStore + CollectionStore + WalWriter
+
+The old flat module graph is gone. The system now routes through a `Castle` context object plus storage contracts.
+
+## Core concepts
+
+### Castle
+
+`Castle` owns one configured collection store, one graph store, and the service layer that sits on top of them.
+
+```python
+with Castle(settings, factory) as castle:
+    castle.search.search(...)
+    castle.vault.add_drawer(...)
+    castle.graph.kg_add(...)
 ```
 
-## Storage backends
+### Services
 
-Two abstract contracts:
-- **CollectionStore** — document + vector storage (drawers)
-- **GraphStore** — entity-relationship graph (knowledge graph)
+| Service | Responsibility | Dependencies |
+|---|---|---|
+| `CatalogService` | Status, wings, rooms, taxonomy, AAAK spec | `CollectionStore` |
+| `SearchService` | Semantic search and duplicate detection | `CollectionStore` |
+| `VaultService` | Drawer writes, deletes, diary writes | `CollectionStore`, `WalWriter` |
+| `GraphService` | Knowledge-graph ops and castle graph traversal | `GraphStore`, `CollectionStore`, `WalWriter` |
 
-Three factory implementations:
+### Storage contracts
 
-| Factory | CollectionStore | GraphStore | Use case |
-|---------|----------------|------------|----------|
-| `InMemoryStorageFactory` | Dict-based | Dict-based | Unit tests |
-| `LocalStorageFactory` | LanceDB | SQLite | Production (local) |
-| `PostgresStorageFactory` | pgvector | SQL tables | Production (server) |
+Two abstract contracts define the storage boundary:
 
-The `Castle` constructor takes a `CastleSettings` and a `StorageFactory`. Callers decide which backend to use.
+- `CollectionStore` — document + vector storage
+- `GraphStore` — entity / relationship storage
 
-## Castle model
+Factory implementations:
 
-The castle organizes memories using a spatial metaphor. Each level of the hierarchy corresponds to metadata fields, which enables filtered search.
+| Factory | Collection | Graph | Typical use |
+|---|---|---|---|
+| `InMemoryStorageFactory` | in-memory | in-memory | unit tests |
+| `LocalStorageFactory` | LanceDB | SQLite | local workstation |
+| `PostgresStorageFactory` | pgvector | PostgreSQL tables | server / shared DB |
 
-### Wings
+The routing helper is `factory_from_settings(settings)`.
 
-A wing represents a person, project, or domain. Every memory belongs to exactly one wing.
+## Spatial memory model
 
-### Rooms
+SwampCastle still uses the castle metaphor because it maps cleanly onto metadata filters:
 
-A room is a specific topic within a wing. The same room name in multiple wings creates a tunnel (cross-wing connection).
+```text
+WING
+  └── ROOM
+        └── DRAWER
+```
 
-### Halls
+- **Wing** — project, person, or domain
+- **Room** — topic within a wing
+- **Drawer** — verbatim text chunk
 
-Memory type corridors — the same set exists in every wing:
+The graph layer builds on top of that metadata to find:
 
-| Hall | What it stores |
-|------|---------------|
-| `hall_facts` | Decisions made, choices locked in |
-| `hall_events` | Sessions, milestones, debugging sessions |
-| `hall_discoveries` | Breakthroughs, new insights |
-| `hall_preferences` | Habits, likes, opinions |
-| `hall_advice` | Recommendations and solutions |
+- shared rooms across wings
+- cross-domain tunnels
+- graph traversal paths
 
-### Tunnels
+## Write-ahead log
 
-When the same room name appears in multiple wings, a tunnel connects them. This enables cross-domain queries.
+Mutating service operations write to a WAL before they touch storage.
 
-## Services
+Current WAL-backed operations include:
+- drawer writes
+- drawer deletes
+- knowledge-graph fact additions
+- knowledge-graph invalidations
+- diary writes
 
-Four role-based services, each with explicit dependencies:
+This gives you a plain JSONL audit trail under `settings.wal_path`.
 
-| Service | Depends on | Responsibility |
-|---------|-----------|----------------|
-| `CatalogService` | `CollectionStore` | Read-only metadata: status, wings, rooms, taxonomy |
-| `SearchService` | `CollectionStore`, `QuerySanitizer` | Semantic search, duplicate detection |
-| `VaultService` | `CollectionStore`, `WalWriter` | Write operations: drawers, diary |
-| `GraphService` | `GraphStore`, `CollectionStore`, `WalWriter` | KG ops, graph traversal, tunnels |
+## Sync model
 
-Services return Pydantic models. They raise `CastleError` subclasses on failure.
+Sync is implemented as a `SyncEngine` over a `CollectionStore`.
 
-## MCP server
+Each record carries:
+- `node_id`
+- `seq`
+- `updated_at`
 
-19 tools registered via `register_tools(castle)`. Each tool has:
-- A Pydantic input model (schema auto-generated via `model_json_schema()`)
-- A handler lambda that calls the appropriate service method
+Version vectors live next to `castle_path` in `version_vector.json`, even when the collection backend is PostgreSQL.
 
-The JSON-RPC handler catches `CastleError` at the boundary and converts to error responses.
+## MCP boundary
 
-## Async
+The MCP server is thin:
 
-`AsyncCastle` wraps a sync `Castle`, delegating all calls to a thread pool via `anyio.to_thread.run_sync()`. Used by the FastAPI sync server and future async MCP.
+1. create `CastleSettings`
+2. build a factory via `factory_from_settings()`
+3. construct `Castle`
+4. register 19 tools from Pydantic models
+5. translate JSON-RPC requests into service calls
 
-## Configuration
+The tool registry lives in `swampcastle/mcp/tools.py`.
 
-`CastleSettings` (Pydantic `BaseSettings`) with priority: env vars (`SWAMPCASTLE_*`) > JSON config file > defaults.
+## Async boundary
 
-Computed paths derive from `castle_path`:
-- `kg_path` = `castle_path/../knowledge_graph.sqlite3`
-- `wal_path` = `castle_path/../wal/`
-- `config_dir` = `castle_path/..`
+`AsyncCastle` wraps a synchronous `Castle` and delegates through `anyio.to_thread.run_sync()`. That keeps the core logic synchronous while still allowing async entry points such as FastAPI.
 
-## Error handling
+## What v4 intentionally removed
 
-`CastleError` hierarchy with typed `code` attributes. Each boundary (MCP, CLI) has one try/except that catches `CastleError` and converts to the appropriate response format.
+The following patterns are no longer the architectural source of truth:
+
+- direct module-to-module global state
+- ChromaDB as the default storage backend
+- old `searcher`, `layers`, `palace`, and `knowledge_graph` entry points
+- hand-written MCP JSON schemas detached from the actual models
+
+Those older names still appear in migration docs because users may be upgrading from MemPalace-era code, but the v4 architecture itself no longer depends on them.

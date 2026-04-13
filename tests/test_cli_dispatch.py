@@ -155,3 +155,23 @@ class TestInstructions:
             with patch("swampcastle.cli.commands.cmd_instructions") as mock:
                 main()
                 mock.assert_called_once()
+
+
+class TestInternalCommandHandlers:
+    def test_cmd_hook_calls_run_hook_with_fields(self):
+        from swampcastle.cli.commands import cmd_hook
+
+        args = SimpleNamespace(hook="stop", harness="claude-code")
+        with patch("swampcastle.hooks_cli.run_hook") as mock:
+            cmd_hook(args)
+
+        mock.assert_called_once_with("stop", "claude-code")
+
+    def test_cmd_instructions_calls_run_instructions_with_name(self):
+        from swampcastle.cli.commands import cmd_instructions
+
+        args = SimpleNamespace(name="help")
+        with patch("swampcastle.instructions_cli.run_instructions") as mock:
+            cmd_instructions(args)
+
+        mock.assert_called_once_with("help")

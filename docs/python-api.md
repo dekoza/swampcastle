@@ -1,372 +1,202 @@
 # Python API
 
-Programmatic access to SwampCastle. All modules are importable from the `swampcastle` package.
+SwampCastle v4 is centered on `Castle`, Pydantic command/query models, and storage factories.
+
+## Recommended entry point: Castle
+
+```python
+from swampcastle.castle import Castle
+from swampcastle.models import AddDrawerCommand, SearchQuery
+from swampcastle.settings import CastleSettings
+from swampcastle.storage import factory_from_settings
+
+settings = CastleSettings(_env_file=None)
+factory = factory_from_settings(settings)
+
+with Castle(settings, factory) as castle:
+    castle.vault.add_drawer(
+        AddDrawerCommand(
+            wing="myapp",
+            room="auth",
+            content="We switched providers because token rotation got simpler.",
+        )
+    )
+
+    result = castle.search.search(SearchQuery(query="provider switch", wing="myapp"))
+    print(result.results)
+```
+
+## Settings
+
+```python
+from swampcastle.settings import CastleSettings
+
+settings = CastleSettings(_env_file=None)
+settings.castle_path
+settings.collection_name
+settings.backend
+settings.database_url
+settings.kg_path
+settings.wal_path
+settings.config_dir
+```
+
+You can also construct settings explicitly:
+
+```python
+settings = CastleSettings(
+    _env_file=None,
+    castle_path="/srv/swampcastle/castle",
+    backend="postgres",
+    database_url="postgresql://user:pass@localhost:5432/swampcastle",
+)
+```
+
+## Factories
+
+### Config-driven routing
+
+```python
+from swampcastle.storage import factory_from_settings
+
+factory = factory_from_settings(settings)
+```
+
+### Direct factories
+
+```python
+from swampcastle.storage.lance import LocalStorageFactory
+from swampcastle.storage.memory import InMemoryStorageFactory
+from swampcastle.storage.postgres import PostgresStorageFactory
+
+local = LocalStorageFactory(settings.castle_path)
+memory = InMemoryStorageFactory()
+postgres = PostgresStorageFactory("postgresql://user:pass@localhost:5432/swampcastle")
+```
 
 ## Search
 
-### swampcastle.searcher
-
 ```python
-from swampcastle.searcher import search_memories, search, SearchError
+from swampcastle.models import SearchQuery
+
+result = castle.search.search(
+    SearchQuery(query="billing retry policy", wing="myapp", room="billing", limit=5)
+)
 ```
 
-#### search_memories(query, palace_path, wing=None, room=None, n_results=5) → dict
+Related model types:
+- `SearchQuery`
+- `SearchResponse`
+- `SearchHit`
+- `DuplicateCheckQuery`
+- `DuplicateCheckResult`
 
-Returns structured search results. Used by the MCP server and other programmatic callers.
+## Drawer writes
 
 ```python
-results = search_memories(
-    "auth decisions",
-    palace_path="~/.swampcastle/palace",
-    wing="myapp",
-    n_results=5,
+from swampcastle.models import AddDrawerCommand, DeleteDrawerCommand
+
+castle.vault.add_drawer(
+    AddDrawerCommand(
+        wing="myapp",
+        room="auth",
+        content="Rotation now happens server-side.",
+        source_file="notes/auth.md",
+        added_by="python-api",
+    )
 )
 
-for hit in results.get("results", []):
-    print(f"{hit['wing']}/{hit['room']} ({hit['similarity']}): {hit['text'][:100]}")
+castle.vault.delete_drawer(DeleteDrawerCommand(drawer_id="drawer_myapp_auth_1234"))
 ```
 
-Returns `{"error": "...", "hint": "..."}` if the palace doesn't exist.
-
-#### search(query, palace_path, wing=None, room=None, n_results=5)
-
-Prints results to stdout. Raises `SearchError` on failure.
-
-#### SearchError
-
-Exception raised when search cannot proceed (no palace found, collection missing, query error).
-
-## Memory stack
-
-### swampcastle.layers
+Diary helpers live on the same service:
 
 ```python
-from swampcastle.layers import MemoryStack, Layer0, Layer1, Layer2, Layer3
-```
+from swampcastle.models.diary import DiaryWriteCommand
+from swampcastle.services.vault import DiaryReadQuery
 
-#### MemoryStack(palace_path=None, identity_path=None)
-
-Unified interface to all four memory layers.
-
-```python
-stack = MemoryStack(palace_path="~/.swampcastle/palace")
-
-# L0 + L1 wake-up (~600-900 tokens)
-context = stack.wake_up(wing="myapp")
-
-# L2 on-demand retrieval (metadata-filtered, no semantic search)
-memories = stack.recall(wing="myapp", room="auth-migration", n_results=10)
-
-# L3 semantic search
-results = stack.search("why did we switch auth providers", wing="myapp", n_results=5)
-
-# Layer status
-status = stack.status()
-```
-
-#### Layer0(identity_path=None)
-
-Reads `~/.swampcastle/identity.txt`.
-
-```python
-l0 = Layer0()
-text = l0.render()       # identity text or default message
-tokens = l0.token_estimate()  # rough token count (len // 4)
-```
-
-#### Layer1(palace_path=None, wing=None)
-
-Auto-generates an essential story from the top palace drawers.
-
-```python
-l1 = Layer1(palace_path="~/.swampcastle/palace", wing="myapp")
-text = l1.generate()  # compact summary of top 15 drawers (~800 tokens max)
-```
-
-#### Layer2(palace_path=None)
-
-On-demand wing/room-filtered retrieval.
-
-```python
-l2 = Layer2(palace_path="~/.swampcastle/palace")
-text = l2.retrieve(wing="myapp", room="auth", n_results=10)
-```
-
-#### Layer3(palace_path=None)
-
-Full semantic search.
-
-```python
-l3 = Layer3(palace_path="~/.swampcastle/palace")
-
-# Formatted text output
-text = l3.search("auth migration", wing="myapp", n_results=5)
-
-# Raw dict list
-hits = l3.search_raw("auth migration", wing="myapp", n_results=5)
-# [{"text": "...", "wing": "...", "room": "...", "source_file": "...", "similarity": 0.89, "metadata": {...}}]
+castle.vault.diary_write(DiaryWriteCommand(agent_name="reviewer", entry="Found a sync race."))
+castle.vault.diary_read(DiaryReadQuery(agent_name="reviewer"))
 ```
 
 ## Knowledge graph
 
-### swampcastle.knowledge_graph
+High-level graph API:
 
 ```python
-from swampcastle.knowledge_graph import KnowledgeGraph
+castle.graph.kg_add(subject="Kai", predicate="works_on", obj="Orion")
+castle.graph.kg_query(entity="Kai")
+castle.graph.kg_invalidate(subject="Kai", predicate="works_on", obj="Orion")
+castle.graph.kg_timeline(entity="Kai")
+castle.graph.kg_stats()
 ```
 
-Full API documented in [kg.md](kg.md).
-
-Key methods:
+If you need the raw stores directly:
 
 ```python
-kg = KnowledgeGraph()
-
-# Write
-kg.add_entity("Kai", entity_type="person", properties={"role": "engineer"})
-kg.add_triple("Kai", "works_on", "Orion", valid_from="2025-06-01")
-kg.invalidate("Kai", "works_on", "Orion", ended="2026-03-01")
-
-# Read
-kg.query_entity("Kai", as_of="2026-01-15", direction="both")
-kg.query_relationship("works_on", as_of="2026-01-15")
-kg.timeline("Kai")
-kg.stats()
-
-# Cleanup
-kg.close()
+from swampcastle.storage.sqlite_graph import SQLiteGraph
+from swampcastle.storage.postgres import PostgresGraphStore
 ```
 
-## Palace access
-
-### swampcastle.palace
+## Catalog / metadata
 
 ```python
-from swampcastle.palace import get_collection, file_already_mined, SKIP_DIRS
-```
-
-#### get_collection(palace_path, collection_name="swampcastle_drawers")
-
-Get or create a palace collection. Returns a backend-appropriate collection object (LanceDB or ChromaDB).
-
-```python
-col = get_collection("~/.swampcastle/palace")
-count = col.count()
-```
-
-#### file_already_mined(collection, source_file, check_mtime=False) → bool
-
-Check if a file has already been stored.
-
-- `check_mtime=True` (project miner): returns `False` if the file was modified since last mining.
-- `check_mtime=False` (convo miner): just checks existence.
-
-#### SKIP_DIRS
-
-Set of directory names that are always skipped during mining: `.git`, `node_modules`, `__pycache__`, `.venv`, `dist`, `build`, etc.
-
-## Configuration
-
-### swampcastle.config
-
-```python
-from swampcastle.config import CastleConfig, sanitize_name, sanitize_content
-```
-
-#### CastleConfig(config_dir=None)
-
-Full API documented in [configuration.md](configuration.md).
-
-```python
-config = CastleConfig()
-config.palace_path       # str
-config.collection_name   # str
-config.people_map        # dict
-config.topic_wings       # list
-config.hall_keywords     # dict
-
-config.init()                          # create config dir + default config.json
-config.save_people_map({"kai": "Kai"}) # write people_map.json
-```
-
-#### sanitize_name(value, field_name="name") → str
-
-Validate a wing/room/entity name. Raises `ValueError` on invalid input.
-
-#### sanitize_content(value, max_length=100_000) → str
-
-Validate content length. Raises `ValueError` on invalid input.
-
-## Normalization
-
-### swampcastle.normalize
-
-```python
-from swampcastle.normalize import normalize
-```
-
-#### normalize(filepath) → str
-
-Load a file and convert to transcript format if it's a recognized chat export. Plain text passes through unchanged.
-
-Supported formats: Claude Code JSONL, Claude.ai JSON, ChatGPT JSON, Slack JSON, OpenAI Codex CLI JSONL, plain text with `>` markers.
-
-Raises `IOError` for files that can't be read or exceed 500 MB.
-
-## Palace graph
-
-### swampcastle.palace_graph
-
-```python
-from swampcastle.palace_graph import build_graph, traverse, find_tunnels, graph_stats
-```
-
-#### build_graph(col=None, config=None) → (nodes, edges)
-
-Build the palace graph from ChromaDB metadata.
-
-- `nodes`: `dict[str, {"wings": list, "halls": list, "count": int, "dates": list}]`
-- `edges`: `list[{"room": str, "wing_a": str, "wing_b": str, "hall": str, "count": int}]`
-
-#### traverse(start_room, col=None, config=None, max_hops=2) → list
-
-BFS traversal from a starting room. Returns connected rooms with hop distances.
-
-#### find_tunnels(wing_a=None, wing_b=None, col=None, config=None) → list
-
-Find rooms that bridge two wings.
-
-#### graph_stats(col=None, config=None) → dict
-
-Summary: total rooms, tunnel rooms, edges, rooms per wing, top tunnels.
-
-## AAAK dialect
-
-### swampcastle.dialect
-
-```python
-from swampcastle.dialect import Dialect
-```
-
-#### Dialect() / Dialect.from_config(config_path)
-
-Create a dialect instance, optionally loaded from an entity config file.
-
-```python
-dialect = Dialect()
-dialect = Dialect.from_config("entities.json")
-
-compressed = dialect.compress(text, metadata={})
-stats = dialect.compression_stats(original, compressed)
-# {"original_chars": 500, "compressed_chars": 180, "original_tokens": 125, "compressed_tokens": 45, "ratio": 2.8}
-
-token_count = Dialect.count_tokens(text)
-```
-
-See [aaak.md](aaak.md) for the dialect specification.
-
-## Database abstraction
-
-### swampcastle.db
-
-```python
-from swampcastle.db import open_collection, detect_backend, LanceCollection, ChromaCollection
-```
-
-#### detect_backend(palace_path) → str
-
-Auto-detect the storage backend. Returns `"lance"`, `"chroma"`, or `"lance"` (default for new palaces).
-
-#### open_collection(palace_path, collection_name="swampcastle_drawers", backend=None, embedder=None, create=True)
-
-Open or create a palace collection. Returns a `LanceCollection` or `ChromaCollection`.
-
-```python
-col = open_collection("~/.swampcastle/palace")
-col = open_collection("~/.swampcastle/palace", backend="lance", embedder=my_embedder)
-```
-
-Both collection types expose the same interface:
-
-```python
-col.upsert(documents=[...], ids=[...], metadatas=[...])
-col.get(where={"wing": "myapp"}, limit=10, offset=0)
-col.query(query_texts=["search term"], n_results=5, where={"wing": "myapp"})
-col.delete(ids=["id1"])
-col.count()
-```
-
-## Embeddings
-
-### swampcastle.embeddings
-
-```python
-from swampcastle.embeddings import get_embedder, OnnxEmbedder, SentenceTransformerEmbedder, OllamaEmbedder
-```
-
-#### get_embedder(config=None) → Embedder
-
-Factory that returns a cached embedder instance based on config.
-
-```python
-embedder = get_embedder()                                              # ONNX default
-embedder = get_embedder({"embedder": "bge-small", "embedder_options": {"device": "cuda"}})
-embedder = get_embedder({"embedder": "ollama", "embedder_options": {"model": "nomic-embed-text"}})
-
-vectors = embedder.embed(["hello world", "another text"])  # list[list[float]]
-embedder.dimension   # int (e.g. 384)
-embedder.model_name  # str (e.g. "all-MiniLM-L6-v2")
+status = castle.catalog.status()
+wings = castle.catalog.list_wings()
+rooms = castle.catalog.list_rooms("myapp")
+taxonomy = castle.catalog.get_taxonomy()
+aaak_spec = castle.catalog.get_aaak_spec()
 ```
 
 ## Sync
 
-### swampcastle.sync
-
 ```python
-from swampcastle.sync import SyncEngine, ChangeSet, SyncRecord
-```
-
-#### SyncEngine(collection, identity=None, vv_path=None)
-
-Extracts and applies changesets against a palace collection.
-
-```python
-from swampcastle.db import open_collection
-from swampcastle.sync_meta import NodeIdentity
-
-col = open_collection("~/.swampcastle/palace")
-engine = SyncEngine(col, identity=NodeIdentity(), vv_path="~/.swampcastle/palace/version_vector.json")
-
-# Get records the remote hasn't seen
-changeset = engine.get_changes_since(remote_version_vector)
-
-# Apply records from a remote node
-result = engine.apply_changes(changeset)
-# MergeResult(accepted=5, rejected_conflicts=1, errors=[])
-```
-
-### swampcastle.sync_client
-
-```python
+from swampcastle.sync import SyncEngine
 from swampcastle.sync_client import SyncClient
+from swampcastle.sync_meta import get_identity
 
+identity = get_identity(str(settings.config_dir))
+engine = SyncEngine(
+    castle._collection,
+    identity=identity,
+    vv_path=str(settings.castle_path / "version_vector.json"),
+)
 client = SyncClient("http://homeserver:7433")
-client.is_reachable()              # bool
-client.get_status()                # {node_id, version_vector, total_drawers}
-result = client.sync(engine)       # full bidirectional sync
+summary = client.sync(engine)
 ```
 
-### swampcastle.sync_meta
+## Mining helpers
 
 ```python
-from swampcastle.sync_meta import NodeIdentity, get_identity, inject_sync_meta
+from swampcastle.mining.miner import mine
+from swampcastle.mining.convo import mine_convos
 
-identity = get_identity()          # module-level singleton
-identity.node_id                   # str (12-char hex)
-identity.next_seq(count=1)         # int (atomically incremented)
-identity.current_seq()             # int (current value without incrementing)
-
-# Inject sync metadata into a batch of metadata dicts
-metadatas = inject_sync_meta([{"wing": "myapp"}], identity)
-# [{"wing": "myapp", "node_id": "a1b2c3d4e5f6", "seq": 42, "updated_at": "2026-04-11T..."}]
+mine("/path/to/project", "/path/to/castle")
+mine_convos("/path/to/exports", "/path/to/castle", wing="myapp")
 ```
+
+Both functions also accept `storage_factory=` if you need to inject a backend explicitly.
+
+## MCP server
+
+```python
+from swampcastle.mcp.server import create_handler
+from swampcastle.mcp.tools import register_tools
+```
+
+Typical usage is still the CLI entry point:
+
+```bash
+swampcastle drawbridge run
+```
+
+## Legacy note
+
+The following old MemPalace-era modules are no longer the recommended API surface:
+- `searcher`
+- `layers`
+- `palace`
+- `knowledge_graph` (as a top-level public module)
+- `config`
+
+Use `Castle`, `CastleSettings`, the Pydantic models, and storage factories instead.

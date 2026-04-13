@@ -1,64 +1,57 @@
 # SwampCastle Mine
 
-When the user invokes this skill, follow these steps:
+When the user wants to ingest data, guide them through these choices.
 
-## 1. Ask what to mine
+## 1. Ask what they want to ingest
 
-Ask the user what they want to mine and where the source data is located.
-Clarify:
-- Is it a project directory (code, docs, notes)?
-- Is it conversation exports (Claude, ChatGPT, Slack)?
-- Do they want auto-classification (decisions, milestones, problems)?
+Clarify whether the source is:
+- a project directory
+- conversation exports
+- a mixed folder that should be handled as conversations
 
-## 2. Choose the mining mode
+## 2. Choose the command
 
-There are three mining modes:
+### Project files
 
-### Project mining
+```bash
+swampcastle gather <dir>
+```
 
-    swampcastle mine <dir>
+### Conversation exports
 
-Mines code files, documentation, and notes from a project directory.
+```bash
+swampcastle gather <dir> --mode convos
+```
 
-### Conversation mining
+### General extraction
 
-    swampcastle mine <dir> --mode convos
+```bash
+swampcastle gather <dir> --mode convos --extract general
+```
 
-Mines conversation exports from Claude, ChatGPT, or Slack into the palace.
+## 3. Optional helpers
 
-### General extraction (auto-classify)
+### Preview only
 
-    swampcastle mine <dir> --mode convos --extract general
+```bash
+swampcastle gather <dir> --dry-run
+```
 
-Auto-classifies mined content into decisions, milestones, and problems.
+### Force a wing
 
-## 3. Optionally split mega-files first
+```bash
+swampcastle gather <dir> --wing <name>
+```
 
-If the source directory contains very large files, suggest splitting them
-before mining:
+### Split mega-files first
 
-    swampcastle split <dir> [--dry-run]
+```bash
+swampcastle cleave <dir> --dry-run
+```
 
-Use --dry-run first to preview what will be split without making changes.
+## 4. After ingest
 
-## 4. Optionally tag with a wing
-
-If the user wants to organize mined content under a specific wing, add the
---wing flag:
-
-    swampcastle mine <dir> --wing <name>
-
-## 5. Show progress and results
-
-Run the selected mining command and display progress as it executes. After
-completion, summarize the results including:
-- Number of items mined
-- Categories or classifications applied
-- Any warnings or skipped files
-
-## 6. Suggest next steps
-
-After mining completes, suggest the user try:
-- /swampcastle:search -- search the newly mined content
-- /swampcastle:status -- check the current state of their palace
-- Mine more data from additional sources
+Recommend:
+- `swampcastle seek "query"`
+- `swampcastle survey`
+- additional ingest from more sources

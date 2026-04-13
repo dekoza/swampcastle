@@ -1,124 +1,72 @@
-# AAAK dialect (experimental)
+# AAAK dialect
 
-AAAK is a lossy abbreviation system for compressing repeated entities and relationships into fewer tokens. It is designed to be readable by any LLM without a decoder.
+AAAK is an experimental compact writing format used for dense memory summaries.
 
-## Current status
+It is **not** the default storage format in v4. Raw verbatim drawers remain the primary retrieval path.
 
-**AAAK regresses retrieval quality vs raw mode.** On LongMemEval:
+## What AAAK is good for
 
-- Raw verbatim mode: **96.6% R@5**
-- AAAK mode: **84.2% R@5** (−12.4 points)
+- compact diary entries
+- dense session summaries
+- human / model-readable shorthand
 
-The 96.6% headline number is from raw verbatim mode, not AAAK. AAAK is a separate compression layer and is **not** the storage default.
+## What AAAK is not
 
-AAAK may save tokens at scale when many entities are repeated across thousands of sessions. It does not save tokens on short text — the overhead of entity codes and structural markers costs more than it saves.
+- not lossless compression
+- not the main retrieval representation
+- not currently a finished end-to-end CLI storage pipeline
 
-See [NOTICES.md](../NOTICES.md) for the full history of claims and corrections.
+## Status
 
-## Format
+The benchmark headline for SwampCastle comes from raw verbatim storage, not AAAK mode.
 
-### Entity codes
+AAAK remains useful as a deliberate summarization layer, but you should treat it as optional and experimental.
 
-Three-letter uppercase codes for frequently mentioned entities:
-
-```
-ALC = Alice
-KAI = Kai
-PRI = Priya
-MAX = Max
-```
-
-### Emotion markers
-
-Action markers before or during text:
-
-```
-*warm* = joy
-*fierce* = determined
-*raw* = vulnerable
-*bloom* = tenderness
-```
-
-### Structure
-
-Pipe-separated fields with category prefixes:
-
-```
-FAM: ALC→♡JOR | 2D(kids): RIL(18,sports) MAX(11,chess+swimming) | BEN(contributor)
-```
-
-### Dates and counts
-
-- Dates: ISO format (`2026-03-31`)
-- Counts: `Nx` = N mentions (e.g., `570x`)
-- Importance: `★` to `★★★★★` (1–5 scale)
-
-### Halls and wings
-
-```
-Halls: hall_facts, hall_events, hall_discoveries, hall_preferences, hall_advice
-Wings: wing_user, wing_agent, wing_team, wing_code, wing_myproject
-Rooms: hyphenated slugs (chromadb-setup, gpu-pricing)
-```
-
-## Example
-
-Full AAAK entry:
-
-```
-FAM: ALC→♡JOR | 2D(kids): RIL(18,sports) MAX(11,chess+swimming) | BEN(contributor)
-```
-
-Reads as: Alice is in a relationship with Jordan. They have 2 kids: Riley (18, into sports) and Max (11, into chess and swimming). Ben is a contributor.
-
-## Usage
-
-### CLI
-
-```bash
-swampcastle compress --wing myapp --dry-run    # preview compression
-swampcastle compress --wing myapp              # compress and store
-swampcastle compress --config entities.json    # with entity config
-```
-
-Compressed drawers are stored in a separate `swampcastle_compressed` ChromaDB collection. The raw originals are preserved.
-
-### Python API
+## Python API
 
 ```python
 from swampcastle.dialect import Dialect
 
-# Basic usage
 dialect = Dialect()
 compressed = dialect.compress("Alice and Jordan discussed the auth migration with Kai")
-stats = dialect.compression_stats(original_text, compressed)
+stats = dialect.compression_stats("Alice and Jordan discussed the auth migration with Kai", compressed)
+```
 
-# With entity config
+You can also load entity configuration from JSON:
+
+```python
 dialect = Dialect.from_config("entities.json")
-compressed = dialect.compress(text, metadata={"wing": "myapp"})
-
-# Token counting
-tokens = Dialect.count_tokens(text)
 ```
 
-### MCP
+## CLI
 
-The AAAK spec is automatically included in the `swampcastle_status` response so the AI learns it on first connection. It can also be retrieved explicitly via `swampcastle_get_aaak_spec`.
-
-Agent diary entries (`swampcastle_diary_write`) are recommended to be written in AAAK format for compression:
-
-```
-SESSION:2026-04-04|built.palace.graph+diary.tools|ALC.req:agent.diaries.in.aaak|★★★
+```bash
+swampcastle distill --dry-run
+swampcastle compress --dry-run
 ```
 
-## Limitations
+Honest status: the current CLI command is preview-oriented. It does not yet implement a full persistent compressed-store workflow.
 
-- **Lossy.** AAAK uses regex-based abbreviation, not reversible compression. Information is lost.
-- **Degrades embedding quality.** Compressed AAAK text produces worse vector embeddings than plain English, which is why search quality drops.
-- **No token savings at small scale.** Short text already tokenizes efficiently. AAAK overhead exceeds savings on individual sentences.
-- **Entity codes require configuration.** Without an entity config file, AAAK cannot assign codes to specific names.
+## MCP
 
-## Tracking
+The AAAK spec is returned by:
+- `swampcastle_status`
+- `swampcastle_get_aaak_spec`
 
-- [Issue #43](https://github.com/dekoza/swampcastle/issues/43) — AAAK tokenizer accuracy
-- [Issue #27](https://github.com/dekoza/swampcastle/issues/27) — AAAK iteration and improvements
+## Typical structure
+
+AAAK commonly uses:
+- short entity codes
+- explicit flags
+- compressed relationship notation
+- compact date / importance markers
+
+Example:
+
+```text
+SESSION:2026-04-04|KAI+ALC|auth.switch.confirmed|DECISION|★★★
+```
+
+## Recommendation
+
+Use AAAK when you are deliberately summarizing. Use raw drawers when you care about retrieval quality.

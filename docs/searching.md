@@ -1,160 +1,109 @@
 # Searching
 
-## CLI search
+## CLI
+
+Primary command:
 
 ```bash
-swampcastle search "why did we switch to GraphQL"
+swampcastle seek "auth migration"
 ```
 
-Returns the top 5 results ranked by semantic similarity. Each result shows the wing, room, source file, similarity score, and the verbatim text.
-
-### Filtering
+Alias:
 
 ```bash
-swampcastle search "auth decisions" --wing myapp
-swampcastle search "pricing" --wing myapp --room billing
+swampcastle search "auth migration"
 ```
 
-Filtering by wing and/or room restricts the ChromaDB query to matching metadata. This narrows the search space and typically improves relevance.
-
-### Result count
+Filters:
 
 ```bash
-swampcastle search "database migration" --results 10
+swampcastle seek "billing retries" --wing myapp
+swampcastle seek "token rotation" --wing myapp --room auth
+swampcastle seek "postgres" --results 10
 ```
 
-Default is 5.
+The CLI prints verbatim text plus wing / room / similarity.
 
-### Output format
+## Python API
 
-```
-============================================================
-  Results for: "auth decisions"
-  Wing: myapp
-============================================================
-
-  [1] myapp / auth-migration
-      Source: 2026-01-15_session.md
-      Match:  0.892
-
-      We decided to migrate from Auth0 to Clerk because of pricing
-      and developer experience. Kai recommended it, Priya approved.
-
-  ────────────────────────────────────────────────────────────
-```
-
-## Programmatic search
-
-### search_memories()
-
-Returns structured data instead of printing to stdout. Used by the MCP server and other programmatic callers.
+Recommended path: `Castle` + `SearchQuery`.
 
 ```python
-from swampcastle.searcher import search_memories
+from swampcastle.castle import Castle
+from swampcastle.models import SearchQuery
+from swampcastle.settings import CastleSettings
+from swampcastle.storage import factory_from_settings
 
-results = search_memories(
-    query="auth decisions",
-    palace_path="~/.swampcastle/palace",
-    wing="myapp",
-    room="auth-migration",
-    n_results=5,
+settings = CastleSettings(_env_file=None)
+factory = factory_from_settings(settings)
+
+with Castle(settings, factory) as castle:
+    result = castle.search.search(
+        SearchQuery(query="auth migration", wing="myapp", room="auth", limit=5)
+    )
+
+for hit in result.results:
+    print(hit.wing, hit.room, hit.similarity, hit.text[:120])
+```
+
+## Duplicate checks
+
+The same service also exposes duplicate detection:
+
+```python
+from swampcastle.models import DuplicateCheckQuery
+
+result = castle.search.check_duplicate(
+    DuplicateCheckQuery(content="We switched auth providers because rotation got simpler.")
 )
 ```
 
-**Parameters:**
+MCP exposes the same flow through `swampcastle_check_duplicate`.
 
-| Parameter | Type | Default | Description |
-|-----------|------|---------|-------------|
-| `query` | `str` | required | Search query text |
-| `palace_path` | `str` | required | Path to the ChromaDB palace directory |
-| `wing` | `str` | `None` | Filter by wing name |
-| `room` | `str` | `None` | Filter by room name |
-| `n_results` | `int` | `5` | Maximum number of results |
+## Query model
 
-**Returns:** `dict` with the following structure:
+`SearchQuery` fields:
 
-```python
-{
-    "query": "auth decisions",
-    "filters": {"wing": "myapp", "room": "auth-migration"},
-    "results": [
-        {
-            "text": "We decided to migrate from Auth0 to Clerk...",
-            "wing": "myapp",
-            "room": "auth-migration",
-            "source_file": "2026-01-15_session.md",
-            "similarity": 0.892,
-        },
-        # ...
-    ],
-}
-```
+| Field | Type | Default |
+|---|---|---|
+| `query` | `str` | required |
+| `limit` | `int` | `5` |
+| `wing` | `str \| None` | `None` |
+| `room` | `str \| None` | `None` |
+| `context` | `str \| None` | `None` |
 
-On error (e.g., no palace found):
+`context` is background context for callers. The search embedding is built from `query`, not from the extra context.
 
-```python
-{
-    "error": "No palace found",
-    "hint": "Run: swampcastle init <dir> && swampcastle mine <dir>",
-}
-```
+## Sanitization
 
-### search()
+`SearchService` sanitizes the query through `query_sanitizer.py` before it hits the embedder. This matters for MCP callers because LLMs sometimes accidentally paste system-prompt junk into a search request.
 
-The CLI-oriented function. Prints results to stdout and raises `SearchError` on failure.
+If sanitization changes the query, the response includes:
+- `query_sanitized = true`
+- a `sanitizer` metadata object
 
-```python
-from swampcastle.searcher import search, SearchError
+## How ranking works
 
-try:
-    search(
-        query="auth decisions",
-        palace_path="~/.swampcastle/palace",
-        wing="myapp",
-        n_results=5,
-    )
-except SearchError as e:
-    print(f"Search failed: {e}")
-```
+At a high level:
 
-### SearchError
+1. the query is embedded
+2. the collection backend searches nearest neighbors
+3. optional `wing` / `room` filters narrow the candidate set
+4. results are returned as `SearchHit` models
 
-Raised when search cannot proceed — typically because no palace exists at the given path, or the ChromaDB collection doesn't exist.
+The concrete ANN implementation depends on the active backend:
+- LanceDB in local mode
+- pgvector in PostgreSQL mode
+- substring-scored in-memory search for tests
 
-```python
-from swampcastle.searcher import SearchError
-```
+## Castle status vs search
 
-## How search works
+`swampcastle survey` / `swampcastle_status` answers:
+- how much memory is stored
+- which wings and rooms exist
 
-1. The query string is embedded using the configured embedder (default: ONNX all-MiniLM-L6-v2, 384 dimensions).
-2. LanceDB performs approximate nearest-neighbor search against stored drawer embeddings.
-3. If `wing` or `room` filters are provided, only matching documents are searched (SQL-like `WHERE` clause on indexed columns).
-4. Results are ranked by cosine distance. The similarity score shown is `1 - distance`.
+`swampcastle seek` / `swampcastle_search` answers:
+- where a specific fact or decision appears
+- which stored chunks are closest to a query
 
-### Query sanitization
-
-When called through the MCP server, search queries are sanitized by `query_sanitizer.py` to strip system prompt contamination. This prevents AI assistants from accidentally including their entire system prompt in the search query, which degrades search quality.
-
-The sanitizer is transparent — if it modifies the query, the response includes a `query_sanitized` flag and the cleaned query text.
-
-## Memory layer search
-
-The [memory layers](architecture.md) provide different search strategies:
-
-- **L2 (on-demand):** metadata-filtered retrieval by wing/room, no semantic search. Fast, returns all matching drawers up to a limit.
-- **L3 (deep search):** full semantic search, the same as `swampcastle search`. Returns ranked results.
-
-```python
-from swampcastle.layers import MemoryStack
-
-stack = MemoryStack(palace_path="~/.swampcastle/palace")
-
-# L2: filtered retrieval (no semantic search)
-stack.recall(wing="myapp", room="auth-migration")
-
-# L3: semantic search
-stack.search("why did we switch auth providers", wing="myapp")
-```
-
-See [python-api.md](python-api.md) for the full `MemoryStack` API.
+Use both. Status tells you the shape of the castle; search tells you what is inside it.

@@ -1,125 +1,131 @@
 # Mining
 
-SwampCastle ingests data through two modes: **project mining** (code, docs, notes) and **conversation mining** (chat exports). Both store verbatim text in ChromaDB as drawers with wing/room metadata.
+SwampCastle ingests two kinds of material:
 
-## Project mining
+- **project files**
+- **conversation exports**
 
-Scans a directory for files and chunks them by paragraph.
+In both cases the output is verbatim drawer content stored through the active `CollectionStore` backend.
+
+## Project files
+
+```bash
+swampcastle gather ~/projects/myapp
+```
+
+Alias:
 
 ```bash
 swampcastle mine ~/projects/myapp
 ```
 
-### What gets mined
+### What it does
 
-Text-based files: `.py`, `.js`, `.ts`, `.md`, `.txt`, `.yaml`, `.json`, `.toml`, `.cfg`, `.ini`, `.html`, `.css`, `.sql`, `.sh`, `.rs`, `.go`, `.java`, `.rb`, `.php`, and similar.
+- walks the directory tree
+- skips common junk directories (`.git`, `.venv`, `node_modules`, caches, build outputs)
+- respects `.gitignore` by default
+- chunks readable text files into drawers
+- assigns a wing and room to each chunk
+- skips already-mined files when possible
 
-### What gets skipped
-
-- Directories in the default skip list: `.git`, `node_modules`, `__pycache__`, `.venv`, `venv`, `dist`, `build`, `.next`, `coverage`, `.swampcastle`, and others (full list in `palace.py`)
-- Files matching `.gitignore` patterns (disable with `--no-gitignore`)
-- Binary files
-- Files already mined (checked by source file path and modification time)
-
-### Wing assignment
-
-The wing defaults to the directory name. Override with `--wing`:
+### Common options
 
 ```bash
-swampcastle mine ~/projects/myapp --wing my-web-app
+swampcastle gather <dir> \
+  [--wing NAME] \
+  [--no-gitignore] \
+  [--include-ignored PATH] \
+  [--agent NAME] \
+  [--limit N] \
+  [--dry-run]
 ```
 
-### Room assignment
-
-Rooms are assigned based on the file's parent directory name, mapped through 70+ patterns in `room_detector_local.py`. For example, files in `src/auth/` get room `auth`, files in `docs/` get room `documentation`.
-
-Run `swampcastle init <dir>` first to preview and confirm room detection.
-
-### Re-mining
-
-Running `mine` on the same directory again skips files that haven't changed (checked by modification time). Modified files are re-mined. To force a full re-mine, delete the palace and start fresh.
-
-### Options
+Examples:
 
 ```bash
-swampcastle mine <dir> [options]
-
---wing NAME              Wing name (default: directory name)
---no-gitignore           Don't respect .gitignore
---include-ignored PATHS  Always scan these paths even if gitignored (comma-separated or repeated)
---agent NAME             Your name, recorded on every drawer (default: swampcastle)
---limit N                Max files to process (0 = all)
---dry-run                Show what would be filed without filing
---palace PATH            Override palace location
+swampcastle gather ~/projects/myapp --wing myapp
+swampcastle gather ~/projects/myapp --include-ignored docs/generated
+swampcastle gather ~/projects/myapp --dry-run --limit 25
 ```
 
-## Conversation mining
-
-Parses chat exports and chunks by exchange pair (one user message + one assistant response).
+## Conversation exports
 
 ```bash
-swampcastle mine ~/chats/ --mode convos
+swampcastle gather ~/exports --mode convos --wing myapp
 ```
 
-### Supported formats
+### Supported sources
 
-| Format | File type | Detection |
-|--------|-----------|-----------|
-| Claude Code sessions | JSONL | `type: "human"/"assistant"` entries |
-| Claude.ai export | JSON | `messages` or `chat_messages` array |
-| ChatGPT export | JSON | `mapping` tree with `author.role` |
-| Slack channel export | JSON | `type: "message"` entries |
-| OpenAI Codex CLI | JSONL | `session_meta` + `event_msg` entries |
-| Plain text | TXT | Lines starting with `>` = user turns |
+The normalizer recognizes common transcript formats such as:
+- Claude Code JSONL
+- Claude export JSON
+- ChatGPT export JSON
+- Slack export JSON
+- Codex-style JSONL
+- plain text transcripts
 
-Format detection is automatic. The normalizer (`normalize.py`) converts all formats to a standard transcript before chunking.
+### Extraction modes
 
-### Exchange-pair chunking
-
-Conversations are split into exchange pairs: one user message + the following assistant response. Each pair becomes one drawer. This preserves the question-and-answer context that makes memories searchable.
-
-### General extraction mode
-
-The `--extract general` flag classifies each exchange into one of five memory types and assigns a hall:
+Default exchange-pair chunking:
 
 ```bash
-swampcastle mine ~/chats/ --mode convos --extract general
+swampcastle gather ~/exports --mode convos --extract exchange
 ```
 
-Memory types: `decision`, `preference`, `milestone`, `problem`, `emotional`. Each maps to a hall (`hall_facts`, `hall_preferences`, `hall_events`, `hall_advice`, `hall_discoveries`).
-
-### Options
+General extraction:
 
 ```bash
-swampcastle mine <dir> --mode convos [options]
-
---wing NAME              Wing name (default: directory name)
---extract MODE           exchange (default) or general (5 memory types)
---agent NAME             Your name (default: swampcastle)
---limit N                Max files to process (0 = all)
---dry-run                Show what would be filed without filing
---palace PATH            Override palace location
+swampcastle gather ~/exports --mode convos --extract general
 ```
+
+`general` classifies chunks into broader memory types instead of keeping only exchange-pair structure.
+
+## Room detection
+
+`swampcastle build` / `swampcastle init` is the preview step for room and entity detection:
+
+```bash
+swampcastle build ~/projects/myapp
+```
+
+That command helps you inspect the inferred structure before you ingest anything.
 
 ## Splitting mega-files
 
-Some export tools concatenate multiple sessions into one file. Split them before mining:
+Some transcript dumps contain multiple sessions in one file.
 
 ```bash
-swampcastle split ~/chats/
-swampcastle split ~/chats/ --dry-run              # preview
-swampcastle split ~/chats/ --min-sessions 3       # only split files with 3+ sessions
-swampcastle split ~/chats/ --output-dir ~/split/  # write to a different directory
+swampcastle cleave ~/exports
+swampcastle cleave ~/exports --dry-run
+swampcastle cleave ~/exports --output-dir ~/split-exports
 ```
 
-The splitter detects session boundaries in the transcript and writes one file per session.
+Alias: `swampcastle split`
 
-## Deduplication
+## Duplicate handling
 
-SwampCastle checks for duplicates before filing:
+There are three distinct duplicate controls:
 
-- **Project mining** skips files already mined (by source file path + modification time).
-- **Conversation mining** skips files already mined (by source file path).
-- **MCP `add_drawer`** uses a deterministic ID derived from wing + room + content, so upserting the same content is a no-op.
+1. file-level skipping during project mining
+2. file-level skipping during conversation mining
+3. semantic duplicate checks through `SearchService`
 
-For bulk deduplication of an existing palace, see the `dedup.py` module.
+For bulk cleanup of already-stored drawers, use the backend-agnostic dedup utility:
+
+```bash
+python -m swampcastle.dedup --dry-run
+python -m swampcastle.dedup --threshold 0.10
+```
+
+There is no dedicated top-level `swampcastle dedup` CLI subcommand yet.
+
+## Backend behavior
+
+Mining now routes through the configured storage factory.
+
+That means the same ingest code can target:
+- local LanceDB + SQLite
+- PostgreSQL + pgvector
+- in-memory stores in tests
+
+You can also inject a `storage_factory=` programmatically when calling `mine()` or `mine_convos()` from Python.

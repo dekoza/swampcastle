@@ -1,5 +1,11 @@
 # Notices
 
+## Origins
+
+SwampCastle is based on [MemPalace](https://github.com/MemPalace/mempalace) by milla-jovovich and contributors. The first three castles sank into the swamp. The fourth one stayed up.
+
+---
+
 ## Fake websites — April 11, 2026
 
 Community members ([#267](https://github.com/dekoza/swampcastle/issues/267), [#326](https://github.com/dekoza/swampcastle/issues/326), [#506](https://github.com/dekoza/swampcastle/issues/506)) have reported fake MemPalace websites distributing malware.

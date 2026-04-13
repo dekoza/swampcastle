@@ -3,57 +3,47 @@ name = "swampcastle"
 version = "4.0.0"
 description = "Give your AI a memory — the fourth one stayed up. No API key required."
 readme = "README.md"
-requires-python = ">=3.9"
+requires-python = ">=3.11"
 license = "MIT"
-authors = [{ name = "milla-jovovich" }]
-keywords = [
-  "ai",
-  "memory",
-  "llm",
-  "rag",
-  "chromadb",
-  "mcp",
-  "vector-database",
-  "claude",
-  "chatgpt",
-  "embeddings",
-]
+authors = [{ name = "Dominik Kozaczko", email = "dominik@kozaczko.info" }]
+keywords = ["ai-memory", "mcp", "lancedb", "knowledge-graph", "semantic-search", "llm"]
 classifiers = [
   "Development Status :: 4 - Beta",
   "Environment :: Console",
   "Intended Audience :: Developers",
   "Programming Language :: Python :: 3",
-  "Programming Language :: Python :: 3.9",
-  "Programming Language :: Python :: 3.10",
   "Programming Language :: Python :: 3.11",
   "Programming Language :: Python :: 3.12",
+  "Programming Language :: Python :: 3.13",
   "Topic :: Scientific/Engineering :: Artificial Intelligence",
   "Topic :: Utilities",
 ]
 dependencies = [
-  "lancedb>=0.14",
+  "lancedb>=0.14,<1",
   "pyyaml>=6.0,<7",
-  "onnxruntime>=1.14",
-  "tokenizers>=0.13",
-  "pydantic-settings>=2.11.0",
+  "onnxruntime>=1.14,<2",
+  "tokenizers>=0.13,<1",
+  "pydantic>=2.0,<3",
+  "pydantic-settings>=2.11,<3",
+  "anyio>=4.0,<5",
 ]
 
 [project.urls]
-Homepage = "https://github.com/milla-jovovich/swampcastle"
-Repository = "https://github.com/milla-jovovich/swampcastle"
-"Bug Tracker" = "https://github.com/milla-jovovich/swampcastle/issues"
+Homepage = "https://github.com/dekoza/swampcastle"
+Repository = "https://github.com/dekoza/swampcastle"
+Documentation = "https://github.com/dekoza/swampcastle/tree/main/docs"
+"Bug Tracker" = "https://github.com/dekoza/swampcastle/issues"
 
 [project.scripts]
 swampcastle = "swampcastle:main"
-mempalace = "swampcastle:main"
-
+swampcastle-mcp = "swampcastle.mcp.server:main"
 
 [project.optional-dependencies]
-dev = ["pytest>=7.0", "pytest-cov>=4.0", "ruff>=0.4.0", "psutil>=5.9"]
 spellcheck = ["autocorrect>=2.0"]
-chroma = ["chromadb>=0.5.0,<0.7"]                                      # Legacy backend — install for migration
-gpu = ["sentence-transformers>=2.2.0"]                                 # Local GPU/CPU embeddings via torch
-server = ["fastapi>=0.100", "uvicorn>=0.20", "httpx>=0.24"]            # Sync server
+chroma = ["chromadb>=0.5.0,<0.7"]
+gpu = ["sentence-transformers>=2.2.0"]
+server = ["fastapi>=0.100", "uvicorn>=0.20", "httpx>=0.24"]
+postgres = ["psycopg[binary]>=3.1", "pgvector>=0.3"]
 
 [dependency-groups]
 dev = ["pytest>=7.0", "pytest-cov>=4.0", "ruff>=0.4.0", "psutil>=5.9"]
@@ -67,7 +57,7 @@ packages = ["swampcastle"]
 
 [tool.ruff]
 line-length = 100
-target-version = "py39"
+target-version = "py311"
 extend-exclude = ["benchmarks"]
 
 [tool.ruff.lint]
@@ -83,11 +73,13 @@ quote-style = "double"
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 pythonpath = ["."]
-addopts = "-m 'not benchmark and not slow and not stress'"
+addopts = "-m 'not benchmark and not slow and not stress and not integration and not postgres'"
 markers = [
   "benchmark: scale/performance benchmark tests",
   "slow: tests that take more than 30 seconds",
   "stress: destructive scale tests (100K+ drawers)",
+  "integration: real backends (LanceDB + SQLite)",
+  "postgres: requires PostgreSQL (Docker)",
 ]
 
 [tool.coverage.run]

@@ -16,7 +16,8 @@ from datetime import datetime
 from collections import defaultdict
 
 from .normalize import normalize
-from ..storage.lance import LocalStorageFactory  # mining uses storage directly
+from ..settings import CastleSettings
+from ..storage import StorageFactory, factory_from_settings
 
 SKIP_DIRS = {
     ".git", "node_modules", "__pycache__", ".venv", "venv", "env",
@@ -250,6 +251,7 @@ def mine_convos(
     limit: int = 0,
     dry_run: bool = False,
     extract_mode: str = "exchange",
+    storage_factory: StorageFactory | None = None,
 ):
     """Mine a directory of conversation files into the palace.
 
@@ -279,8 +281,10 @@ def mine_convos(
 
     collection = None
     if not dry_run:
-        factory = LocalStorageFactory(palace_path)
-        collection = factory.open_collection("swampcastle_chests")
+        if storage_factory is None:
+            settings = CastleSettings(castle_path=palace_path, _env_file=None)
+            storage_factory = factory_from_settings(settings)
+        collection = storage_factory.open_collection("swampcastle_chests")
 
     total_drawers = 0
     files_skipped = 0
@@ -391,6 +395,5 @@ if __name__ == "__main__":
     if len(sys.argv) < 2:
         print("Usage: python convo_miner.py <convo_dir> [--palace PATH] [--limit N] [--dry-run]")
         sys.exit(1)
-    from ..settings import CastleSettings as CastleConfig
 
-    mine_convos(sys.argv[1], palace_path=CastleConfig(_env_file=None).castle_path)
+    mine_convos(sys.argv[1], palace_path=CastleSettings(_env_file=None).castle_path)

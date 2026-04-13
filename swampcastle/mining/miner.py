@@ -15,7 +15,8 @@ from pathlib import Path
 from datetime import datetime
 from collections import defaultdict
 
-from ..storage.lance import LocalStorageFactory  # mining uses storage directly
+from ..settings import CastleSettings
+from ..storage import StorageFactory, factory_from_settings
 
 SKIP_DIRS = {
     ".git", "node_modules", "__pycache__", ".venv", "venv", "env",
@@ -564,19 +565,20 @@ def scan_project(
 def mine(
     project_dir: str,
     palace_path: str,
-    wing_override: str = None,
+    wing: str = None,
     agent: str = "swampcastle",
     limit: int = 0,
     dry_run: bool = False,
     respect_gitignore: bool = True,
     include_ignored: list = None,
+    storage_factory: StorageFactory | None = None,
 ):
     """Mine a project directory into the palace."""
 
     project_path = Path(project_dir).expanduser().resolve()
     config = load_config(project_dir)
 
-    wing = wing_override or config["wing"]
+    wing = wing or config["wing"]
     rooms = config.get("rooms", [{"name": "general", "description": "All project files"}])
 
     files = scan_project(
@@ -603,8 +605,10 @@ def mine(
     print(f"{'─' * 55}\n")
 
     if not dry_run:
-        factory = LocalStorageFactory(palace_path)
-        collection = factory.open_collection("swampcastle_chests")
+        if storage_factory is None:
+            settings = CastleSettings(castle_path=palace_path, _env_file=None)
+            storage_factory = factory_from_settings(settings)
+        collection = storage_factory.open_collection("swampcastle_chests")
     else:
         collection = None
 
@@ -650,7 +654,8 @@ def mine(
 def status(palace_path: str):
     """Show what's been filed in the palace."""
     try:
-        factory = LocalStorageFactory(palace_path)
+        settings = CastleSettings(castle_path=palace_path, _env_file=None)
+        factory = factory_from_settings(settings)
         col = factory.open_collection("swampcastle_chests")
         if col.count() == 0:
             raise Exception("Empty palace")

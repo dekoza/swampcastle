@@ -10,6 +10,7 @@ import yaml
 from swampcastle.mining.miner import mine, scan_project
 # file_already_mined moved to mining.miner
 from swampcastle.mining.miner import _file_already_mined as file_already_mined
+from swampcastle.storage.memory import InMemoryStorageFactory
 
 
 def write_file(path: Path, content: str):
@@ -47,6 +48,36 @@ def test_project_mining():
         mine(str(project_root), str(palace_path))
 
         col = _get_test_collection(str(palace_path))
+        assert col.count() > 0
+    finally:
+        shutil.rmtree(tmpdir, ignore_errors=True)
+
+
+def test_project_mining_accepts_storage_factory():
+    tmpdir = tempfile.mkdtemp()
+    try:
+        project_root = Path(tmpdir).resolve()
+        os.makedirs(project_root / "backend")
+
+        write_file(
+            project_root / "backend" / "app.py", "def main():\n    print('hello world')\n" * 20
+        )
+        with open(project_root / "swampcastle.yaml", "w") as f:
+            yaml.dump(
+                {
+                    "wing": "test_project",
+                    "rooms": [
+                        {"name": "backend", "description": "Backend code"},
+                        {"name": "general", "description": "General"},
+                    ],
+                },
+                f,
+            )
+
+        factory = InMemoryStorageFactory()
+        mine(str(project_root), str(project_root / "palace"), storage_factory=factory)
+
+        col = factory.open_collection("swampcastle_chests")
         assert col.count() > 0
     finally:
         shutil.rmtree(tmpdir, ignore_errors=True)

@@ -74,6 +74,9 @@ def cmd_gather(args):
     settings = _settings(args)
     palace_path = str(settings.castle_path)
     project_dir = os.path.expanduser(args.dir)
+    storage_factory = None
+    if not args.dry_run:
+        storage_factory = factory_from_settings(settings)
 
     if args.mode == "convos":
         from swampcastle.mining.convo import mine_convos
@@ -81,16 +84,17 @@ def cmd_gather(args):
             project_dir, palace_path,
             wing=args.wing, agent=args.agent,
             dry_run=args.dry_run, extract_mode=args.extract,
-            limit=args.limit,
+            limit=args.limit, storage_factory=storage_factory,
         )
     else:
         from swampcastle.mining.miner import mine
         mine(
             project_dir, palace_path,
             wing=args.wing, agent=args.agent,
-            no_gitignore=args.no_gitignore,
+            respect_gitignore=not args.no_gitignore,
             include_ignored=args.include_ignored,
             dry_run=args.dry_run, limit=args.limit,
+            storage_factory=storage_factory,
         )
 
 

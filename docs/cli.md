@@ -6,7 +6,7 @@ Global options:
 swampcastle [--palace PATH] [--backend {lance,postgres,chroma}] <command> ...
 ```
 
-Aliases are important in v4 for some commands, but project setup now has one public name.
+SwampCastle auto-creates a default global runtime config at `~/.swampcastle/config.json` on first use. Use `swampcastle wizard` to edit that runtime config explicitly.
 
 ## project
 
@@ -21,6 +21,16 @@ Current behavior:
 - writes `.swampcastle.yaml`
 - scans content to infer people / projects
 - does **not** ingest files on its own
+
+## wizard
+
+Edit global runtime configuration.
+
+```bash
+swampcastle wizard
+```
+
+The wizard edits `~/.swampcastle/config.json` and supports the default Lance backend or manual PostgreSQL configuration.
 
 ## gather / mine
 

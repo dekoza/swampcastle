@@ -88,7 +88,11 @@ That merge order is:
 3. JSON file values
 4. defaults
 
-Important: the current CLI does **not** auto-load `~/.swampcastle/config.json`. If you need runtime configuration today, use CLI flags and environment variables.
+The CLI now auto-creates and auto-loads `~/.swampcastle/config.json` on first use. The default runtime backend is Lance. To edit that runtime configuration explicitly, run:
+
+```bash
+swampcastle wizard
+```
 
 ## Recommended backend routing
 

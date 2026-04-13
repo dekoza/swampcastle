@@ -70,13 +70,19 @@ pip install 'swampcastle[chroma]'    # legacy ChromaDB tooling for migration onl
 
 ## Quick start
 
+Before doing anything else, SwampCastle will create a default global runtime config at `~/.swampcastle/config.json` the first time you use the CLI. The default backend is Lance. If you want to change backend or storage settings, run:
+
+```bash
+swampcastle wizard
+```
+
 ### 1. Prepare a project
 
 ```bash
 swampcastle project ~/projects/myapp
 ```
 
-`project` creates project-local mining config in `.swampcastle.yaml`. It does not ingest files by itself.
+`project` creates project-local mining config in `.swampcastle.yaml`. It does not ingest files by itself. If an older `swampcastle.yaml` exists, SwampCastle will migrate it to the hidden filename and tell you.
 
 ### 2. Ingest files
 

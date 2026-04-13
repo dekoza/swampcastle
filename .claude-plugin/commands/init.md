@@ -1,6 +1,6 @@
 ---
-description: Set up SwampCastle — install the package, initialize a palace, configure MCP server, and verify everything works.
+description: Set up SwampCastle — install the package, prepare a project for mining, configure MCP, and verify everything works.
 allowed-tools: Bash, Read, Write, Edit, Glob, Grep
 ---
 
-Invoke the generic swampcastle skill (using the Skill tool) with the `init` command, then follow its instructions.
+Invoke the generic swampcastle skill (using the Skill tool) with the `project` command, then follow its instructions.

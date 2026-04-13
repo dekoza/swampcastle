@@ -88,7 +88,7 @@ swampcastle gather ~/exports --mode convos --extract general
 swampcastle project ~/projects/myapp
 ```
 
-That command helps you inspect and save the inferred structure before you ingest anything.
+That command helps you inspect and save the inferred structure before you ingest anything. New setups use `.swampcastle.yaml`; if a legacy `swampcastle.yaml` exists, SwampCastle migrates it automatically.
 
 ## Splitting mega-files
 

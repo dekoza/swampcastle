@@ -23,13 +23,19 @@ pip install 'swampcastle[chroma]'    # legacy migration tooling only
 
 ## First local castle
 
+On first use, SwampCastle creates a default global runtime config at `~/.swampcastle/config.json` and uses the local Lance backend. If you want to change runtime backend or storage settings, run:
+
+```bash
+swampcastle wizard
+```
+
 ### 1. Prepare project structure
 
 ```bash
 swampcastle project ~/projects/myapp
 ```
 
-`project` writes `.swampcastle.yaml` for the target project. It prepares room routing for ingest but does not ingest files by itself.
+`project` writes `.swampcastle.yaml` for the target project. It prepares room routing for ingest but does not ingest files by itself. If a legacy `swampcastle.yaml` exists, it is migrated automatically.
 
 ### 2. Ingest project files
 

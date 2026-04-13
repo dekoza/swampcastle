@@ -1,6 +1,6 @@
-# SwampCastle Init
+# SwampCastle Init (legacy alias)
 
-Guide the user through a working v4 setup.
+This instruction name is kept only for compatibility. Prefer the project setup flow.
 
 ## Step 1: Check Python
 
@@ -27,10 +27,10 @@ Ask which directory they want to inspect / ingest.
 Run:
 
 ```bash
-swampcastle build <dir>
+swampcastle project <dir>
 ```
 
-Explain that `build` previews room and entity detection. It is not the ingest step.
+Explain that `project` writes `.swampcastle.yaml` for the target repository. It is project setup, not the ingest step.
 
 ## Step 5: Ingest data
 

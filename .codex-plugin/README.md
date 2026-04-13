@@ -1,10 +1,10 @@
 # SwampCastle - Codex CLI Plugin
 
-Give your AI a persistent memory -- mine projects and conversations into a searchable palace backed by ChromaDB, with 19 MCP tools, auto-save hooks, and guided skills.
+Give your AI a persistent memory -- mine projects and conversations into a searchable palace backed by Lance by default, with 19 MCP tools, auto-save hooks, and guided skills.
 
 ## Prerequisites
 
-- Python 3.9+
+- Python 3.11+
 - Codex CLI installed and configured
 - `pip install swampcastle`
 
@@ -24,7 +24,7 @@ cp -r .codex-plugin /path/to/your/project/.codex-plugin
 codex --plugins
 ```
 
-3. Initialize your palace:
+3. Prepare your project:
 
 ```bash
 codex /init
@@ -47,7 +47,7 @@ pip install -e .
 
 3. The `.codex-plugin` directory is already in the repo root. Codex CLI will detect it automatically when you run Codex from inside the repository.
 
-4. Initialize your palace:
+4. Prepare your project:
 
 ```bash
 codex /init
@@ -58,7 +58,7 @@ codex /init
 | Skill | Description |
 |-------|-------------|
 | `/help` | Show available commands and usage tips |
-| `/init` | Initialize a new memory palace |
+| `/init` | Prepare a project for mining and setup |
 | `/search` | Semantic search across all mined memories |
 | `/mine` | Mine a project or conversation into your palace |
 | `/status` | Show palace status, room counts, and health |

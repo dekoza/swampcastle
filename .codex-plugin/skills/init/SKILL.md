@@ -1,10 +1,10 @@
 ---
 name: init
-description: Initialize a new SwampCastle — guided setup for your AI memory palace with ChromaDB backend.
+description: Prepare a project for SwampCastle mining and guided setup for your AI memory system.
 allowed-tools: Bash, Read, Write, Edit
 ---
 
-# SwampCastle Init
+# SwampCastle Project Setup
 
 Run the following command and follow the returned instructions step by step:
 

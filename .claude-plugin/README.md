@@ -1,10 +1,10 @@
 # SwampCastle Claude Code Plugin
 
-A Claude Code plugin that gives your AI a persistent memory system. Mine projects and conversations into a searchable palace backed by ChromaDB, with 19 MCP tools, auto-save hooks, and 5 guided skills.
+A Claude Code plugin that gives your AI a persistent memory system. Mine projects and conversations into a searchable palace backed by Lance by default, with 19 MCP tools, auto-save hooks, and 5 guided skills.
 
 ## Prerequisites
 
-- Python 3.9+
+- Python 3.11+
 
 ## Installation
 
@@ -23,10 +23,16 @@ claude plugin add /path/to/swampcastle
 
 ## Post-Install Setup
 
-After installing the plugin, run the init command to complete setup (pip install, MCP configuration, etc.):
+After installing the plugin, the first CLI run creates default runtime config automatically. To prepare a project for mining, run:
 
 ```
 /swampcastle:init
+```
+
+To change global backend or storage settings later, run:
+
+```bash
+swampcastle wizard
 ```
 
 ## Available Slash Commands
@@ -50,7 +56,7 @@ Set the `MEMPAL_DIR` environment variable to a directory path to automatically r
 
 ## MCP Server
 
-The plugin automatically configures a local MCP server with 19 tools for storing, searching, and managing memories. No manual MCP setup is required -- `/swampcastle:init` handles everything.
+The plugin can configure a local MCP server with 19 tools for storing, searching, and managing memories. Use `/swampcastle:init` for guided project setup and MCP guidance.
 
 ## Full Documentation
 

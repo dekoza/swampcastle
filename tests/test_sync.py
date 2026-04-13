@@ -718,6 +718,34 @@ class TestSyncServerFactoryRouting:
         with pytest.raises(RuntimeError, match="Sync does not support ChromaDB"):
             ss._get_engine()
 
+    @pytest.mark.parametrize(
+        ("error", "message"),
+        [
+            (ValueError("bad config"), "Invalid configuration for sync server"),
+            (ImportError("missing dep"), "Missing dependency for configured backend"),
+            (FileNotFoundError("missing castle"), "Castle path not found"),
+        ],
+    )
+    def test_get_engine_wraps_backend_errors(self, tmp_path, monkeypatch, error, message):
+        import swampcastle.sync_server as ss
+
+        settings = SimpleNamespace(
+            castle_path=tmp_path / "castle",
+            config_dir=tmp_path / "config",
+            collection_name="swampcastle_chests",
+            backend="lance",
+        )
+
+        monkeypatch.setattr(ss, "CastleConfig", lambda _env_file=None: settings)
+        monkeypatch.setattr(
+            ss,
+            "factory_from_settings",
+            lambda s: (_ for _ in ()).throw(error),
+        )
+
+        with pytest.raises(RuntimeError, match=message):
+            ss._get_engine()
+
     def test_shutdown_engine_cleans_up_factory(self, tmp_path, monkeypatch):
         """_shutdown_engine should close the factory and reset globals."""
         import swampcastle.sync_server as ss
@@ -794,6 +822,8 @@ class TestSyncServer:
     @pytest.fixture(autouse=True)
     def setup_server(self, tmp_path, monkeypatch):
         """Configure a fresh palace for the server."""
+        pytest.importorskip("fastapi")
+
         palace = str(tmp_path / "server_palace")
         monkeypatch.setenv("SWAMPCASTLE_PATH", palace)
 

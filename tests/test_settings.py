@@ -9,6 +9,18 @@ import pytest
 from swampcastle.settings import CastleSettings
 
 
+@pytest.fixture(autouse=True)
+def clear_swampcastle_env(monkeypatch):
+    for key in [
+        "SWAMPCASTLE_CASTLE_PATH",
+        "SWAMPCASTLE_BACKEND",
+        "SWAMPCASTLE_DATABASE_URL",
+        "SWAMPCASTLE_EMBEDDER",
+        "SWAMPCASTLE_EMBEDDER_DEVICE",
+    ]:
+        monkeypatch.delenv(key, raising=False)
+
+
 class TestDefaults:
     def test_default_castle_path(self):
         s = CastleSettings(_env_file=None)
@@ -73,6 +85,23 @@ class TestJsonFile:
         monkeypatch.setenv("SWAMPCASTLE_CASTLE_PATH", "/from/env")
         s = CastleSettings(_env_file=None, _json_file=str(json_path))
         assert str(s.castle_path) == "/from/env"
+
+    def test_invalid_json_is_ignored(self, tmp_path):
+        json_path = tmp_path / "broken.json"
+        json_path.write_text("{not valid json")
+        s = CastleSettings(_env_file=None, _json_file=str(json_path))
+        assert str(s.castle_path).endswith(".swampcastle/castle")
+
+    def test_unknown_json_keys_are_ignored(self, tmp_path):
+        json_path = tmp_path / "config.json"
+        json_path.write_text(json.dumps({"castle_path": "/from/json", "bogus": "x"}))
+        s = CastleSettings(_env_file=None, _json_file=str(json_path))
+        assert str(s.castle_path) == "/from/json"
+        assert not hasattr(s, "bogus")
+
+    def test_missing_json_file_is_ignored(self, tmp_path):
+        s = CastleSettings(_env_file=None, _json_file=str(tmp_path / "missing.json"))
+        assert str(s.castle_path).endswith(".swampcastle/castle")
 
 
 class TestValidation:

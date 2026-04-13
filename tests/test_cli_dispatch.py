@@ -175,3 +175,21 @@ class TestInternalCommandHandlers:
             cmd_instructions(args)
 
         mock.assert_called_once_with("help")
+
+    def test_cmd_raise_calls_real_migration_entrypoint(self):
+        from swampcastle.cli.commands import cmd_raise
+
+        args = SimpleNamespace(
+            source_palace="/legacy/palace",
+            target_castle="/new/castle",
+            palace=None,
+            dry_run=True,
+        )
+        with patch("swampcastle.migrate.migrate") as mock:
+            cmd_raise(args)
+
+        mock.assert_called_once_with(
+            source_palace="/legacy/palace",
+            target_castle="/new/castle",
+            dry_run=True,
+        )

@@ -183,9 +183,14 @@ def cmd_instructions(args):
 
 
 def cmd_raise(args):
-    print("  Migration: ChromaDB → LanceDB")
-    print("  Install chromadb: pip install 'swampcastle[chroma]'")
-    print("  Then run: swampcastle raise")
+    from swampcastle.migrate import migrate
+
+    target_castle = getattr(args, "target_castle", None) or getattr(args, "palace", None)
+    migrate(
+        source_palace=getattr(args, "source_palace", None),
+        target_castle=target_castle,
+        dry_run=getattr(args, "dry_run", False),
+    )
 
 
 def cmd_reforge(args):

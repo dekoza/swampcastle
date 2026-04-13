@@ -1,214 +1,296 @@
 #!/usr/bin/env python3
-"""
-swampcastle migrate — Recover a palace created with a different ChromaDB version.
+"""Legacy ChromaDB palace migration for SwampCastle v4.
 
-Reads documents and metadata directly from the palace's SQLite database
-(bypassing ChromaDB's API, which fails on version-mismatched palaces),
-then re-imports everything into a fresh palace using the currently installed
-ChromaDB version.
+This module migrates drawer data out of an on-disk ChromaDB palace and into
+SwampCastle's v4 local castle layout (LanceDB + sidecar files).
 
-This fixes the 3.0.0 → 3.1.0 upgrade path where chromadb was downgraded
-from 1.5.x to 0.6.x, breaking the on-disk storage format.
-
-Usage:
-    swampcastle migrate                          # migrate default palace
-    swampcastle migrate --palace /path/to/palace  # migrate specific palace
-    swampcastle migrate --dry-run                # show what would be migrated
+The source palace is never modified. Migration reads the old SQLite store and
+writes into a new target castle directory.
 """
 
-import os
+from __future__ import annotations
+
 import shutil
 import sqlite3
 from collections import defaultdict
-from datetime import datetime
+from dataclasses import dataclass, field
+from pathlib import Path
+from typing import Any
+
+from swampcastle.settings import CastleSettings
+from swampcastle.storage import StorageFactory, factory_from_settings
+
+COLLECTION_NAME = "swampcastle_chests"
+BATCH_SIZE = 500
+SIDECAR_FILES = ["knowledge_graph.sqlite3", "identity.txt", "node_id", "seq"]
 
 
-def extract_drawers_from_sqlite(db_path: str) -> list:
-    """Read all drawers directly from ChromaDB's SQLite, bypassing the API.
+@dataclass
+class MigrationReport:
+    source_palace: Path
+    target_castle: Path
+    drawers_found: int
+    drawers_migrated: int
+    dry_run: bool
+    source_version: str
+    sidecars_copied: list[str] = field(default_factory=list)
 
-    Works regardless of which ChromaDB version created the database.
-    Returns list of dicts with 'id', 'document', and 'metadata' keys.
+
+def resolve_source_palace(source_palace: str | None = None) -> Path:
+    """Resolve the legacy ChromaDB palace directory.
+
+    Search order:
+    1. explicit source path
+    2. ~/.mempalace/palace
+    3. ~/.swampcastle/palace
     """
+    candidates: list[Path] = []
+    if source_palace:
+        candidates.append(Path(source_palace).expanduser())
+    else:
+        home = Path.home()
+        candidates.extend([
+            home / ".mempalace" / "palace",
+            home / ".swampcastle" / "palace",
+        ])
+
+    for palace_dir in candidates:
+        db_path = palace_dir / "chroma.sqlite3"
+        if db_path.is_file():
+            return palace_dir
+
+    if source_palace:
+        raise FileNotFoundError(f"No ChromaDB palace found at {Path(source_palace).expanduser()}")
+    raise FileNotFoundError(
+        "No legacy ChromaDB palace found. Checked ~/.mempalace/palace and ~/.swampcastle/palace"
+    )
+
+
+def extract_drawers_from_sqlite(db_path: str) -> list[dict[str, Any]]:
+    """Read all drawers directly from ChromaDB's SQLite store."""
     conn = sqlite3.connect(db_path)
     conn.row_factory = sqlite3.Row
 
-    # Get all embedding IDs and their documents
-    rows = conn.execute("""
-        SELECT e.embedding_id,
-               MAX(CASE WHEN em.key = 'chroma:document' THEN em.string_value END) as document
-        FROM embeddings e
-        JOIN embedding_metadata em ON em.id = e.id
-        GROUP BY e.embedding_id
-    """).fetchall()
-
-    drawers = []
-    for row in rows:
-        embedding_id = row["embedding_id"]
-        document = row["document"]
-        if not document:
-            continue
-
-        # Get metadata for this embedding
-        meta_rows = conn.execute(
+    try:
+        rows = conn.execute(
             """
-            SELECT em.key, em.string_value, em.int_value, em.float_value, em.bool_value
-            FROM embedding_metadata em
-            JOIN embeddings e ON e.id = em.id
-            WHERE e.embedding_id = ?
-              AND em.key NOT LIKE 'chroma:%'
-        """,
-            (embedding_id,),
+            SELECT e.embedding_id,
+                   MAX(CASE WHEN em.key = 'chroma:document' THEN em.string_value END) AS document
+            FROM embeddings e
+            JOIN embedding_metadata em ON em.id = e.id
+            GROUP BY e.embedding_id
+            """
         ).fetchall()
 
-        metadata = {}
-        for mr in meta_rows:
-            key = mr["key"]
-            if mr["string_value"] is not None:
-                metadata[key] = mr["string_value"]
-            elif mr["int_value"] is not None:
-                metadata[key] = mr["int_value"]
-            elif mr["float_value"] is not None:
-                metadata[key] = mr["float_value"]
-            elif mr["bool_value"] is not None:
-                metadata[key] = bool(mr["bool_value"])
+        drawers = []
+        for row in rows:
+            document = row["document"]
+            if not document:
+                continue
 
-        drawers.append(
-            {
-                "id": embedding_id,
-                "document": document,
-                "metadata": metadata,
-            }
-        )
+            meta_rows = conn.execute(
+                """
+                SELECT em.key, em.string_value, em.int_value, em.float_value, em.bool_value
+                FROM embedding_metadata em
+                JOIN embeddings e ON e.id = em.id
+                WHERE e.embedding_id = ?
+                  AND em.key NOT LIKE 'chroma:%'
+                """,
+                (row["embedding_id"],),
+            ).fetchall()
 
-    conn.close()
-    return drawers
+            metadata: dict[str, Any] = {}
+            for meta_row in meta_rows:
+                key = meta_row["key"]
+                if meta_row["string_value"] is not None:
+                    metadata[key] = meta_row["string_value"]
+                elif meta_row["int_value"] is not None:
+                    metadata[key] = meta_row["int_value"]
+                elif meta_row["float_value"] is not None:
+                    metadata[key] = meta_row["float_value"]
+                elif meta_row["bool_value"] is not None:
+                    metadata[key] = bool(meta_row["bool_value"])
+
+            drawers.append(
+                {
+                    "id": row["embedding_id"],
+                    "document": document,
+                    "metadata": metadata,
+                }
+            )
+        return drawers
+    finally:
+        conn.close()
 
 
 def detect_chromadb_version(db_path: str) -> str:
-    """Detect which ChromaDB version created the database by checking schema."""
+    """Best-effort schema fingerprinting for old ChromaDB palaces."""
     conn = sqlite3.connect(db_path)
     try:
-        # 1.x has schema_str column in collections table
-        cols = [r[1] for r in conn.execute("PRAGMA table_info(collections)").fetchall()]
-        if "schema_str" in cols:
+        try:
+            columns = [row[1] for row in conn.execute("PRAGMA table_info(collections)").fetchall()]
+        except sqlite3.DatabaseError:
+            return "unknown"
+        if "schema_str" in columns:
             return "1.x"
-        # 0.6.x has embeddings_queue but no schema_str
         tables = [
-            r[0]
-            for r in conn.execute("SELECT name FROM sqlite_master WHERE type='table'").fetchall()
+            row[0]
+            for row in conn.execute("SELECT name FROM sqlite_master WHERE type='table'").fetchall()
         ]
         if "embeddings_queue" in tables:
             return "0.6.x"
+        if "embedding_metadata" in tables and "embeddings" in tables:
+            return "legacy"
         return "unknown"
     finally:
         conn.close()
 
 
-def migrate(palace_path: str, dry_run: bool = False):
-    """Migrate a palace to the currently installed ChromaDB version."""
-    import chromadb
+def _summarize_drawers(drawers: list[dict[str, Any]]) -> dict[str, dict[str, int]]:
+    summary: dict[str, dict[str, int]] = defaultdict(lambda: defaultdict(int))
+    for drawer in drawers:
+        metadata = drawer["metadata"]
+        wing = metadata.get("wing", "unknown")
+        room = metadata.get("room", "unknown")
+        summary[wing][room] += 1
+    return summary
 
-    palace_path = os.path.expanduser(palace_path)
-    db_path = os.path.join(palace_path, "chroma.sqlite3")
 
-    if not os.path.isfile(db_path):
-        print(f"\n  No palace database found at {db_path}")
-        return False
+def _default_target_factory(target_castle: Path) -> StorageFactory:
+    settings = CastleSettings(
+        _env_file=None,
+        castle_path=target_castle,
+        backend="lance",
+    )
+    return factory_from_settings(settings)
+
+
+def _copy_sidecars(source_root: Path, target_root: Path) -> list[str]:
+    copied: list[str] = []
+
+    for filename in SIDECAR_FILES:
+        source = source_root / filename
+        target = target_root / filename
+        if not source.exists() or target.exists():
+            continue
+        shutil.copy2(source, target)
+        copied.append(filename)
+
+    source_wal = source_root / "wal"
+    target_wal = target_root / "wal"
+    if source_wal.is_dir() and not target_wal.exists():
+        shutil.copytree(source_wal, target_wal)
+        copied.append("wal/")
+
+    return copied
+
+
+def _print_summary(report: MigrationReport, drawers: list[dict[str, Any]]) -> None:
+    summary = _summarize_drawers(drawers)
 
     print(f"\n{'=' * 60}")
-    print("  SwampCastle Migrate")
+    print("  SwampCastle Raise")
+    print(f"{'=' * 60}")
+    print(f"  Source palace: {report.source_palace}")
+    print(f"  Source DB:     {report.source_palace / 'chroma.sqlite3'}")
+    print(f"  Source ver:    ChromaDB {report.source_version}")
+    print(f"  Target castle: {report.target_castle}")
+    print(f"  Drawers:       {report.drawers_found}")
+    print(f"  Mode:          {'DRY RUN' if report.dry_run else 'LIVE'}")
+
+    if summary:
+        print("\n  By wing / room:")
+        for wing, rooms in sorted(summary.items()):
+            total = sum(rooms.values())
+            print(f"    WING: {wing} ({total})")
+            for room, count in sorted(rooms.items(), key=lambda item: item[1], reverse=True):
+                print(f"      ROOM: {room:24} {count:5}")
+
+    if report.dry_run:
+        print("\n  DRY RUN — no changes written.")
+    else:
+        print(f"\n  Migrated:      {report.drawers_migrated}")
+        if report.sidecars_copied:
+            print(f"  Sidecars:      {', '.join(report.sidecars_copied)}")
+        else:
+            print("  Sidecars:      none copied")
     print(f"{'=' * 60}\n")
-    print(f"  Palace:    {palace_path}")
-    print(f"  Database:  {db_path}")
-    print(f"  DB size:   {os.path.getsize(db_path) / 1024 / 1024:.1f} MB")
 
-    # Detect version
-    source_version = detect_chromadb_version(db_path)
-    print(f"  Source:    ChromaDB {source_version}")
-    print(f"  Target:    ChromaDB {chromadb.__version__}")
 
-    # Try reading with current chromadb first
-    try:
-        client = chromadb.PersistentClient(path=palace_path)
-        col = client.get_collection("swampcastle_chests")
-        count = col.count()
-        print(f"\n  Palace is already readable by chromadb {chromadb.__version__}.")
-        print(f"  {count} drawers found. No migration needed.")
-        return True
-    except Exception:
-        print(f"\n  Palace is NOT readable by chromadb {chromadb.__version__}.")
-        print("  Extracting from SQLite directly...")
+def migrate(
+    source_palace: str | None = None,
+    target_castle: str | None = None,
+    dry_run: bool = False,
+    target_factory: StorageFactory | None = None,
+) -> MigrationReport:
+    """Migrate a legacy ChromaDB palace into a v4 local castle."""
+    source_path = resolve_source_palace(source_palace)
+    source_db = source_path / "chroma.sqlite3"
+    source_root = source_path.parent
 
-    # Extract all drawers via raw SQL
-    drawers = extract_drawers_from_sqlite(db_path)
-    print(f"  Extracted {len(drawers)} drawers from SQLite")
+    if target_castle is None:
+        target_path = CastleSettings(_env_file=None).castle_path
+    else:
+        target_path = Path(target_castle).expanduser()
 
-    if not drawers:
-        print("  Nothing to migrate.")
-        return True
+    if source_path.resolve() == target_path.resolve():
+        raise ValueError("Source palace and target castle must be different paths")
 
-    # Show summary
-    wings = defaultdict(lambda: defaultdict(int))
-    for d in drawers:
-        w = d["metadata"].get("wing", "?")
-        r = d["metadata"].get("room", "?")
-        wings[w][r] += 1
+    if target_path.exists():
+        if not target_path.is_dir() or any(target_path.iterdir()):
+            raise FileExistsError(f"Target castle already exists and is not empty: {target_path}")
 
-    print("\n  Summary:")
-    for wing, rooms in sorted(wings.items()):
-        total = sum(rooms.values())
-        print(f"    WING: {wing} ({total} drawers)")
-        for room, count in sorted(rooms.items(), key=lambda x: -x[1]):
-            print(f"      ROOM: {room:30} {count:5}")
+    drawers = extract_drawers_from_sqlite(str(source_db))
+    report = MigrationReport(
+        source_palace=source_path,
+        target_castle=target_path,
+        drawers_found=len(drawers),
+        drawers_migrated=0,
+        dry_run=dry_run,
+        source_version=detect_chromadb_version(str(source_db)),
+    )
 
     if dry_run:
-        print("\n  DRY RUN — no changes made.")
-        print(f"  Would migrate {len(drawers)} drawers.")
-        return True
+        _print_summary(report, drawers)
+        return report
 
-    # Backup the old palace
-    timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-    backup_path = f"{palace_path}.pre-migrate.{timestamp}"
-    print(f"\n  Backing up to {backup_path}...")
-    shutil.copytree(palace_path, backup_path)
+    target_root = target_path.parent
+    target_root.mkdir(parents=True, exist_ok=True)
+    target_path.mkdir(parents=True, exist_ok=True)
 
-    # Build fresh palace in a temp directory (avoids chromadb reading old state)
-    import tempfile
+    created_targets: list[Path] = []
+    own_factory = target_factory is None
+    factory = target_factory or _default_target_factory(target_path)
 
-    temp_palace = tempfile.mkdtemp(prefix="swampcastle_migrate_")
-    print(f"  Creating fresh palace in {temp_palace}...")
-    client = chromadb.PersistentClient(path=temp_palace)
-    col = client.get_or_create_collection("swampcastle_chests")
+    try:
+        collection = factory.open_collection(COLLECTION_NAME)
+        for start in range(0, len(drawers), BATCH_SIZE):
+            batch = drawers[start : start + BATCH_SIZE]
+            collection.upsert(
+                ids=[drawer["id"] for drawer in batch],
+                documents=[drawer["document"] for drawer in batch],
+                metadatas=[drawer["metadata"] for drawer in batch],
+            )
+            report.drawers_migrated += len(batch)
 
-    # Re-import in batches
-    batch_size = 500
-    imported = 0
-    for i in range(0, len(drawers), batch_size):
-        batch = drawers[i : i + batch_size]
-        col.add(
-            ids=[d["id"] for d in batch],
-            documents=[d["document"] for d in batch],
-            metadatas=[d["metadata"] for d in batch],
-        )
-        imported += len(batch)
-        print(f"  Imported {imported}/{len(drawers)} drawers...")
+        report.sidecars_copied = _copy_sidecars(source_root, target_root)
+        created_targets.extend(target_root / name for name in report.sidecars_copied if name != "wal/")
+        if "wal/" in report.sidecars_copied:
+            created_targets.append(target_root / "wal")
+    except Exception:
+        if own_factory:
+            factory.close()
+        if not target_factory:
+            shutil.rmtree(target_path, ignore_errors=True)
+        for created in reversed(created_targets):
+            if created.is_dir():
+                shutil.rmtree(created, ignore_errors=True)
+            elif created.exists():
+                created.unlink(missing_ok=True)
+        raise
+    else:
+        if own_factory:
+            factory.close()
 
-    # Verify before swapping
-    final_count = col.count()
-    del col
-    del client
-
-    # Swap: remove old palace, move new one into place
-    print("  Swapping old palace for migrated version...")
-    shutil.rmtree(palace_path)
-    shutil.move(temp_palace, palace_path)
-
-    print("\n  Migration complete.")
-    print(f"  Drawers migrated: {final_count}")
-    print(f"  Backup at: {backup_path}")
-
-    if final_count != len(drawers):
-        print(f"  WARNING: Expected {len(drawers)}, got {final_count}")
-
-    print(f"\n{'=' * 60}\n")
-    return True
+    _print_summary(report, drawers)
+    return report

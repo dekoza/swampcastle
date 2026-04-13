@@ -89,7 +89,10 @@ def main():
         instr_sub.add_parser(n)
 
     # raise (migrate)
-    sub.add_parser("raise", aliases=["migrate"], help="Raise from the swamp (ChromaDB → LanceDB)")
+    p = sub.add_parser("raise", aliases=["migrate"], help="Raise from the swamp (ChromaDB → LanceDB)")
+    p.add_argument("--source-palace", default=None, help="Path to legacy ChromaDB palace directory")
+    p.add_argument("--target-castle", default=None, help="Path to target castle directory")
+    p.add_argument("--dry-run", action="store_true")
 
     # reforge (reindex)
     p = sub.add_parser("reforge", aliases=["reindex"], help="Reforge embeddings with new model")

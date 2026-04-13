@@ -3,7 +3,7 @@
 import json
 import logging
 import os
-from typing import Any, Dict, List, Optional
+from typing import Dict, List, Optional
 
 from .base import CollectionStore
 from . import StorageFactory
@@ -88,8 +88,15 @@ class LanceCollection(CollectionStore):
 
     FILTER_COLUMNS = {"wing", "room", "source_file", "node_id", "seq"}
     SCHEMA_COLUMNS = {
-        "id", "document", "vector", "wing", "room", "source_file",
-        "node_id", "seq", "metadata_json",
+        "id",
+        "document",
+        "vector",
+        "wing",
+        "room",
+        "source_file",
+        "node_id",
+        "seq",
+        "metadata_json",
     }
     INTERNAL_FIELDS = {"_distance", "_relevance_score"}
 
@@ -158,8 +165,10 @@ class LanceCollection(CollectionStore):
     def _inject_sync(self, metadatas: list) -> list:
         if self._sync_identity is None:
             from ..sync_meta import get_identity  # Circular import: sync_meta imports config
+
             self._sync_identity = get_identity()
         from ..sync_meta import inject_sync_meta  # Circular import: sync_meta imports config
+
         return inject_sync_meta(metadatas, self._sync_identity)
 
     def add(self, *, documents, ids, metadatas=None, embeddings=None):
@@ -327,8 +336,12 @@ class LanceBackend:
     """Factory for LanceDB backend."""
 
     def get_collection(
-        self, palace_path: str, collection_name: str, create: bool = True,
-        embedder=None, sync_identity=None,
+        self,
+        palace_path: str,
+        collection_name: str,
+        create: bool = True,
+        embedder=None,
+        sync_identity=None,
     ):
         import lancedb
 
@@ -344,6 +357,7 @@ class LanceBackend:
 
         if embedder is None:
             from ..embeddings import get_embedder
+
             embedder = get_embedder()
 
         db = lancedb.connect(palace_path)
@@ -361,12 +375,16 @@ class LocalStorageFactory(StorageFactory):
 
     def open_collection(self, name: str) -> LanceCollection:
         return self._backend.get_collection(
-            self._castle_path, name, create=True, embedder=self._embedder,
+            self._castle_path,
+            name,
+            create=True,
+            embedder=self._embedder,
         )
 
     def open_graph(self):
         if self._graph is None:
             from .sqlite_graph import SQLiteGraph
+
             kg_path = os.path.join(os.path.dirname(self._castle_path), "knowledge_graph.sqlite3")
             self._graph = SQLiteGraph(kg_path)
         return self._graph

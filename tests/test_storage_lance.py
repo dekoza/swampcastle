@@ -2,7 +2,7 @@
 
 import pytest
 
-from swampcastle.storage.lance import LanceBackend, LanceCollection
+from swampcastle.storage.lance import LanceBackend
 
 
 class TestLanceBackend:

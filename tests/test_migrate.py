@@ -4,7 +4,6 @@ from __future__ import annotations
 
 import sqlite3
 from pathlib import Path
-from types import SimpleNamespace
 
 import pytest
 
@@ -263,6 +262,7 @@ def test_migrate_cleans_up_sidecars_on_upsert_failure(tmp_path):
     class FailingFactory:
         def open_collection(self, name):
             return FailingCollection()
+
         def close(self):
             pass
 

@@ -263,9 +263,14 @@ class TestPostgresStorageFactory:
         monkeypatch.setattr("swampcastle.storage.postgres.ConnectionPool", fake_connection_pool)
         monkeypatch.setattr("swampcastle.storage.postgres.register_vector", lambda conn: None)
         monkeypatch.setattr("swampcastle.storage.postgres.Vector", lambda value: value)
-        monkeypatch.setattr("swampcastle.storage.postgres.psycopg", type("P", (), {"connect": staticmethod(fake_connect)}))
+        monkeypatch.setattr(
+            "swampcastle.storage.postgres.psycopg",
+            type("P", (), {"connect": staticmethod(fake_connect)}),
+        )
 
-        factory = PostgresStorageFactory("postgresql://localhost/swampcastle", embedder=FakeEmbedder())
+        factory = PostgresStorageFactory(
+            "postgresql://localhost/swampcastle", embedder=FakeEmbedder()
+        )
 
         assert isinstance(factory, StorageFactory)
         assert factory._pool is fake_pool
@@ -286,12 +291,19 @@ class TestPostgresStorageFactory:
         def fake_connect(dsn):
             yield RecordingConnection()
 
-        monkeypatch.setattr("swampcastle.storage.postgres.ConnectionPool", lambda **kwargs: fake_pool)
+        monkeypatch.setattr(
+            "swampcastle.storage.postgres.ConnectionPool", lambda **kwargs: fake_pool
+        )
         monkeypatch.setattr("swampcastle.storage.postgres.register_vector", lambda conn: None)
         monkeypatch.setattr("swampcastle.storage.postgres.Vector", lambda value: value)
-        monkeypatch.setattr("swampcastle.storage.postgres.psycopg", type("P", (), {"connect": staticmethod(fake_connect)}))
+        monkeypatch.setattr(
+            "swampcastle.storage.postgres.psycopg",
+            type("P", (), {"connect": staticmethod(fake_connect)}),
+        )
 
-        factory = PostgresStorageFactory("postgresql://localhost/swampcastle", embedder=FakeEmbedder())
+        factory = PostgresStorageFactory(
+            "postgresql://localhost/swampcastle", embedder=FakeEmbedder()
+        )
 
         collection = factory.open_collection("swampcastle_chests")
         graph = factory.open_graph()
@@ -306,12 +318,19 @@ class TestPostgresStorageFactory:
         def fake_connect(dsn):
             yield RecordingConnection()
 
-        monkeypatch.setattr("swampcastle.storage.postgres.ConnectionPool", lambda **kwargs: fake_pool)
+        monkeypatch.setattr(
+            "swampcastle.storage.postgres.ConnectionPool", lambda **kwargs: fake_pool
+        )
         monkeypatch.setattr("swampcastle.storage.postgres.register_vector", lambda conn: None)
         monkeypatch.setattr("swampcastle.storage.postgres.Vector", lambda value: value)
-        monkeypatch.setattr("swampcastle.storage.postgres.psycopg", type("P", (), {"connect": staticmethod(fake_connect)}))
+        monkeypatch.setattr(
+            "swampcastle.storage.postgres.psycopg",
+            type("P", (), {"connect": staticmethod(fake_connect)}),
+        )
 
-        factory = PostgresStorageFactory("postgresql://localhost/swampcastle", embedder=FakeEmbedder())
+        factory = PostgresStorageFactory(
+            "postgresql://localhost/swampcastle", embedder=FakeEmbedder()
+        )
         factory.close()
 
         assert fake_pool.closed is True

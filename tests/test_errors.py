@@ -12,8 +12,7 @@ from swampcastle.errors import (
 
 class TestCastleErrorHierarchy:
     def test_all_subclass_castle_error(self):
-        for cls in (NoCastleError, StorageError, ValidationError,
-                    EmbedderError, SyncConflictError):
+        for cls in (NoCastleError, StorageError, ValidationError, EmbedderError, SyncConflictError):
             assert issubclass(cls, CastleError)
 
     def test_all_subclass_exception(self):
@@ -22,8 +21,14 @@ class TestCastleErrorHierarchy:
 
     def test_each_has_distinct_code(self):
         codes = set()
-        for cls in (CastleError, NoCastleError, StorageError,
-                    ValidationError, EmbedderError, SyncConflictError):
+        for cls in (
+            CastleError,
+            NoCastleError,
+            StorageError,
+            ValidationError,
+            EmbedderError,
+            SyncConflictError,
+        ):
             codes.add(cls.code)
         assert len(codes) == 6
 

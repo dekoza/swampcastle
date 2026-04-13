@@ -3,14 +3,16 @@ import shutil
 import tempfile
 from pathlib import Path
 
-from swampcastle.storage.lance import LanceBackend
-_get_test_collection = lambda path, name="swampcastle_chests": LanceBackend().get_collection(path, name, create=True)
 import yaml
 
-from swampcastle.mining.miner import mine, scan_project
-# file_already_mined moved to mining.miner
 from swampcastle.mining.miner import _file_already_mined as file_already_mined
+from swampcastle.mining.miner import mine, scan_project
+from swampcastle.storage.lance import LanceBackend
 from swampcastle.storage.memory import InMemoryStorageFactory
+
+
+def _get_test_collection(path, name="swampcastle_chests"):
+    return LanceBackend().get_collection(path, name, create=True)
 
 
 def write_file(path: Path, content: str):

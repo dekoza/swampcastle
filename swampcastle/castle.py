@@ -59,11 +59,7 @@ class AsyncCastle:
         self._castle = castle
 
     async def search(self, query: SearchQuery) -> SearchResponse:
-        return await anyio.to_thread.run_sync(
-            lambda: self._castle.search.search(query)
-        )
+        return await anyio.to_thread.run_sync(lambda: self._castle.search.search(query))
 
     async def status(self) -> StatusResponse:
-        return await anyio.to_thread.run_sync(
-            lambda: self._castle.catalog.status()
-        )
+        return await anyio.to_thread.run_sync(lambda: self._castle.catalog.status())

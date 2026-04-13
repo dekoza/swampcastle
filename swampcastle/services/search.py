@@ -40,13 +40,15 @@ class SearchService:
             for i, doc in enumerate(raw["documents"][0]):
                 meta = raw["metadatas"][0][i]
                 dist = raw["distances"][0][i]
-                hits.append(SearchHit(
-                    text=doc,
-                    wing=meta.get("wing", ""),
-                    room=meta.get("room", ""),
-                    similarity=round(1 - dist, 3),
-                    source_file=meta.get("source_file"),
-                ))
+                hits.append(
+                    SearchHit(
+                        text=doc,
+                        wing=meta.get("wing", ""),
+                        room=meta.get("room", ""),
+                        similarity=round(1 - dist, 3),
+                        source_file=meta.get("source_file"),
+                    )
+                )
 
         resp = SearchResponse(
             query=sanitized["clean_query"],
@@ -74,13 +76,15 @@ class SearchService:
                 dist = raw["distances"][0][i]
                 similarity = round(1 - dist, 3)
                 if similarity >= query.threshold:
-                    matches.append({
-                        "drawer_id": drawer_id,
-                        "similarity": similarity,
-                        "wing": raw["metadatas"][0][i].get("wing", ""),
-                        "room": raw["metadatas"][0][i].get("room", ""),
-                        "preview": raw["documents"][0][i][:200],
-                    })
+                    matches.append(
+                        {
+                            "drawer_id": drawer_id,
+                            "similarity": similarity,
+                            "wing": raw["metadatas"][0][i].get("wing", ""),
+                            "room": raw["metadatas"][0][i].get("room", ""),
+                            "preview": raw["documents"][0][i][:200],
+                        }
+                    )
         return DuplicateCheckResult(
             is_duplicate=len(matches) > 0,
             matches=matches,

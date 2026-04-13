@@ -34,8 +34,7 @@ class _JsonFileSource(PydanticBaseSettingsSource):
         return val, field_name, val is not None
 
     def __call__(self) -> dict[str, Any]:
-        return {k: v for k, v in self._data.items()
-                if k in self.settings_cls.model_fields}
+        return {k: v for k, v in self._data.items() if k in self.settings_cls.model_fields}
 
 
 class CastleSettings(BaseSettings):
@@ -76,6 +75,7 @@ class CastleSettings(BaseSettings):
                     pass
         # Only use JSON values for fields not set via env or explicit kwargs
         import os
+
         env_prefix = "SWAMPCASTLE_"
         for k, v in json_data.items():
             if k not in type(self).model_fields:

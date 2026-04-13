@@ -1,6 +1,6 @@
 """Catalog Pydantic models — status, wings, rooms, taxonomy."""
 
-from typing import Any, Optional
+from typing import Optional
 
 from pydantic import BaseModel
 

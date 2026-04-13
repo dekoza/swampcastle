@@ -479,7 +479,9 @@ def test_try_normalize_json_valid_but_unknown_schema():
 
 def test_messages_to_transcript_basic():
     msgs = [("user", "Q"), ("assistant", "A")]
-    with patch("swampcastle.mining.normalize.spellcheck_user_text", side_effect=lambda x: x, create=True):
+    with patch(
+        "swampcastle.mining.normalize.spellcheck_user_text", side_effect=lambda x: x, create=True
+    ):
         result = _messages_to_transcript(msgs, spellcheck=False)
     assert "> Q" in result
     assert "A" in result

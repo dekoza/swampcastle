@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import io
 import os
 from types import SimpleNamespace
 from unittest.mock import patch
@@ -23,7 +22,9 @@ def restore_castle_env(monkeypatch):
 
 
 class DummyCastle:
-    def __init__(self, settings, factory, *, status=None, search=None, distill_count=0, reforge_count=0):
+    def __init__(
+        self, settings, factory, *, status=None, search=None, distill_count=0, reforge_count=0
+    ):
         self.catalog = SimpleNamespace(status=lambda: status)
         self.search = SimpleNamespace(search=lambda query: search)
         self.vault = SimpleNamespace(
@@ -61,7 +62,9 @@ def test_cmd_survey_prints_status(capsys):
 
 def test_cmd_seek_prints_no_results(capsys):
     result = SimpleNamespace(results=[])
-    args = SimpleNamespace(query="nothing", wing=None, room=None, results=5, palace=None, backend=None)
+    args = SimpleNamespace(
+        query="nothing", wing=None, room=None, results=5, palace=None, backend=None
+    )
 
     with patch("swampcastle.castle.Castle", lambda s, f: DummyCastle(s, f, search=result)):
         with patch("swampcastle.cli.commands.factory_from_settings", return_value=object()):
@@ -73,7 +76,9 @@ def test_cmd_seek_prints_no_results(capsys):
 def test_cmd_seek_prints_hits(capsys):
     hit = SimpleNamespace(wing="proj", room="auth", similarity=0.9, text="hello world")
     result = SimpleNamespace(results=[hit])
-    args = SimpleNamespace(query="hello", wing=None, room=None, results=5, palace=None, backend=None)
+    args = SimpleNamespace(
+        query="hello", wing=None, room=None, results=5, palace=None, backend=None
+    )
 
     with patch("swampcastle.castle.Castle", lambda s, f: DummyCastle(s, f, search=result)):
         with patch("swampcastle.cli.commands.factory_from_settings", return_value=object()):
@@ -86,7 +91,9 @@ def test_cmd_seek_prints_hits(capsys):
 
 def test_cmd_build_exits_for_missing_dir(capsys):
     with pytest.raises(SystemExit, match="1"):
-        commands.cmd_build(SimpleNamespace(dir="/does/not/exist", yes=False, palace=None, backend=None))
+        commands.cmd_build(
+            SimpleNamespace(dir="/does/not/exist", yes=False, palace=None, backend=None)
+        )
     assert "not a directory" in capsys.readouterr().out
 
 
@@ -97,8 +104,14 @@ def test_cmd_build_prints_detection_summary(tmp_path, capsys):
 
     with patch("swampcastle.mining.rooms.detect_rooms_from_folders", return_value=["a", "b"]):
         with patch("swampcastle.entity_detector.scan_for_detection", return_value=["file1"]):
-            with patch("swampcastle.entity_detector.detect_entities", return_value={"people": [1], "projects": [1, 2]}):
-                with patch("swampcastle.entity_detector.confirm_entities", return_value={"people": [1], "projects": [1, 2]}):
+            with patch(
+                "swampcastle.entity_detector.detect_entities",
+                return_value={"people": [1], "projects": [1, 2]},
+            ):
+                with patch(
+                    "swampcastle.entity_detector.confirm_entities",
+                    return_value={"people": [1], "projects": [1, 2]},
+                ):
                     commands.cmd_build(args)
 
     out = capsys.readouterr().out
@@ -110,8 +123,16 @@ def test_cmd_gather_projects_uses_miner(tmp_path):
     target = tmp_path / "proj"
     target.mkdir()
     args = SimpleNamespace(
-        dir=str(target), mode="projects", wing="wing1", agent="swampcastle", dry_run=False,
-        no_gitignore=False, include_ignored=["*.log"], limit=7, palace=None, backend=None,
+        dir=str(target),
+        mode="projects",
+        wing="wing1",
+        agent="swampcastle",
+        dry_run=False,
+        no_gitignore=False,
+        include_ignored=["*.log"],
+        limit=7,
+        palace=None,
+        backend=None,
     )
 
     with patch("swampcastle.cli.commands.factory_from_settings", return_value="factory"):
@@ -126,8 +147,15 @@ def test_cmd_gather_convos_uses_convo_miner_in_dry_run(tmp_path):
     target = tmp_path / "proj"
     target.mkdir()
     args = SimpleNamespace(
-        dir=str(target), mode="convos", wing="wing1", agent="agentx", dry_run=True,
-        extract="exchange", limit=3, palace=None, backend=None,
+        dir=str(target),
+        mode="convos",
+        wing="wing1",
+        agent="agentx",
+        dry_run=True,
+        extract="exchange",
+        limit=3,
+        palace=None,
+        backend=None,
     )
 
     with patch("swampcastle.mining.convo.mine_convos") as mock_mine:
@@ -155,12 +183,22 @@ def test_cmd_cleave_builds_sys_argv(tmp_path):
     with patch("swampcastle.split_mega_files.main") as mock_main:
         commands.cmd_cleave(args)
 
-    assert os.sys.argv == ["swampcastle", str(tmp_path), "--output-dir", "/tmp/out", "--dry-run", "--min-sessions", "4"]
+    assert os.sys.argv == [
+        "swampcastle",
+        str(tmp_path),
+        "--output-dir",
+        "/tmp/out",
+        "--dry-run",
+        "--min-sessions",
+        "4",
+    ]
     mock_main.assert_called_once()
 
 
 def test_cmd_distill_prints_no_drawers(capsys):
-    args = SimpleNamespace(wing=None, room=None, dry_run=False, config=None, palace=None, backend=None)
+    args = SimpleNamespace(
+        wing=None, room=None, dry_run=False, config=None, palace=None, backend=None
+    )
 
     with patch("swampcastle.castle.Castle", lambda s, f: DummyCastle(s, f, distill_count=0)):
         with patch("swampcastle.cli.commands.factory_from_settings", return_value=object()):
@@ -179,13 +217,17 @@ def test_cmd_distill_passes_config_and_dry_run(capsys):
             self._collection = object()
 
     castle = DistillCastle(None, None)
-    args = SimpleNamespace(wing="w", room="r", dry_run=True, config="entities.json", palace=None, backend=None)
+    args = SimpleNamespace(
+        wing="w", room="r", dry_run=True, config="entities.json", palace=None, backend=None
+    )
 
     with patch("swampcastle.castle.Castle", lambda s, f: castle):
         with patch("swampcastle.cli.commands.factory_from_settings", return_value=object()):
             commands.cmd_distill(args)
 
-    assert castle.calls == [{"wing": "w", "room": "r", "dry_run": True, "config_path": "entities.json"}]
+    assert castle.calls == [
+        {"wing": "w", "room": "r", "dry_run": True, "config_path": "entities.json"}
+    ]
     assert "DRY RUN" in capsys.readouterr().out
 
 
@@ -214,7 +256,9 @@ def test_cmd_reforge_updates_embedder_settings_and_prints(capsys):
             self._collection = object()
 
     castle = ReforgeCastle(None, None)
-    args = SimpleNamespace(wing="w", room="r", dry_run=False, embedder="onnx", device="cpu", palace=None, backend=None)
+    args = SimpleNamespace(
+        wing="w", room="r", dry_run=False, embedder="onnx", device="cpu", palace=None, backend=None
+    )
 
     with patch("swampcastle.castle.Castle", lambda s, f: castle):
         with patch("swampcastle.cli.commands.factory_from_settings", return_value=object()):
@@ -241,7 +285,9 @@ def test_cmd_garrison_exits_when_uvicorn_missing(capsys):
 
     with patch("builtins.__import__", side_effect=fake_import):
         with pytest.raises(SystemExit, match="1"):
-            commands.cmd_garrison(SimpleNamespace(host="0.0.0.0", port=7433, palace=None, backend=None))
+            commands.cmd_garrison(
+                SimpleNamespace(host="0.0.0.0", port=7433, palace=None, backend=None)
+            )
 
     assert "Sync server requires" in capsys.readouterr().out
 
@@ -251,7 +297,9 @@ def test_cmd_garrison_runs_uvicorn(monkeypatch):
     monkeypatch.setitem(__import__("sys").modules, "uvicorn", uvicorn)
     with patch("swampcastle.sync_server.create_app", return_value="app"):
         with patch.object(uvicorn, "run") as mock_run:
-            commands.cmd_garrison(SimpleNamespace(host="127.0.0.1", port=9999, palace="/tmp/castle", backend=None))
+            commands.cmd_garrison(
+                SimpleNamespace(host="127.0.0.1", port=9999, palace="/tmp/castle", backend=None)
+            )
     assert os.environ["SWAMPCASTLE_CASTLE_PATH"] == "/tmp/castle"
     mock_run.assert_called_once_with("app", host="127.0.0.1", port=9999)
 
@@ -269,7 +317,11 @@ def test_cmd_parley_dry_run(capsys):
             with patch("swampcastle.sync.SyncEngine"):
                 with patch("swampcastle.sync_client.SyncClient") as mock_client:
                     with patch("swampcastle.sync_meta.NodeIdentity"):
-                        commands.cmd_parley(SimpleNamespace(server="http://x", dry_run=True, palace=None, backend=None))
+                        commands.cmd_parley(
+                            SimpleNamespace(
+                                server="http://x", dry_run=True, palace=None, backend=None
+                            )
+                        )
 
     out = capsys.readouterr().out
     assert "Syncing with http://x" in out
@@ -291,7 +343,11 @@ def test_cmd_parley_live_prints_summary(capsys):
             with patch("swampcastle.sync.SyncEngine"):
                 with patch("swampcastle.sync_client.SyncClient", return_value=client):
                     with patch("swampcastle.sync_meta.NodeIdentity"):
-                        commands.cmd_parley(SimpleNamespace(server="http://x", dry_run=False, palace=None, backend=None))
+                        commands.cmd_parley(
+                            SimpleNamespace(
+                                server="http://x", dry_run=False, palace=None, backend=None
+                            )
+                        )
 
     assert "Pushed: 2, Pulled: 3" in capsys.readouterr().out
 

@@ -87,16 +87,20 @@ class TestSearch:
 
 class TestCheckDuplicate:
     def test_finds_duplicate(self, svc):
-        r = svc.check_duplicate(DuplicateCheckQuery(
-            content="we chose postgres for horizontal scaling",
-            threshold=0.5,
-        ))
+        r = svc.check_duplicate(
+            DuplicateCheckQuery(
+                content="we chose postgres for horizontal scaling",
+                threshold=0.5,
+            )
+        )
         assert r.is_duplicate is True
         assert len(r.matches) > 0
 
     def test_no_duplicate(self, svc):
-        r = svc.check_duplicate(DuplicateCheckQuery(
-            content="completely unrelated quantum physics discussion",
-            threshold=0.99,
-        ))
+        r = svc.check_duplicate(
+            DuplicateCheckQuery(
+                content="completely unrelated quantum physics discussion",
+                threshold=0.99,
+            )
+        )
         assert r.is_duplicate is False

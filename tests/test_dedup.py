@@ -52,7 +52,6 @@ def test_get_source_groups_basic():
     assert len(groups["a.txt"]) == 5
 
 
-
 def test_get_source_groups_below_min():
     col = MagicMock()
     col.count.return_value = 2
@@ -68,7 +67,6 @@ def test_get_source_groups_below_min():
     ]
     groups = dedup.get_source_groups(col, min_count=5)
     assert len(groups) == 0
-
 
 
 def test_get_source_groups_source_filter():
@@ -93,7 +91,6 @@ def test_get_source_groups_source_filter():
     assert "other.txt" not in groups
 
 
-
 def test_get_source_groups_wing_filter():
     col = MagicMock()
     col.count.return_value = 5
@@ -113,7 +110,6 @@ def test_get_source_groups_wing_filter():
     dedup.get_source_groups(col, min_count=5, wing="my_wing")
     first_call = col.get.call_args_list[0]
     assert first_call.kwargs.get("where") == {"wing": "my_wing"}
-
 
 
 def test_get_source_groups_missing_source_file():
@@ -153,7 +149,6 @@ def test_dedup_source_group_all_unique():
     assert col.query.call_args.kwargs["where"] == {"source_file": "a.txt"}
 
 
-
 def test_dedup_source_group_with_duplicate():
     col = MagicMock()
     col.get.return_value = {
@@ -176,7 +171,6 @@ def test_dedup_source_group_with_duplicate():
     assert len(deleted) == 1
 
 
-
 def test_dedup_source_group_short_docs_deleted():
     col = MagicMock()
     col.get.return_value = {
@@ -191,7 +185,6 @@ def test_dedup_source_group_short_docs_deleted():
     assert "d2" in deleted
 
 
-
 def test_dedup_source_group_empty_doc_deleted():
     col = MagicMock()
     col.get.return_value = {
@@ -204,7 +197,6 @@ def test_dedup_source_group_empty_doc_deleted():
     }
     kept, deleted = dedup.dedup_source_group(col, ["d1", "d2"], threshold=0.15, dry_run=True)
     assert "d2" in deleted
-
 
 
 def test_dedup_source_group_live_deletes():
@@ -225,7 +217,6 @@ def test_dedup_source_group_live_deletes():
     col.delete.assert_called_once()
     assert kept == ["d1"]
     assert deleted == ["d2"]
-
 
 
 def test_dedup_source_group_query_failure_keeps():
@@ -261,7 +252,6 @@ def test_show_stats_uses_storage_factory(capsys):
     assert "src/auth.py" in out
 
 
-
 def test_dedup_palace_dry_run_keeps_records(capsys):
     factory = InMemoryStorageFactory()
     col = _seed_factory(factory)
@@ -273,7 +263,6 @@ def test_dedup_palace_dry_run_keeps_records(capsys):
     assert "DRY RUN" in out
 
 
-
 def test_dedup_palace_live_run_deletes_duplicates():
     factory = InMemoryStorageFactory()
     col = _seed_factory(factory)
@@ -281,7 +270,6 @@ def test_dedup_palace_live_run_deletes_duplicates():
     dedup.dedup_palace(dry_run=False, storage_factory=factory)
 
     assert col.count() < 5
-
 
 
 def test_dedup_palace_with_wing_filter_only_dedups_target_wing():

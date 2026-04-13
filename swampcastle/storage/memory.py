@@ -66,7 +66,8 @@ class InMemoryCollectionStore(CollectionStore):
             matches = [(id_, self._docs[id_]) for id_ in ids if id_ in self._docs]
         else:
             matches = [
-                (id_, rec) for id_, rec in self._docs.items()
+                (id_, rec)
+                for id_, rec in self._docs.items()
                 if _match_where(rec["metadata"], where)
             ]
 
@@ -132,37 +133,53 @@ class InMemoryGraphStore(GraphStore):
         eid = self._entity_id(name)
         if eid not in self._entities:
             self._entities[eid] = {
-                "id": eid, "name": name, "type": "unknown", "properties": {},
+                "id": eid,
+                "name": name,
+                "type": "unknown",
+                "properties": {},
             }
         return eid
 
     def add_entity(self, *, name, entity_type="unknown", properties=None):
         eid = self._entity_id(name)
         self._entities[eid] = {
-            "id": eid, "name": name, "type": entity_type,
+            "id": eid,
+            "name": name,
+            "type": entity_type,
             "properties": properties or {},
         }
         return eid
 
-    def add_triple(self, *, subject, predicate, obj, valid_from=None,
-                   valid_to=None, confidence=1.0, source_closet=None,
-                   source_file=None):
+    def add_triple(
+        self,
+        *,
+        subject,
+        predicate,
+        obj,
+        valid_from=None,
+        valid_to=None,
+        confidence=1.0,
+        source_closet=None,
+        source_file=None,
+    ):
         self._ensure_entity(subject)
         self._ensure_entity(obj)
         tid = uuid.uuid4().hex[:12]
-        self._triples.append({
-            "id": tid,
-            "subject": subject,
-            "subject_id": self._entity_id(subject),
-            "predicate": predicate,
-            "object": obj,
-            "object_id": self._entity_id(obj),
-            "valid_from": valid_from,
-            "valid_to": valid_to,
-            "confidence": confidence,
-            "source_closet": source_closet,
-            "source_file": source_file,
-        })
+        self._triples.append(
+            {
+                "id": tid,
+                "subject": subject,
+                "subject_id": self._entity_id(subject),
+                "predicate": predicate,
+                "object": obj,
+                "object_id": self._entity_id(obj),
+                "valid_from": valid_from,
+                "valid_to": valid_to,
+                "confidence": confidence,
+                "source_closet": source_closet,
+                "source_file": source_file,
+            }
+        )
         return tid
 
     def _is_valid_at(self, triple: dict, as_of: str) -> bool:
@@ -205,15 +222,18 @@ class InMemoryGraphStore(GraphStore):
         oid = self._entity_id(obj)
         ended = ended or str(date.today())
         for t in self._triples:
-            if (t["subject_id"] == sid and t["predicate"] == predicate
-                    and t["object_id"] == oid and t["valid_to"] is None):
+            if (
+                t["subject_id"] == sid
+                and t["predicate"] == predicate
+                and t["object_id"] == oid
+                and t["valid_to"] is None
+            ):
                 t["valid_to"] = ended
 
     def timeline(self, *, entity_name=None):
         if entity_name:
             eid = self._entity_id(entity_name)
-            triples = [t for t in self._triples
-                       if t["subject_id"] == eid or t["object_id"] == eid]
+            triples = [t for t in self._triples if t["subject_id"] == eid or t["object_id"] == eid]
         else:
             triples = list(self._triples)
         return sorted(triples, key=lambda t: t.get("valid_from") or "")

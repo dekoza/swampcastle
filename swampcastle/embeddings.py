@@ -46,8 +46,12 @@ _ONNX_SHA256 = "913d7300ceae3b2dbc2c50d1de4baacab4be7b9380491c27fab7418616a16ec3
 _ONNX_ARCHIVE = "onnx.tar.gz"
 _ONNX_SUBDIR = "onnx"
 _ONNX_REQUIRED_FILES = (
-    "config.json", "model.onnx", "special_tokens_map.json",
-    "tokenizer_config.json", "tokenizer.json", "vocab.txt",
+    "config.json",
+    "model.onnx",
+    "special_tokens_map.json",
+    "tokenizer_config.json",
+    "tokenizer.json",
+    "vocab.txt",
 )
 
 
@@ -55,10 +59,16 @@ def _onnx_model_dir() -> str:
     """Cache directory for the ONNX model files."""
     import os
     from pathlib import Path
-    return str(Path(os.environ.get(
-        "SWAMPCASTLE_ONNX_CACHE",
-        Path.home() / ".cache" / "swampcastle" / "onnx_models" / _ONNX_MODEL_NAME,
-    )) / _ONNX_SUBDIR)
+
+    return str(
+        Path(
+            os.environ.get(
+                "SWAMPCASTLE_ONNX_CACHE",
+                Path.home() / ".cache" / "swampcastle" / "onnx_models" / _ONNX_MODEL_NAME,
+            )
+        )
+        / _ONNX_SUBDIR
+    )
 
 
 def _ensure_onnx_model() -> str:
@@ -89,12 +99,12 @@ def _ensure_onnx_model() -> str:
         if not _verify_sha256(archive_path, _ONNX_SHA256):
             os.remove(archive_path)
             raise RuntimeError(
-                f"Downloaded ONNX model failed SHA256 verification. "
-                f"Delete {cache_root} and retry."
+                f"Downloaded ONNX model failed SHA256 verification. Delete {cache_root} and retry."
             )
 
     with tarfile.open(archive_path, "r:gz") as tar:
         import sys
+
         if sys.version_info >= (3, 12):
             tar.extractall(path=cache_root, filter="data")
         else:
@@ -105,6 +115,7 @@ def _ensure_onnx_model() -> str:
 
 def _verify_sha256(path: str, expected: str) -> bool:
     import hashlib
+
     h = hashlib.sha256()
     with open(path, "rb") as f:
         for block in iter(lambda: f.read(8192), b""):
@@ -156,6 +167,7 @@ class OnnxEmbedder:
             )
 
         import os
+
         model_dir = _ensure_onnx_model()
 
         so = ort.SessionOptions()
@@ -166,12 +178,12 @@ class OnnxEmbedder:
             sess_options=so,
         )
 
-        self._tokenizer = Tokenizer.from_file(
-            os.path.join(model_dir, "tokenizer.json")
-        )
+        self._tokenizer = Tokenizer.from_file(os.path.join(model_dir, "tokenizer.json"))
         self._tokenizer.enable_truncation(max_length=self.MAX_SEQ_LENGTH)
         self._tokenizer.enable_padding(
-            pad_id=0, pad_token="[PAD]", length=self.MAX_SEQ_LENGTH,
+            pad_id=0,
+            pad_token="[PAD]",
+            length=self.MAX_SEQ_LENGTH,
         )
         logger.info("Loaded ONNX embedder: %s (%dd)", _ONNX_MODEL_NAME, self.DIMENSION)
 
@@ -187,11 +199,14 @@ class OnnxEmbedder:
             attention_mask = np.array([e.attention_mask for e in encoded], dtype=np.int64)
             token_type_ids = np.zeros_like(input_ids, dtype=np.int64)
 
-            output = self._session.run(None, {
-                "input_ids": input_ids,
-                "attention_mask": attention_mask,
-                "token_type_ids": token_type_ids,
-            })
+            output = self._session.run(
+                None,
+                {
+                    "input_ids": input_ids,
+                    "attention_mask": attention_mask,
+                    "token_type_ids": token_type_ids,
+                },
+            )
 
             last_hidden = output[0]
             mask_expanded = np.broadcast_to(
@@ -199,7 +214,9 @@ class OnnxEmbedder:
                 last_hidden.shape,
             )
             embeddings = np.sum(last_hidden * mask_expanded, axis=1) / np.clip(
-                mask_expanded.sum(axis=1), a_min=1e-9, a_max=None,
+                mask_expanded.sum(axis=1),
+                a_min=1e-9,
+                a_max=None,
             )
             norms = np.linalg.norm(embeddings, axis=1, keepdims=True)
             norms[norms == 0] = 1e-12

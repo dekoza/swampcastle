@@ -21,12 +21,14 @@ class FakeFastAPI:
         def decorator(func):
             self.routes["GET"][path] = func
             return func
+
         return decorator
 
     def post(self, path):
         def decorator(func):
             self.routes["POST"][path] = func
             return func
+
         return decorator
 
 
@@ -101,7 +103,9 @@ def test_create_app_routes_use_engine(monkeypatch):
         _col=SimpleNamespace(count=lambda: 4),
         _identity=SimpleNamespace(node_id="node-1"),
         version_vector={"node-1": 2},
-        apply_changes=lambda cs: MergeResult(accepted=len(cs.records), rejected_conflicts=0, errors=[]),
+        apply_changes=lambda cs: MergeResult(
+            accepted=len(cs.records), rejected_conflicts=0, errors=[]
+        ),
         get_changes_since=lambda vv: remote_changes,
     )
     monkeypatch.setattr(server, "_get_engine", lambda: engine)

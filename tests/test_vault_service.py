@@ -26,16 +26,20 @@ def svc(col, wal):
 
 class TestAddDrawer:
     def test_roundtrip(self, svc, col):
-        r = svc.add_drawer(AddDrawerCommand(
-            wing="proj", room="arch", content="chose postgres",
-        ))
+        r = svc.add_drawer(
+            AddDrawerCommand(
+                wing="proj",
+                room="arch",
+                content="chose postgres",
+            )
+        )
         assert r.success is True
         assert r.drawer_id is not None
         assert col.count() == 1
 
     def test_idempotent(self, svc, col):
         cmd = AddDrawerCommand(wing="w", room="r", content="same content")
-        r1 = svc.add_drawer(cmd)
+        svc.add_drawer(cmd)
         r2 = svc.add_drawer(cmd)
         assert r2.success is True
         assert r2.reason == "already_exists"
@@ -74,9 +78,12 @@ class TestDeleteDrawer:
 
 class TestDiary:
     def test_write_and_read(self, svc):
-        svc.diary_write(DiaryWriteCommand(
-            agent_name="reviewer", entry="found bug in auth",
-        ))
+        svc.diary_write(
+            DiaryWriteCommand(
+                agent_name="reviewer",
+                entry="found bug in auth",
+            )
+        )
         resp = svc.diary_read(DiaryReadQuery(agent_name="reviewer"))
         assert len(resp.entries) == 1
         assert "found bug" in resp.entries[0].content
@@ -87,24 +94,34 @@ class TestDiary:
         assert resp.message is not None
 
     def test_diary_write_result(self, svc):
-        r = svc.diary_write(DiaryWriteCommand(
-            agent_name="ops", entry="deploy ok", topic="deploy",
-        ))
+        r = svc.diary_write(
+            DiaryWriteCommand(
+                agent_name="ops",
+                entry="deploy ok",
+                topic="deploy",
+            )
+        )
         assert r.success is True
         assert r.agent == "ops"
         assert r.topic == "deploy"
 
     def test_diary_respects_last_n(self, svc):
         for i in range(5):
-            svc.diary_write(DiaryWriteCommand(
-                agent_name="bot", entry=f"entry {i}",
-            ))
+            svc.diary_write(
+                DiaryWriteCommand(
+                    agent_name="bot",
+                    entry=f"entry {i}",
+                )
+            )
         resp = svc.diary_read(DiaryReadQuery(agent_name="bot", last_n=2))
         assert len(resp.entries) == 2
 
     def test_diary_wal_logged(self, svc, wal):
-        svc.diary_write(DiaryWriteCommand(
-            agent_name="test", entry="wal test",
-        ))
+        svc.diary_write(
+            DiaryWriteCommand(
+                agent_name="test",
+                entry="wal test",
+            )
+        )
         ops = [e["operation"] for e in wal.read_entries()]
         assert "diary_write" in ops

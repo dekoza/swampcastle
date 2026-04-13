@@ -27,9 +27,9 @@ class TestSurvey:
     def test_backend_flag_passed_to_settings(self):
         class DummyCastle:
             def __init__(self, settings, factory):
-                self.catalog = SimpleNamespace(status=lambda: SimpleNamespace(
-                    total_drawers=0, wings={}, rooms={}
-                ))
+                self.catalog = SimpleNamespace(
+                    status=lambda: SimpleNamespace(total_drawers=0, wings={}, rooms={})
+                )
 
             def __enter__(self):
                 return self
@@ -143,7 +143,9 @@ class TestNi:
 
 class TestHook:
     def test_dispatches(self):
-        with patch("sys.argv", ["swampcastle", "hook", "run", "--hook", "stop", "--harness", "claude-code"]):
+        with patch(
+            "sys.argv", ["swampcastle", "hook", "run", "--hook", "stop", "--harness", "claude-code"]
+        ):
             with patch("swampcastle.cli.commands.cmd_hook") as mock:
                 main()
                 mock.assert_called_once()

@@ -71,16 +71,27 @@ class SQLiteGraph(GraphStore):
             )
         return eid
 
-    def add_triple(self, *, subject, predicate, obj, valid_from=None,
-                   valid_to=None, confidence=1.0, source_closet=None,
-                   source_file=None):
+    def add_triple(
+        self,
+        *,
+        subject,
+        predicate,
+        obj,
+        valid_from=None,
+        valid_to=None,
+        confidence=1.0,
+        source_closet=None,
+        source_file=None,
+    ):
         sub_id = self._entity_id(subject)
         obj_id = self._entity_id(obj)
         pred = predicate.lower().replace(" ", "_")
 
         conn = self._get_conn()
         with conn:
-            conn.execute("INSERT OR IGNORE INTO entities (id, name) VALUES (?, ?)", (sub_id, subject))
+            conn.execute(
+                "INSERT OR IGNORE INTO entities (id, name) VALUES (?, ?)", (sub_id, subject)
+            )
             conn.execute("INSERT OR IGNORE INTO entities (id, name) VALUES (?, ?)", (obj_id, obj))
 
             existing = conn.execute(
@@ -97,8 +108,17 @@ class SQLiteGraph(GraphStore):
             conn.execute(
                 """INSERT INTO triples (id, subject, predicate, object, valid_from, valid_to,
                    confidence, source_closet, source_file) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)""",
-                (triple_id, sub_id, pred, obj_id, valid_from, valid_to,
-                 confidence, source_closet, source_file),
+                (
+                    triple_id,
+                    sub_id,
+                    pred,
+                    obj_id,
+                    valid_from,
+                    valid_to,
+                    confidence,
+                    source_closet,
+                    source_file,
+                ),
             )
         return triple_id
 
@@ -120,46 +140,58 @@ class SQLiteGraph(GraphStore):
         results = []
 
         if direction in ("outgoing", "both"):
-            query = ("SELECT t.*, e.name as obj_name FROM triples t "
-                     "JOIN entities e ON t.object = e.id WHERE t.subject = ?")
+            query = (
+                "SELECT t.*, e.name as obj_name FROM triples t "
+                "JOIN entities e ON t.object = e.id WHERE t.subject = ?"
+            )
             params: list[Any] = [eid]
             if as_of:
-                query += (" AND (t.valid_from IS NULL OR t.valid_from <= ?)"
-                          " AND (t.valid_to IS NULL OR t.valid_to >= ?)")
+                query += (
+                    " AND (t.valid_from IS NULL OR t.valid_from <= ?)"
+                    " AND (t.valid_to IS NULL OR t.valid_to >= ?)"
+                )
                 params.extend([as_of, as_of])
             for row in conn.execute(query, params).fetchall():
-                results.append({
-                    "direction": "outgoing",
-                    "subject": name,
-                    "predicate": row["predicate"],
-                    "object": row["obj_name"],
-                    "valid_from": row["valid_from"],
-                    "valid_to": row["valid_to"],
-                    "confidence": row["confidence"],
-                    "source_closet": row["source_closet"],
-                    "current": row["valid_to"] is None,
-                })
+                results.append(
+                    {
+                        "direction": "outgoing",
+                        "subject": name,
+                        "predicate": row["predicate"],
+                        "object": row["obj_name"],
+                        "valid_from": row["valid_from"],
+                        "valid_to": row["valid_to"],
+                        "confidence": row["confidence"],
+                        "source_closet": row["source_closet"],
+                        "current": row["valid_to"] is None,
+                    }
+                )
 
         if direction in ("incoming", "both"):
-            query = ("SELECT t.*, e.name as sub_name FROM triples t "
-                     "JOIN entities e ON t.subject = e.id WHERE t.object = ?")
+            query = (
+                "SELECT t.*, e.name as sub_name FROM triples t "
+                "JOIN entities e ON t.subject = e.id WHERE t.object = ?"
+            )
             params = [eid]
             if as_of:
-                query += (" AND (t.valid_from IS NULL OR t.valid_from <= ?)"
-                          " AND (t.valid_to IS NULL OR t.valid_to >= ?)")
+                query += (
+                    " AND (t.valid_from IS NULL OR t.valid_from <= ?)"
+                    " AND (t.valid_to IS NULL OR t.valid_to >= ?)"
+                )
                 params.extend([as_of, as_of])
             for row in conn.execute(query, params).fetchall():
-                results.append({
-                    "direction": "incoming",
-                    "subject": row["sub_name"],
-                    "predicate": row["predicate"],
-                    "object": name,
-                    "valid_from": row["valid_from"],
-                    "valid_to": row["valid_to"],
-                    "confidence": row["confidence"],
-                    "source_closet": row["source_closet"],
-                    "current": row["valid_to"] is None,
-                })
+                results.append(
+                    {
+                        "direction": "incoming",
+                        "subject": row["sub_name"],
+                        "predicate": row["predicate"],
+                        "object": name,
+                        "valid_from": row["valid_from"],
+                        "valid_to": row["valid_to"],
+                        "confidence": row["confidence"],
+                        "source_closet": row["source_closet"],
+                        "current": row["valid_to"] is None,
+                    }
+                )
 
         return results
 
@@ -173,14 +205,19 @@ class SQLiteGraph(GraphStore):
         )
         params: list[Any] = [pred]
         if as_of:
-            query += (" AND (t.valid_from IS NULL OR t.valid_from <= ?)"
-                      " AND (t.valid_to IS NULL OR t.valid_to >= ?)")
+            query += (
+                " AND (t.valid_from IS NULL OR t.valid_from <= ?)"
+                " AND (t.valid_to IS NULL OR t.valid_to >= ?)"
+            )
             params.extend([as_of, as_of])
         return [
             {
-                "subject": r["sub_name"], "predicate": pred,
-                "object": r["obj_name"], "valid_from": r["valid_from"],
-                "valid_to": r["valid_to"], "current": r["valid_to"] is None,
+                "subject": r["sub_name"],
+                "predicate": pred,
+                "object": r["obj_name"],
+                "valid_from": r["valid_from"],
+                "valid_to": r["valid_to"],
+                "current": r["valid_to"] is None,
             }
             for r in conn.execute(query, params).fetchall()
         ]
@@ -206,9 +243,12 @@ class SQLiteGraph(GraphStore):
             ).fetchall()
         return [
             {
-                "subject": r["sub_name"], "predicate": r["predicate"],
-                "object": r["obj_name"], "valid_from": r["valid_from"],
-                "valid_to": r["valid_to"], "current": r["valid_to"] is None,
+                "subject": r["sub_name"],
+                "predicate": r["predicate"],
+                "object": r["obj_name"],
+                "valid_from": r["valid_from"],
+                "valid_to": r["valid_to"],
+                "current": r["valid_to"] is None,
             }
             for r in rows
         ]

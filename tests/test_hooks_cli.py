@@ -113,7 +113,9 @@ def _capture_hook_output(hook_fn, data, harness="claude-code", state_dir=None):
     import io
 
     buf = io.StringIO()
-    patches = [patch("swampcastle.hooks_cli._output", side_effect=lambda d: buf.write(json.dumps(d)))]
+    patches = [
+        patch("swampcastle.hooks_cli._output", side_effect=lambda d: buf.write(json.dumps(d)))
+    ]
     if state_dir:
         patches.append(patch("swampcastle.hooks_cli.STATE_DIR", state_dir))
     with contextlib.ExitStack() as stack:

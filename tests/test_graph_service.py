@@ -42,21 +42,31 @@ class TestKGOperations:
     def test_invalidate(self, svc):
         svc.kg_add(subject="Kai", predicate="works_on", obj="Orion")
         svc.kg_invalidate(
-            subject="Kai", predicate="works_on", obj="Orion", ended="2026-03-01",
+            subject="Kai",
+            predicate="works_on",
+            obj="Orion",
+            ended="2026-03-01",
         )
         r = svc.kg_query(entity="Kai")
         assert r.facts[0]["valid_to"] == "2026-03-01"
 
     def test_temporal_query(self, svc):
         svc.kg_add(
-            subject="Kai", predicate="works_on", obj="Orion",
+            subject="Kai",
+            predicate="works_on",
+            obj="Orion",
             valid_from="2025-01-01",
         )
         svc.kg_invalidate(
-            subject="Kai", predicate="works_on", obj="Orion", ended="2025-12-31",
+            subject="Kai",
+            predicate="works_on",
+            obj="Orion",
+            ended="2025-12-31",
         )
         svc.kg_add(
-            subject="Kai", predicate="works_on", obj="Nova",
+            subject="Kai",
+            predicate="works_on",
+            obj="Nova",
             valid_from="2026-01-01",
         )
 
@@ -94,13 +104,21 @@ class TestGraphTraversal:
     def populated(self, col, svc):
         vault = VaultService(col, WalWriter(svc._wal._dir))
         for wing, room in [
-            ("proj", "auth"), ("proj", "billing"), ("proj", "deploy"),
-            ("personal", "auth"), ("personal", "journal"),
-            ("infra", "deploy"), ("infra", "monitoring"),
+            ("proj", "auth"),
+            ("proj", "billing"),
+            ("proj", "deploy"),
+            ("personal", "auth"),
+            ("personal", "journal"),
+            ("infra", "deploy"),
+            ("infra", "monitoring"),
         ]:
-            vault.add_drawer(AddDrawerCommand(
-                wing=wing, room=room, content=f"{wing}/{room} content",
-            ))
+            vault.add_drawer(
+                AddDrawerCommand(
+                    wing=wing,
+                    room=room,
+                    content=f"{wing}/{room} content",
+                )
+            )
         return svc
 
     def test_traverse_from_room(self, populated):

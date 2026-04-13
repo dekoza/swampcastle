@@ -6,7 +6,6 @@ from datetime import datetime
 
 from pydantic import BaseModel, Field
 
-from swampcastle.errors import NoCastleError, ValidationError
 from swampcastle.models.diary import (
     DiaryEntry,
     DiaryResponse,
@@ -38,48 +37,62 @@ class VaultService:
     def add_drawer(self, cmd: AddDrawerCommand) -> DrawerResult:
         drawer_id = cmd.drawer_id()
 
-        self._wal.log("add_drawer", {
-            "drawer_id": drawer_id,
-            "wing": cmd.wing,
-            "room": cmd.room,
-            "added_by": cmd.added_by,
-            "content_length": len(cmd.content),
-        })
+        self._wal.log(
+            "add_drawer",
+            {
+                "drawer_id": drawer_id,
+                "wing": cmd.wing,
+                "room": cmd.room,
+                "added_by": cmd.added_by,
+                "content_length": len(cmd.content),
+            },
+        )
 
         existing = self._col.get(ids=[drawer_id])
         if existing and existing["ids"]:
             return DrawerResult(
-                success=True, reason="already_exists", drawer_id=drawer_id,
+                success=True,
+                reason="already_exists",
+                drawer_id=drawer_id,
             )
 
         self._col.upsert(
             ids=[drawer_id],
             documents=[cmd.content],
-            metadatas=[{
-                "wing": cmd.wing,
-                "room": cmd.room,
-                "source_file": cmd.source_file or "",
-                "chunk_index": 0,
-                "added_by": cmd.added_by,
-                "filed_at": datetime.now().isoformat(),
-            }],
+            metadatas=[
+                {
+                    "wing": cmd.wing,
+                    "room": cmd.room,
+                    "source_file": cmd.source_file or "",
+                    "chunk_index": 0,
+                    "added_by": cmd.added_by,
+                    "filed_at": datetime.now().isoformat(),
+                }
+            ],
         )
         return DrawerResult(
-            success=True, drawer_id=drawer_id, wing=cmd.wing, room=cmd.room,
+            success=True,
+            drawer_id=drawer_id,
+            wing=cmd.wing,
+            room=cmd.room,
         )
 
     def delete_drawer(self, cmd: DeleteDrawerCommand) -> DeleteDrawerResult:
         existing = self._col.get(ids=[cmd.drawer_id])
         if not existing["ids"]:
             return DeleteDrawerResult(
-                success=False, drawer_id=cmd.drawer_id,
+                success=False,
+                drawer_id=cmd.drawer_id,
                 error=f"Drawer not found: {cmd.drawer_id}",
             )
 
-        self._wal.log("delete_drawer", {
-            "drawer_id": cmd.drawer_id,
-            "content_preview": existing.get("documents", [""])[0][:200],
-        })
+        self._wal.log(
+            "delete_drawer",
+            {
+                "drawer_id": cmd.drawer_id,
+                "content_preview": existing.get("documents", [""])[0][:200],
+            },
+        )
 
         self._col.delete(ids=[cmd.drawer_id])
         return DeleteDrawerResult(success=True, drawer_id=cmd.drawer_id)
@@ -92,29 +105,37 @@ class VaultService:
             f"{hashlib.sha256(cmd.entry[:50].encode()).hexdigest()[:12]}"
         )
 
-        self._wal.log("diary_write", {
-            "agent_name": cmd.agent_name,
-            "topic": cmd.topic,
-            "entry_id": entry_id,
-        })
+        self._wal.log(
+            "diary_write",
+            {
+                "agent_name": cmd.agent_name,
+                "topic": cmd.topic,
+                "entry_id": entry_id,
+            },
+        )
 
         self._col.add(
             ids=[entry_id],
             documents=[cmd.entry],
-            metadatas=[{
-                "wing": wing,
-                "room": "diary",
-                "hall": "hall_diary",
-                "topic": cmd.topic,
-                "type": "diary_entry",
-                "agent": cmd.agent_name,
-                "filed_at": now.isoformat(),
-                "date": now.strftime("%Y-%m-%d"),
-            }],
+            metadatas=[
+                {
+                    "wing": wing,
+                    "room": "diary",
+                    "hall": "hall_diary",
+                    "topic": cmd.topic,
+                    "type": "diary_entry",
+                    "agent": cmd.agent_name,
+                    "filed_at": now.isoformat(),
+                    "date": now.strftime("%Y-%m-%d"),
+                }
+            ],
         )
         return DiaryWriteResult(
-            success=True, entry_id=entry_id, agent=cmd.agent_name,
-            topic=cmd.topic, timestamp=now.isoformat(),
+            success=True,
+            entry_id=entry_id,
+            agent=cmd.agent_name,
+            topic=cmd.topic,
+            timestamp=now.isoformat(),
         )
 
     def diary_read(self, query: DiaryReadQuery) -> DiaryResponse:
@@ -128,23 +149,26 @@ class VaultService:
 
         if not results["ids"]:
             return DiaryResponse(
-                agent=query.agent_name, entries=[],
+                agent=query.agent_name,
+                entries=[],
                 message="No diary entries yet.",
             )
 
         entries = []
         for doc, meta in zip(results["documents"], results["metadatas"]):
-            entries.append(DiaryEntry(
-                date=meta.get("date", ""),
-                timestamp=meta.get("filed_at", ""),
-                topic=meta.get("topic", ""),
-                content=doc,
-            ))
+            entries.append(
+                DiaryEntry(
+                    date=meta.get("date", ""),
+                    timestamp=meta.get("filed_at", ""),
+                    topic=meta.get("topic", ""),
+                    content=doc,
+                )
+            )
 
         entries.sort(key=lambda x: x.timestamp, reverse=True)
         return DiaryResponse(
             agent=query.agent_name,
-            entries=entries[:query.last_n],
+            entries=entries[: query.last_n],
         )
 
     def distill(

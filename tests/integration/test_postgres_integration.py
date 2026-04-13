@@ -186,7 +186,9 @@ def test_upsert_idempotent_and_estimated_count(factory, database_url):
 @pytest.mark.postgres
 def test_dimension_mismatch_is_rejected(database_url):
     collection_name = _unique_collection_name()
-    factory_3d = PostgresStorageFactory(database_url, embedder=FakeEmbedder3D(), min_size=1, max_size=2)
+    factory_3d = PostgresStorageFactory(
+        database_url, embedder=FakeEmbedder3D(), min_size=1, max_size=2
+    )
     try:
         collection = factory_3d.open_collection(collection_name)
         collection.upsert(
@@ -197,7 +199,9 @@ def test_dimension_mismatch_is_rejected(database_url):
     finally:
         factory_3d.close()
 
-    factory_4d = PostgresStorageFactory(database_url, embedder=FakeEmbedder4D(), min_size=1, max_size=2)
+    factory_4d = PostgresStorageFactory(
+        database_url, embedder=FakeEmbedder4D(), min_size=1, max_size=2
+    )
     try:
         with pytest.raises(RuntimeError, match="dimension mismatch"):
             factory_4d.open_collection(collection_name).count()

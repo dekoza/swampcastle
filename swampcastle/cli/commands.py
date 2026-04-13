@@ -22,6 +22,7 @@ def _settings(args) -> CastleSettings:
 
 def cmd_survey(args):
     from swampcastle.castle import Castle
+
     settings = _settings(args)
     with Castle(settings, factory_from_settings(settings)) as castle:
         s = castle.catalog.status()
@@ -35,11 +36,17 @@ def cmd_survey(args):
 def cmd_seek(args):
     from swampcastle.castle import Castle
     from swampcastle.models import SearchQuery
+
     settings = _settings(args)
     with Castle(settings, factory_from_settings(settings)) as castle:
-        result = castle.search.search(SearchQuery(
-            query=args.query, wing=args.wing, room=args.room, limit=args.results,
-        ))
+        result = castle.search.search(
+            SearchQuery(
+                query=args.query,
+                wing=args.wing,
+                room=args.room,
+                limit=args.results,
+            )
+        )
         if not result.results:
             print("  No results found.")
             return
@@ -57,7 +64,6 @@ def cmd_build(args):
         print(f"  Error: {project_dir} is not a directory")
         sys.exit(1)
 
-    settings = _settings(args)
     rooms = detect_rooms_from_folders(project_dir, auto_accept=args.yes)
     print(f"  Detected {len(rooms)} rooms in {project_dir}")
 
@@ -66,8 +72,10 @@ def cmd_build(args):
         entities = detect_entities(candidates)
         if not args.yes:
             entities = confirm_entities(entities)
-        print(f"  Detected {len(entities.get('people', []))} people, "
-              f"{len(entities.get('projects', []))} projects")
+        print(
+            f"  Detected {len(entities.get('people', []))} people, "
+            f"{len(entities.get('projects', []))} projects"
+        )
 
 
 def cmd_gather(args):
@@ -80,20 +88,29 @@ def cmd_gather(args):
 
     if args.mode == "convos":
         from swampcastle.mining.convo import mine_convos
+
         mine_convos(
-            project_dir, palace_path,
-            wing=args.wing, agent=args.agent,
-            dry_run=args.dry_run, extract_mode=args.extract,
-            limit=args.limit, storage_factory=storage_factory,
+            project_dir,
+            palace_path,
+            wing=args.wing,
+            agent=args.agent,
+            dry_run=args.dry_run,
+            extract_mode=args.extract,
+            limit=args.limit,
+            storage_factory=storage_factory,
         )
     else:
         from swampcastle.mining.miner import mine
+
         mine(
-            project_dir, palace_path,
-            wing=args.wing, agent=args.agent,
+            project_dir,
+            palace_path,
+            wing=args.wing,
+            agent=args.agent,
             respect_gitignore=not args.no_gitignore,
             include_ignored=args.include_ignored,
-            dry_run=args.dry_run, limit=args.limit,
+            dry_run=args.dry_run,
+            limit=args.limit,
             storage_factory=storage_factory,
         )
 
@@ -101,6 +118,7 @@ def cmd_gather(args):
 def cmd_herald(args):
     """Wake-up context (L0+L1)."""
     from swampcastle.castle import Castle
+
     settings = _settings(args)
     with Castle(settings, factory_from_settings(settings)) as castle:
         s = castle.catalog.status()
@@ -112,6 +130,7 @@ def cmd_herald(args):
 
 def cmd_cleave(args):
     from swampcastle.split_mega_files import main as split_main
+
     sys.argv = ["swampcastle", args.dir]
     if args.output_dir:
         sys.argv.extend(["--output-dir", args.output_dir])
@@ -125,6 +144,7 @@ def cmd_cleave(args):
 def cmd_distill(args):
     from swampcastle.castle import Castle
     from swampcastle.storage import factory_from_settings
+
     settings = _settings(args)
 
     config_path = getattr(args, "config", None)
@@ -166,6 +186,7 @@ def cmd_drawbridge_run(args):
     if palace:
         os.environ["SWAMPCASTLE_CASTLE_PATH"] = str(Path(palace).expanduser().resolve())
     from swampcastle.mcp.server import main as mcp_main
+
     mcp_main()
 
 
@@ -195,6 +216,7 @@ def cmd_raise(args):
 def cmd_reforge(args):
     from swampcastle.castle import Castle
     from swampcastle.storage import factory_from_settings
+
     settings = _settings(args)
 
     # Override embedder settings if specified
@@ -224,6 +246,7 @@ def cmd_reforge(args):
 
 def cmd_armory(args):
     from swampcastle.embeddings import list_embedders
+
     models = list_embedders()
     print("  Available embedding models:")
     for name, info in models.items():
@@ -238,6 +261,7 @@ def cmd_garrison(args):
         sys.exit(1)
 
     from swampcastle.sync_server import create_app
+
     settings = _settings(args)
     os.environ["SWAMPCASTLE_CASTLE_PATH"] = str(settings.castle_path)
     app = create_app()
@@ -261,8 +285,10 @@ def cmd_parley(args):
             print("  DRY RUN — no changes.")
             return
         result = client.sync(engine)
-        print(f"  Done. Pushed: {result.get('push', {}).get('sent', 0)}, "
-              f"Pulled: {result.get('pull', {}).get('received', 0)}")
+        print(
+            f"  Done. Pushed: {result.get('push', {}).get('sent', 0)}, "
+            f"Pulled: {result.get('pull', {}).get('received', 0)}"
+        )
 
 
 def cmd_ni(args):

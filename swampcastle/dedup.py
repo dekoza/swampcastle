@@ -185,8 +185,7 @@ def dedup_palace(
     print(f"\n{'─' * 55}")
     print(f"  Done in {elapsed:.1f}s")
     print(
-        f"  Drawers: {total_kept + total_deleted:,} → {total_kept:,}  "
-        f"(-{total_deleted:,} removed)"
+        f"  Drawers: {total_kept + total_deleted:,} → {total_kept:,}  (-{total_deleted:,} removed)"
     )
     print(f"  Castle after: {col.count():,} drawers")
     if dry_run:

@@ -100,8 +100,11 @@ class TestAddTripleCommand:
 
     def test_optional_fields(self):
         cmd = AddTripleCommand(
-            subject="A", predicate="rel", object="B",
-            valid_from="2025-01-01", source_closet="c1",
+            subject="A",
+            predicate="rel",
+            object="B",
+            valid_from="2025-01-01",
+            source_closet="c1",
         )
         assert cmd.valid_from == "2025-01-01"
 
@@ -153,8 +156,12 @@ class TestSerialization:
 
     def test_status_response_roundtrip(self):
         resp = StatusResponse(
-            total_drawers=42, wings={"w": 42}, rooms={"r": 42},
-            castle_path="/tmp", protocol="proto", aaak_dialect="aaak",
+            total_drawers=42,
+            wings={"w": 42},
+            rooms={"r": 42},
+            castle_path="/tmp",
+            protocol="proto",
+            aaak_dialect="aaak",
         )
         data = resp.model_dump()
         restored = StatusResponse(**data)

@@ -49,10 +49,12 @@ def resolve_source_palace(source_palace: str | None = None) -> Path:
         candidates.append(Path(source_palace).expanduser())
     else:
         home = Path.home()
-        candidates.extend([
-            home / ".mempalace" / "palace",
-            home / ".swampcastle" / "palace",
-        ])
+        candidates.extend(
+            [
+                home / ".mempalace" / "palace",
+                home / ".swampcastle" / "palace",
+            ]
+        )
 
     for palace_dir in candidates:
         db_path = palace_dir / "chroma.sqlite3"

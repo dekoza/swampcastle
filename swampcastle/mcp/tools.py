@@ -6,7 +6,6 @@ from typing import Any, Callable
 from pydantic import BaseModel
 
 from swampcastle.castle import Castle
-from swampcastle.models.catalog import StatusResponse
 from swampcastle.models.diary import DiaryWriteCommand
 from swampcastle.models.drawer import (
     AddDrawerCommand,
@@ -88,22 +87,29 @@ def register_tools(castle: Castle) -> dict[str, ToolDef]:
             description="Query entity relationships with optional time filtering.",
             input_model=KGQueryParams,
             handler=lambda p: castle.graph.kg_query(
-                entity=p.entity, as_of=p.as_of, direction=p.direction,
+                entity=p.entity,
+                as_of=p.as_of,
+                direction=p.direction,
             ),
         ),
         "swampcastle_kg_add": ToolDef(
             description="Add a fact to the knowledge graph.",
             input_model=AddTripleCommand,
             handler=lambda cmd: castle.graph.kg_add(
-                subject=cmd.subject, predicate=cmd.predicate, obj=cmd.object,
-                valid_from=cmd.valid_from, source_closet=cmd.source_closet,
+                subject=cmd.subject,
+                predicate=cmd.predicate,
+                obj=cmd.object,
+                valid_from=cmd.valid_from,
+                source_closet=cmd.source_closet,
             ),
         ),
         "swampcastle_kg_invalidate": ToolDef(
             description="Mark a fact as no longer true.",
             input_model=InvalidateCommand,
             handler=lambda cmd: castle.graph.kg_invalidate(
-                subject=cmd.subject, predicate=cmd.predicate, obj=cmd.object,
+                subject=cmd.subject,
+                predicate=cmd.predicate,
+                obj=cmd.object,
                 ended=cmd.ended,
             ),
         ),

@@ -21,24 +21,26 @@ class TestSQLiteGraph:
         assert tid
 
     def test_query_entity(self, graph):
-        graph.add_triple(subject="Kai", predicate="works_on", obj="Orion",
-                         valid_from="2025-06-01")
+        graph.add_triple(subject="Kai", predicate="works_on", obj="Orion", valid_from="2025-06-01")
         r = graph.query_entity(name="Kai")
         assert len(r) == 1
         assert r[0]["predicate"] == "works_on"
 
     def test_invalidate(self, graph):
         graph.add_triple(subject="Kai", predicate="works_on", obj="Orion")
-        graph.invalidate(subject="Kai", predicate="works_on", obj="Orion",
-                         ended="2026-03-01")
+        graph.invalidate(subject="Kai", predicate="works_on", obj="Orion", ended="2026-03-01")
         r = graph.query_entity(name="Kai")
         assert r[0]["valid_to"] == "2026-03-01"
 
     def test_temporal_as_of(self, graph):
-        graph.add_triple(subject="Kai", predicate="works_on", obj="Orion",
-                         valid_from="2025-01-01", valid_to="2025-12-31")
-        graph.add_triple(subject="Kai", predicate="works_on", obj="Nova",
-                         valid_from="2026-01-01")
+        graph.add_triple(
+            subject="Kai",
+            predicate="works_on",
+            obj="Orion",
+            valid_from="2025-01-01",
+            valid_to="2025-12-31",
+        )
+        graph.add_triple(subject="Kai", predicate="works_on", obj="Nova", valid_from="2026-01-01")
         mid_2025 = graph.query_entity(name="Kai", as_of="2025-06-15")
         assert len(mid_2025) == 1
         assert mid_2025[0]["object"] == "Orion"

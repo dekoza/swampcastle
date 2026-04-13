@@ -18,11 +18,13 @@ def castle(tmp_path):
         _env_file=None,
         castle_path=tmp_path / "castle",
     )
-    
+
     with Castle(settings, factory) as c:
         # Add some initial data
         c.vault.add_drawer(AddDrawerCommand(wing="test", room="r1", content="First drawer content"))
-        c.vault.add_drawer(AddDrawerCommand(wing="test", room="r1", content="Second drawer with different words"))
+        c.vault.add_drawer(
+            AddDrawerCommand(wing="test", room="r1", content="Second drawer with different words")
+        )
         yield c
 
 
@@ -62,7 +64,7 @@ def test_distill_does_not_mutate_input_metadata(castle):
 def test_reforge_recomputes_embeddings(castle):
     """Reforge should re-embed all drawers using the current embedder."""
     # 1. Reforge
-    # In memory factory uses a simple store that doesn't compute real 
+    # In memory factory uses a simple store that doesn't compute real
     # embeddings, but we verify it completes and returns the correct count.
     count = castle.vault.reforge()
     assert count == 2

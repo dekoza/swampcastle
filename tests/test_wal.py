@@ -23,7 +23,9 @@ class TestWalWriter:
         entries = wal.read_entries()
         assert len(entries) == 3
         assert [e["operation"] for e in entries] == [
-            "add_drawer", "delete_drawer", "kg_add",
+            "add_drawer",
+            "delete_drawer",
+            "kg_add",
         ]
 
     def test_result_field(self, tmp_path):
@@ -38,7 +40,7 @@ class TestWalWriter:
 
     def test_creates_directory(self, tmp_path):
         wal_dir = tmp_path / "nested" / "wal"
-        wal = WalWriter(wal_dir)
+        WalWriter(wal_dir)
         assert wal_dir.exists()
 
     def test_jsonl_format(self, tmp_path):
@@ -46,7 +48,7 @@ class TestWalWriter:
         wal.log("op1", {"k": "v1"})
         wal.log("op2", {"k": "v2"})
         raw = (tmp_path / "wal" / "write_log.jsonl").read_text()
-        lines = [l for l in raw.strip().split("\n") if l]
+        lines = [entry for entry in raw.strip().split("\n") if entry]
         assert len(lines) == 2
         for line in lines:
             json.loads(line)
@@ -54,6 +56,7 @@ class TestWalWriter:
     def test_file_permissions(self, tmp_path):
         import os
         import stat
+
         wal = WalWriter(tmp_path / "wal")
         wal.log("test", {})
         wal_file = tmp_path / "wal" / "write_log.jsonl"

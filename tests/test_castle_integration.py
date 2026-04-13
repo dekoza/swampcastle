@@ -19,7 +19,9 @@ class TestCastleIntegration:
 
     def test_add_and_search(self, castle):
         castle.vault.add_drawer(
-            AddDrawerCommand(wing="proj", room="arch", content="chose postgres for horizontal scaling")
+            AddDrawerCommand(
+                wing="proj", room="arch", content="chose postgres for horizontal scaling"
+            )
         )
         r = castle.search.search(SearchQuery(query="postgres scaling"))
         assert len(r.results) > 0
@@ -42,9 +44,13 @@ class TestCastleIntegration:
     def test_diary_roundtrip(self, castle):
         from swampcastle.models.diary import DiaryWriteCommand
         from swampcastle.services.vault import DiaryReadQuery
-        castle.vault.diary_write(DiaryWriteCommand(
-            agent_name="reviewer", entry="found auth bypass",
-        ))
+
+        castle.vault.diary_write(
+            DiaryWriteCommand(
+                agent_name="reviewer",
+                entry="found auth bypass",
+            )
+        )
         resp = castle.vault.diary_read(DiaryReadQuery(agent_name="reviewer"))
         assert len(resp.entries) == 1
 

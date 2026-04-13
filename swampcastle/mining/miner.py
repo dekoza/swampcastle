@@ -19,10 +19,29 @@ from ..settings import CastleSettings
 from ..storage import StorageFactory, factory_from_settings
 
 SKIP_DIRS = {
-    ".git", "node_modules", "__pycache__", ".venv", "venv", "env",
-    "dist", "build", ".next", "coverage", ".swampcastle", ".ruff_cache",
-    ".mypy_cache", ".pytest_cache", ".cache", ".tox", ".nox", ".idea",
-    ".vscode", ".ipynb_checkpoints", ".eggs", "htmlcov", "target",
+    ".git",
+    "node_modules",
+    "__pycache__",
+    ".venv",
+    "venv",
+    "env",
+    "dist",
+    "build",
+    ".next",
+    "coverage",
+    ".swampcastle",
+    ".ruff_cache",
+    ".mypy_cache",
+    ".pytest_cache",
+    ".cache",
+    ".tox",
+    ".nox",
+    ".idea",
+    ".vscode",
+    ".ipynb_checkpoints",
+    ".eggs",
+    "htmlcov",
+    "target",
 }
 
 
@@ -37,6 +56,7 @@ def _file_already_mined(collection, source_file: str, check_mtime: bool = False)
             if stored_mtime is None:
                 return False
             import os
+
             current_mtime = os.path.getmtime(source_file)
             return abs(float(stored_mtime) - current_mtime) < 0.001
         return True

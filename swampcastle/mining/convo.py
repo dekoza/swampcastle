@@ -20,8 +20,17 @@ from ..settings import CastleSettings
 from ..storage import StorageFactory, factory_from_settings
 
 SKIP_DIRS = {
-    ".git", "node_modules", "__pycache__", ".venv", "venv", "env",
-    "dist", "build", ".next", "coverage", ".swampcastle",
+    ".git",
+    "node_modules",
+    "__pycache__",
+    ".venv",
+    "venv",
+    "env",
+    "dist",
+    "build",
+    ".next",
+    "coverage",
+    ".swampcastle",
 }
 
 

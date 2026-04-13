@@ -35,11 +35,14 @@ def create_handler(castle: Castle):
                 version = client_version
             else:
                 version = SUPPORTED_PROTOCOL_VERSIONS[0]
-            return _result(req_id, {
-                "protocolVersion": version,
-                "capabilities": {"tools": {"listChanged": False}},
-                "serverInfo": {"name": "swampcastle", "version": __version__},
-            })
+            return _result(
+                req_id,
+                {
+                    "protocolVersion": version,
+                    "capabilities": {"tools": {"listChanged": False}},
+                    "serverInfo": {"name": "swampcastle", "version": __version__},
+                },
+            )
 
         if method == "notifications/initialized":
             return None
@@ -50,11 +53,13 @@ def create_handler(castle: Castle):
         if method == "tools/list":
             tool_list = []
             for name, tool in tools.items():
-                tool_list.append({
-                    "name": name,
-                    "description": tool.description,
-                    "inputSchema": tool.input_schema,
-                })
+                tool_list.append(
+                    {
+                        "name": name,
+                        "description": tool.description,
+                        "inputSchema": tool.input_schema,
+                    }
+                )
             return _result(req_id, {"tools": tool_list})
 
         if method == "tools/call":
@@ -88,16 +93,22 @@ def _call_tool(req_id, tools: dict[str, ToolDef], name: str, args: dict) -> dict
         else:
             text = json.dumps(result, default=str)
 
-        return _result(req_id, {
-            "content": [{"type": "text", "text": text}],
-        })
+        return _result(
+            req_id,
+            {
+                "content": [{"type": "text", "text": text}],
+            },
+        )
 
     except CastleError as e:
         error_body = json.dumps({"error": str(e), "code": e.code})
-        return _result(req_id, {
-            "content": [{"type": "text", "text": error_body}],
-            "isError": True,
-        })
+        return _result(
+            req_id,
+            {
+                "content": [{"type": "text", "text": error_body}],
+                "isError": True,
+            },
+        )
     except Exception:
         logger.exception("Tool error in %s", name)
         return _error(req_id, -32603, f"Internal error in tool {name}")

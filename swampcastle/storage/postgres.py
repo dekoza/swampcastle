@@ -426,7 +426,11 @@ class PostgresCollectionStore(CollectionStore):
         if not query_texts:
             return {"ids": [[]], "documents": [[]], "metadatas": [[]], "distances": [[]]}
 
-        query_vector = Vector(self._embedder.embed(query_texts[:1])[0]) if Vector is not None else query_texts[0]
+        query_vector = (
+            Vector(self._embedder.embed(query_texts[:1])[0])
+            if Vector is not None
+            else query_texts[0]
+        )
         clauses = ["embedding IS NOT NULL"]
         params: list[Any] = [query_vector]
         if where:
@@ -508,7 +512,9 @@ class PostgresCollectionStore(CollectionStore):
         self._ensure_schema()
         with self._pool.connection() as conn:
             with conn.cursor() as cur:
-                cur.execute("SELECT reltuples::bigint FROM pg_class WHERE relname = %s", (self._table_name,))
+                cur.execute(
+                    "SELECT reltuples::bigint FROM pg_class WHERE relname = %s", (self._table_name,)
+                )
                 row = cur.fetchone()
         return int(_row_value(row, "reltuples", 0) if row is not None else 0)
 
@@ -554,7 +560,9 @@ class PostgresGraphStore(GraphStore):
                 )
                 cur.execute("CREATE INDEX IF NOT EXISTS idx_triples_subject ON kg_triples(subject)")
                 cur.execute("CREATE INDEX IF NOT EXISTS idx_triples_object ON kg_triples(object)")
-                cur.execute("CREATE INDEX IF NOT EXISTS idx_triples_predicate ON kg_triples(predicate)")
+                cur.execute(
+                    "CREATE INDEX IF NOT EXISTS idx_triples_predicate ON kg_triples(predicate)"
+                )
                 cur.execute(
                     "CREATE INDEX IF NOT EXISTS idx_triples_validity "
                     "ON kg_triples(valid_from, valid_to)"

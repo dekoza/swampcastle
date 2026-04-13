@@ -34,11 +34,15 @@ class TestFactoryRouter:
             factory_from_settings(settings)
 
     def test_postgres_backend_without_database_url_raises_value_error(self, tmp_path):
-        settings = CastleSettings(castle_path=tmp_path / "castle", backend="postgres", _env_file=None)
+        settings = CastleSettings(
+            castle_path=tmp_path / "castle", backend="postgres", _env_file=None
+        )
         with pytest.raises(ValueError, match="SWAMPCASTLE_DATABASE_URL"):
             factory_from_settings(settings)
 
-    def test_postgres_backend_missing_dependency_raises_helpful_import_error(self, tmp_path, monkeypatch):
+    def test_postgres_backend_missing_dependency_raises_helpful_import_error(
+        self, tmp_path, monkeypatch
+    ):
         settings = CastleSettings(
             castle_path=tmp_path / "castle",
             backend="postgres",

@@ -48,23 +48,21 @@ class TestCastleRoundtrip:
         castle.vault.add_drawer(
             AddDrawerCommand(wing="test", room="arch", content="chose postgres for scaling")
         )
-        result = castle.search.search(
-            SearchQuery(query="postgres scaling")
-        )
+        result = castle.search.search(SearchQuery(query="postgres scaling"))
         assert len(result.results) > 0
         assert "postgres" in result.results[0].text.lower()
 
     def test_add_then_status(self, castle):
-        castle.vault.add_drawer(
-            AddDrawerCommand(wing="proj", room="auth", content="jwt decision")
-        )
+        castle.vault.add_drawer(AddDrawerCommand(wing="proj", room="auth", content="jwt decision"))
         status = castle.catalog.status()
         assert status.total_drawers == 1
         assert "proj" in status.wings
 
     def test_kg_roundtrip(self, castle):
         castle.graph.kg_add(
-            subject="Kai", predicate="works_on", obj="Orion",
+            subject="Kai",
+            predicate="works_on",
+            obj="Orion",
         )
         result = castle.graph.kg_query(entity="Kai")
         assert result.count == 1

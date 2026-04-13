@@ -2,7 +2,6 @@
 
 import io
 import json
-from types import SimpleNamespace
 
 import pytest
 
@@ -22,6 +21,7 @@ def castle(tmp_path):
 @pytest.fixture
 def tools(castle):
     from swampcastle.mcp.tools import register_tools
+
     return register_tools(castle)
 
 
@@ -53,9 +53,7 @@ class TestToolDispatch:
         assert result.total_drawers == 0
 
     def test_search_empty(self, tools):
-        result = tools["swampcastle_search"].handler(
-            SearchQuery(query="anything")
-        )
+        result = tools["swampcastle_search"].handler(SearchQuery(query="anything"))
         assert result.results == []
 
     def test_add_then_search(self, tools):
@@ -64,19 +62,16 @@ class TestToolDispatch:
         )
         assert add_result.success
 
-        search_result = tools["swampcastle_search"].handler(
-            SearchQuery(query="postgres")
-        )
+        search_result = tools["swampcastle_search"].handler(SearchQuery(query="postgres"))
         assert len(search_result.results) > 0
 
     def test_kg_add_then_query(self, tools):
         from swampcastle.models import AddTripleCommand, KGQueryParams
+
         tools["swampcastle_kg_add"].handler(
             AddTripleCommand(subject="Kai", predicate="works_on", object="Orion")
         )
-        result = tools["swampcastle_kg_query"].handler(
-            KGQueryParams(entity="Kai")
-        )
+        result = tools["swampcastle_kg_query"].handler(KGQueryParams(entity="Kai"))
         assert result.count == 1
 
     def test_aaak_spec(self, tools):
@@ -117,18 +112,29 @@ class TestJsonRpcHandler:
     @pytest.fixture
     def handler(self, castle):
         from swampcastle.mcp.server import create_handler
+
         return create_handler(castle)
 
     def test_initialize(self, handler):
-        req = {"jsonrpc": "2.0", "id": 1, "method": "initialize",
-               "params": {"protocolVersion": "2024-11-05"}}
+        req = {
+            "jsonrpc": "2.0",
+            "id": 1,
+            "method": "initialize",
+            "params": {"protocolVersion": "2024-11-05"},
+        }
         resp = handler(req)
         assert resp["result"]["protocolVersion"]
         assert resp["result"]["serverInfo"]["name"] == "swampcastle"
 
     def test_tools_list(self, handler):
-        handler({"jsonrpc": "2.0", "id": 1, "method": "initialize",
-                 "params": {"protocolVersion": "2024-11-05"}})
+        handler(
+            {
+                "jsonrpc": "2.0",
+                "id": 1,
+                "method": "initialize",
+                "params": {"protocolVersion": "2024-11-05"},
+            }
+        )
         req = {"jsonrpc": "2.0", "id": 2, "method": "tools/list"}
         resp = handler(req)
         tool_names = [t["name"] for t in resp["result"]["tools"]]
@@ -136,19 +142,39 @@ class TestJsonRpcHandler:
         assert len(tool_names) == 19
 
     def test_tool_call(self, handler):
-        handler({"jsonrpc": "2.0", "id": 1, "method": "initialize",
-                 "params": {"protocolVersion": "2024-11-05"}})
-        req = {"jsonrpc": "2.0", "id": 3, "method": "tools/call",
-               "params": {"name": "swampcastle_status", "arguments": {}}}
+        handler(
+            {
+                "jsonrpc": "2.0",
+                "id": 1,
+                "method": "initialize",
+                "params": {"protocolVersion": "2024-11-05"},
+            }
+        )
+        req = {
+            "jsonrpc": "2.0",
+            "id": 3,
+            "method": "tools/call",
+            "params": {"name": "swampcastle_status", "arguments": {}},
+        }
         resp = handler(req)
         content = json.loads(resp["result"]["content"][0]["text"])
         assert "total_drawers" in content
 
     def test_unknown_tool(self, handler):
-        handler({"jsonrpc": "2.0", "id": 1, "method": "initialize",
-                 "params": {"protocolVersion": "2024-11-05"}})
-        req = {"jsonrpc": "2.0", "id": 4, "method": "tools/call",
-               "params": {"name": "nonexistent_tool", "arguments": {}}}
+        handler(
+            {
+                "jsonrpc": "2.0",
+                "id": 1,
+                "method": "initialize",
+                "params": {"protocolVersion": "2024-11-05"},
+            }
+        )
+        req = {
+            "jsonrpc": "2.0",
+            "id": 4,
+            "method": "tools/call",
+            "params": {"name": "nonexistent_tool", "arguments": {}},
+        }
         resp = handler(req)
         assert "error" in resp
 

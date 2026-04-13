@@ -1,7 +1,6 @@
 """Tests for swampcastle.settings — CastleSettings (Pydantic BaseSettings)."""
 
 import json
-import os
 from pathlib import Path
 
 import pytest

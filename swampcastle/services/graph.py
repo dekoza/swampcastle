@@ -4,13 +4,9 @@ from collections import Counter, defaultdict
 from datetime import date
 
 from swampcastle.models.kg import (
-    AddTripleCommand,
-    InvalidateCommand,
     InvalidateResult,
-    KGQueryParams,
     KGQueryResult,
     KGStatsResult,
-    TimelineQuery,
     TimelineResult,
     TripleResult,
 )
@@ -24,47 +20,78 @@ class GraphService:
         self._col = collection
         self._wal = wal
 
-    def kg_query(self, entity: str, as_of: str | None = None,
-                 direction: str = "both") -> KGQueryResult:
+    def kg_query(
+        self, entity: str, as_of: str | None = None, direction: str = "both"
+    ) -> KGQueryResult:
         results = self._graph.query_entity(name=entity, as_of=as_of, direction=direction)
         return KGQueryResult(
-            entity=entity, as_of=as_of, facts=results, count=len(results),
+            entity=entity,
+            as_of=as_of,
+            facts=results,
+            count=len(results),
         )
 
-    def kg_add(self, subject: str, predicate: str, obj: str,
-               valid_from: str | None = None,
-               source_closet: str | None = None) -> TripleResult:
-        self._wal.log("kg_add", {
-            "subject": subject, "predicate": predicate,
-            "object": obj, "valid_from": valid_from,
-        })
+    def kg_add(
+        self,
+        subject: str,
+        predicate: str,
+        obj: str,
+        valid_from: str | None = None,
+        source_closet: str | None = None,
+    ) -> TripleResult:
+        self._wal.log(
+            "kg_add",
+            {
+                "subject": subject,
+                "predicate": predicate,
+                "object": obj,
+                "valid_from": valid_from,
+            },
+        )
         triple_id = self._graph.add_triple(
-            subject=subject, predicate=predicate, obj=obj,
-            valid_from=valid_from, source_closet=source_closet,
+            subject=subject,
+            predicate=predicate,
+            obj=obj,
+            valid_from=valid_from,
+            source_closet=source_closet,
         )
         return TripleResult(
-            success=True, triple_id=triple_id,
+            success=True,
+            triple_id=triple_id,
             fact=f"{subject} → {predicate} → {obj}",
         )
 
-    def kg_invalidate(self, subject: str, predicate: str, obj: str,
-                      ended: str | None = None) -> InvalidateResult:
+    def kg_invalidate(
+        self, subject: str, predicate: str, obj: str, ended: str | None = None
+    ) -> InvalidateResult:
         ended = ended or str(date.today())
-        self._wal.log("kg_invalidate", {
-            "subject": subject, "predicate": predicate,
-            "object": obj, "ended": ended,
-        })
+        self._wal.log(
+            "kg_invalidate",
+            {
+                "subject": subject,
+                "predicate": predicate,
+                "object": obj,
+                "ended": ended,
+            },
+        )
         self._graph.invalidate(
-            subject=subject, predicate=predicate, obj=obj, ended=ended,
+            subject=subject,
+            predicate=predicate,
+            obj=obj,
+            ended=ended,
         )
         return InvalidateResult(
-            success=True, fact=f"{subject} → {predicate} → {obj}", ended=ended,
+            success=True,
+            fact=f"{subject} → {predicate} → {obj}",
+            ended=ended,
         )
 
     def kg_timeline(self, entity: str | None = None) -> TimelineResult:
         results = self._graph.timeline(entity_name=entity)
         return TimelineResult(
-            entity=entity or "all", timeline=results, count=len(results),
+            entity=entity or "all",
+            timeline=results,
+            count=len(results),
         )
 
     def kg_stats(self) -> KGStatsResult:
@@ -101,12 +128,17 @@ class GraphService:
             wings = sorted(data["wings"])
             if len(wings) >= 2:
                 for i, wa in enumerate(wings):
-                    for wb in wings[i + 1:]:
+                    for wb in wings[i + 1 :]:
                         for hall in data["halls"] or [""]:
-                            edges.append({
-                                "room": room, "wing_a": wa, "wing_b": wb,
-                                "hall": hall, "count": data["count"],
-                            })
+                            edges.append(
+                                {
+                                    "room": room,
+                                    "wing_a": wa,
+                                    "wing_b": wb,
+                                    "hall": hall,
+                                    "count": data["count"],
+                                }
+                            )
 
         nodes = {}
         for room, data in room_data.items():
@@ -125,10 +157,15 @@ class GraphService:
 
         start = nodes[start_room]
         visited = {start_room}
-        results = [{
-            "room": start_room, "wings": start["wings"],
-            "halls": start["halls"], "count": start["count"], "hop": 0,
-        }]
+        results = [
+            {
+                "room": start_room,
+                "wings": start["wings"],
+                "halls": start["halls"],
+                "count": start["count"],
+                "hop": 0,
+            }
+        ]
 
         frontier = [(start_room, 0)]
         while frontier:
@@ -142,19 +179,23 @@ class GraphService:
                 shared = current_wings & set(data["wings"])
                 if shared:
                     visited.add(room)
-                    results.append({
-                        "room": room, "wings": data["wings"],
-                        "halls": data["halls"], "count": data["count"],
-                        "hop": depth + 1, "connected_via": sorted(shared),
-                    })
+                    results.append(
+                        {
+                            "room": room,
+                            "wings": data["wings"],
+                            "halls": data["halls"],
+                            "count": data["count"],
+                            "hop": depth + 1,
+                            "connected_via": sorted(shared),
+                        }
+                    )
                     if depth + 1 < max_hops:
                         frontier.append((room, depth + 1))
 
         results.sort(key=lambda x: (x["hop"], -x["count"]))
         return results[:50]
 
-    def find_tunnels(self, wing_a: str | None = None,
-                     wing_b: str | None = None) -> list[dict]:
+    def find_tunnels(self, wing_a: str | None = None, wing_b: str | None = None) -> list[dict]:
         nodes, _ = self._build_graph()
         tunnels = []
         for room, data in nodes.items():
@@ -165,10 +206,14 @@ class GraphService:
                 continue
             if wing_b and wing_b not in wings:
                 continue
-            tunnels.append({
-                "room": room, "wings": wings,
-                "halls": data["halls"], "count": data["count"],
-            })
+            tunnels.append(
+                {
+                    "room": room,
+                    "wings": wings,
+                    "halls": data["halls"],
+                    "count": data["count"],
+                }
+            )
         tunnels.sort(key=lambda x: -x["count"])
         return tunnels[:50]
 

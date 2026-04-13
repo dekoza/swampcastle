@@ -1,10 +1,14 @@
 import os
-import tempfile
 import shutil
+import tempfile
+
+from swampcastle.mining.convo import mine_convos
 from swampcastle.storage.lance import LanceBackend
 from swampcastle.storage.memory import InMemoryStorageFactory
-_get_test_collection = lambda path, name="swampcastle_chests": LanceBackend().get_collection(path, name, create=True)
-from swampcastle.mining.convo import mine_convos
+
+
+def _get_test_collection(path, name="swampcastle_chests"):
+    return LanceBackend().get_collection(path, name, create=True)
 
 
 def test_convo_mining():

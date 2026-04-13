@@ -1,7 +1,6 @@
 """SwampCastle CLI — argparse setup + dispatch."""
 
 import argparse
-import sys
 
 from swampcastle.version import __version__
 
@@ -12,8 +11,9 @@ def main():
         description='SwampCastle — "The fourth one stayed up."',
         formatter_class=argparse.RawDescriptionHelpFormatter,
     )
-    parser.add_argument("--palace", "--castle", default=None, dest="palace",
-                        help="Path to castle directory")
+    parser.add_argument(
+        "--palace", "--castle", default=None, dest="palace", help="Path to castle directory"
+    )
     parser.add_argument(
         "--backend",
         choices=["lance", "postgres", "chroma"],
@@ -52,8 +52,7 @@ def main():
     sub.add_parser("survey", aliases=["status"], help="Survey the castle")
 
     # drawbridge (mcp)
-    p_db = sub.add_parser("drawbridge", aliases=["mcp"],
-                          help="Lower the drawbridge — MCP server")
+    p_db = sub.add_parser("drawbridge", aliases=["mcp"], help="Lower the drawbridge — MCP server")
     db_sub = p_db.add_subparsers(dest="mcp_action")
     p_dbr = db_sub.add_parser("run", help="Start MCP server (JSON-RPC stdin/stdout)")
     p_dbr.add_argument("--palace", dest="run_palace", default=None)
@@ -90,7 +89,9 @@ def main():
         instr_sub.add_parser(n)
 
     # raise (migrate)
-    p = sub.add_parser("raise", aliases=["migrate"], help="Raise from the swamp (ChromaDB → LanceDB)")
+    p = sub.add_parser(
+        "raise", aliases=["migrate"], help="Raise from the swamp (ChromaDB → LanceDB)"
+    )
     p.add_argument("--source-palace", default=None, help="Path to legacy ChromaDB palace directory")
     p.add_argument("--target-castle", default=None, help="Path to target castle directory")
     p.add_argument("--dry-run", action="store_true")
@@ -154,18 +155,30 @@ def main():
         return
 
     dispatch = {
-        "build": cmd.cmd_build, "init": cmd.cmd_build,
-        "gather": cmd.cmd_gather, "mine": cmd.cmd_gather,
-        "seek": cmd.cmd_seek, "search": cmd.cmd_seek,
-        "survey": cmd.cmd_survey, "status": cmd.cmd_survey,
-        "herald": cmd.cmd_herald, "wake-up": cmd.cmd_herald,
-        "cleave": cmd.cmd_cleave, "split": cmd.cmd_cleave,
-        "distill": cmd.cmd_distill, "compress": cmd.cmd_distill,
-        "raise": cmd.cmd_raise, "migrate": cmd.cmd_raise,
-        "reforge": cmd.cmd_reforge, "reindex": cmd.cmd_reforge,
-        "armory": cmd.cmd_armory, "embedders": cmd.cmd_armory,
-        "garrison": cmd.cmd_garrison, "serve": cmd.cmd_garrison,
-        "parley": cmd.cmd_parley, "sync": cmd.cmd_parley,
+        "build": cmd.cmd_build,
+        "init": cmd.cmd_build,
+        "gather": cmd.cmd_gather,
+        "mine": cmd.cmd_gather,
+        "seek": cmd.cmd_seek,
+        "search": cmd.cmd_seek,
+        "survey": cmd.cmd_survey,
+        "status": cmd.cmd_survey,
+        "herald": cmd.cmd_herald,
+        "wake-up": cmd.cmd_herald,
+        "cleave": cmd.cmd_cleave,
+        "split": cmd.cmd_cleave,
+        "distill": cmd.cmd_distill,
+        "compress": cmd.cmd_distill,
+        "raise": cmd.cmd_raise,
+        "migrate": cmd.cmd_raise,
+        "reforge": cmd.cmd_reforge,
+        "reindex": cmd.cmd_reforge,
+        "armory": cmd.cmd_armory,
+        "embedders": cmd.cmd_armory,
+        "garrison": cmd.cmd_garrison,
+        "serve": cmd.cmd_garrison,
+        "parley": cmd.cmd_parley,
+        "sync": cmd.cmd_parley,
         "ni": cmd.cmd_ni,
     }
 

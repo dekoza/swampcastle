@@ -7,15 +7,17 @@ from types import SimpleNamespace
 import pytest
 
 from swampcastle.storage.lance import LanceBackend, LanceCollection
+from swampcastle.sync import ChangeSet, SyncEngine, SyncRecord, VersionVector
+from swampcastle.sync_meta import NodeIdentity
 
 
 def open_collection(path, **kw):
     return LanceBackend().get_collection(
-        path, "swampcastle_chests", create=True,
+        path,
+        "swampcastle_chests",
+        create=True,
         sync_identity=kw.get("sync_identity"),
     )
-from swampcastle.sync import SyncEngine, ChangeSet, SyncRecord, VersionVector
-from swampcastle.sync_meta import NodeIdentity
 
 
 # ── Helpers ───────────────────────────────────────────────────────────────────
@@ -328,7 +330,6 @@ class TestSyncEngine:
         engine.apply_changes(cs)
         assert engine.version_vector.get("remote") == 11
 
-
     def test_get_changes_returns_all_nodes_records(self, tmp_path):
         """Hub must return records from ALL nodes, not just its own.
 
@@ -342,21 +343,31 @@ class TestSyncEngine:
         col.upsert(
             documents=["from node X"],
             ids=["x1"],
-            metadatas=[{
-                "wing": "proj", "room": "r", "source_file": "",
-                "node_id": "node_x", "seq": 1,
-                "updated_at": "2026-04-10T10:00:00+00:00",
-            }],
+            metadatas=[
+                {
+                    "wing": "proj",
+                    "room": "r",
+                    "source_file": "",
+                    "node_id": "node_x",
+                    "seq": 1,
+                    "updated_at": "2026-04-10T10:00:00+00:00",
+                }
+            ],
             _raw=True,
         )
         col.upsert(
             documents=["from node Y"],
             ids=["y1"],
-            metadatas=[{
-                "wing": "proj", "room": "r", "source_file": "",
-                "node_id": "node_y", "seq": 3,
-                "updated_at": "2026-04-10T10:00:00+00:00",
-            }],
+            metadatas=[
+                {
+                    "wing": "proj",
+                    "room": "r",
+                    "source_file": "",
+                    "node_id": "node_y",
+                    "seq": 3,
+                    "updated_at": "2026-04-10T10:00:00+00:00",
+                }
+            ],
             _raw=True,
         )
 
@@ -374,20 +385,38 @@ class TestSyncEngine:
             documents=["old from X", "new from X"],
             ids=["x1", "x2"],
             metadatas=[
-                {"wing": "p", "room": "r", "source_file": "",
-                 "node_id": "node_x", "seq": 1, "updated_at": "2026-01-01T00:00:00+00:00"},
-                {"wing": "p", "room": "r", "source_file": "",
-                 "node_id": "node_x", "seq": 5, "updated_at": "2026-04-01T00:00:00+00:00"},
+                {
+                    "wing": "p",
+                    "room": "r",
+                    "source_file": "",
+                    "node_id": "node_x",
+                    "seq": 1,
+                    "updated_at": "2026-01-01T00:00:00+00:00",
+                },
+                {
+                    "wing": "p",
+                    "room": "r",
+                    "source_file": "",
+                    "node_id": "node_x",
+                    "seq": 5,
+                    "updated_at": "2026-04-01T00:00:00+00:00",
+                },
             ],
             _raw=True,
         )
         col.upsert(
             documents=["from Y"],
             ids=["y1"],
-            metadatas=[{
-                "wing": "p", "room": "r", "source_file": "",
-                "node_id": "node_y", "seq": 2, "updated_at": "2026-02-01T00:00:00+00:00",
-            }],
+            metadatas=[
+                {
+                    "wing": "p",
+                    "room": "r",
+                    "source_file": "",
+                    "node_id": "node_y",
+                    "seq": 2,
+                    "updated_at": "2026-02-01T00:00:00+00:00",
+                }
+            ],
             _raw=True,
         )
 
@@ -406,26 +435,36 @@ class TestSyncEngine:
         col.upsert(
             documents=["local version"],
             ids=["tz_test"],
-            metadatas=[{
-                "wing": "p", "room": "r", "source_file": "",
-                "node_id": ni.node_id, "seq": 1,
-                "updated_at": "2026-06-01T12:00:00+00:00",
-            }],
+            metadatas=[
+                {
+                    "wing": "p",
+                    "room": "r",
+                    "source_file": "",
+                    "node_id": ni.node_id,
+                    "seq": 1,
+                    "updated_at": "2026-06-01T12:00:00+00:00",
+                }
+            ],
             _raw=True,
         )
 
         # Remote record with Z format — same instant, but different string
         cs = ChangeSet(
             source_node="remote",
-            records=[SyncRecord(
-                id="tz_test",
-                document="remote version",
-                metadata={
-                    "wing": "p", "room": "r", "source_file": "",
-                    "node_id": "remote", "seq": 5,
-                    "updated_at": "2026-06-01T12:00:00Z",
-                },
-            )],
+            records=[
+                SyncRecord(
+                    id="tz_test",
+                    document="remote version",
+                    metadata={
+                        "wing": "p",
+                        "room": "r",
+                        "source_file": "",
+                        "node_id": "remote",
+                        "seq": 5,
+                        "updated_at": "2026-06-01T12:00:00Z",
+                    },
+                )
+            ],
         )
 
         # Same instant — should fall through to node_id tiebreak
@@ -447,11 +486,16 @@ class TestSyncEngine:
         col.upsert(
             documents=["local WINS (later UTC)"],
             ids=["tz_offset"],
-            metadatas=[{
-                "wing": "p", "room": "r", "source_file": "",
-                "node_id": ni.node_id, "seq": 1,
-                "updated_at": "2026-06-01T13:00:00+00:00",
-            }],
+            metadatas=[
+                {
+                    "wing": "p",
+                    "room": "r",
+                    "source_file": "",
+                    "node_id": ni.node_id,
+                    "seq": 1,
+                    "updated_at": "2026-06-01T13:00:00+00:00",
+                }
+            ],
             _raw=True,
         )
 
@@ -459,15 +503,20 @@ class TestSyncEngine:
         # 2026-06-01T17:00:00+05:00 == 2026-06-01T12:00:00Z
         cs = ChangeSet(
             source_node="remote",
-            records=[SyncRecord(
-                id="tz_offset",
-                document="remote LOSES (earlier UTC)",
-                metadata={
-                    "wing": "p", "room": "r", "source_file": "",
-                    "node_id": "remote", "seq": 5,
-                    "updated_at": "2026-06-01T17:00:00+05:00",
-                },
-            )],
+            records=[
+                SyncRecord(
+                    id="tz_offset",
+                    document="remote LOSES (earlier UTC)",
+                    metadata={
+                        "wing": "p",
+                        "room": "r",
+                        "source_file": "",
+                        "node_id": "remote",
+                        "seq": 5,
+                        "updated_at": "2026-06-01T17:00:00+05:00",
+                    },
+                )
+            ],
         )
 
         result = engine.apply_changes(cs)
@@ -493,8 +542,11 @@ class TestSyncEngine:
                     id="with_emb",
                     document="has embedding",
                     metadata={
-                        "wing": "p", "room": "r", "source_file": "",
-                        "node_id": "remote", "seq": 1,
+                        "wing": "p",
+                        "room": "r",
+                        "source_file": "",
+                        "node_id": "remote",
+                        "seq": 1,
                         "updated_at": "2026-04-10T10:00:00+00:00",
                     },
                     embedding=provided_emb,
@@ -503,8 +555,11 @@ class TestSyncEngine:
                     id="no_emb",
                     document="needs embedding",
                     metadata={
-                        "wing": "p", "room": "r", "source_file": "",
-                        "node_id": "remote", "seq": 2,
+                        "wing": "p",
+                        "room": "r",
+                        "source_file": "",
+                        "node_id": "remote",
+                        "seq": 2,
                         "updated_at": "2026-04-10T10:00:00+00:00",
                     },
                     embedding=None,
@@ -613,9 +668,7 @@ class TestTwoNodeSync:
 
         # Client B pulls from hub — must get client A's record
         cs_hub = engine_hub.get_changes_since(engine_b.version_vector)
-        assert len(cs_hub.records) >= 1, (
-            "Hub must relay client A's records to client B"
-        )
+        assert len(cs_hub.records) >= 1, "Hub must relay client A's records to client B"
         result_b = engine_b.apply_changes(cs_hub)
         assert result_b.accepted >= 1
 
@@ -690,7 +743,9 @@ class TestSyncServerFactoryRouting:
 
         monkeypatch.setattr(ss, "CastleConfig", lambda _env_file=None: settings)
         monkeypatch.setattr(ss, "factory_from_settings", lambda s: DummyFactory())
-        monkeypatch.setattr(ss, "get_identity", lambda config_dir=None: SimpleNamespace(node_id="node"))
+        monkeypatch.setattr(
+            ss, "get_identity", lambda config_dir=None: SimpleNamespace(node_id="node")
+        )
 
         engine_a = ss._get_engine()
         engine_b = ss._get_engine()
@@ -755,6 +810,7 @@ class TestSyncServerFactoryRouting:
         class DummyFactory:
             def open_collection(self, name):
                 return object()
+
             def close(self):
                 closed["called"] = True
 
@@ -767,7 +823,9 @@ class TestSyncServerFactoryRouting:
 
         monkeypatch.setattr(ss, "CastleConfig", lambda _env_file=None: settings)
         monkeypatch.setattr(ss, "factory_from_settings", lambda s: DummyFactory())
-        monkeypatch.setattr(ss, "get_identity", lambda config_dir=None: SimpleNamespace(node_id="node"))
+        monkeypatch.setattr(
+            ss, "get_identity", lambda config_dir=None: SimpleNamespace(node_id="node")
+        )
 
         # Initialize the engine
         ss._get_engine()

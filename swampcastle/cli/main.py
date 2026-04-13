@@ -166,6 +166,7 @@ def main():
         return
 
     from swampcastle.cli import commands as cmd
+    from swampcastle.runtime_config import ensure_runtime_config
 
     # Two-level subcommands
     if args.command in ("drawbridge", "mcp"):
@@ -192,6 +193,9 @@ def main():
         args.name = name
         cmd.cmd_instructions(args)
         return
+
+    if args.command != "ni":
+        ensure_runtime_config()
 
     dispatch = {
         "project": cmd.cmd_project,

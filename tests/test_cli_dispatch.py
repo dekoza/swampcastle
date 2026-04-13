@@ -8,6 +8,11 @@ import pytest
 from swampcastle.cli.main import main
 
 
+@pytest.fixture(autouse=True)
+def isolate_runtime_home(monkeypatch, tmp_path):
+    monkeypatch.setattr("swampcastle.runtime_config.Path.home", lambda: tmp_path)
+
+
 class TestNoArgs:
     def test_prints_help(self, capsys):
         with patch("sys.argv", ["swampcastle"]):

@@ -100,6 +100,18 @@ The same runtime directory may also contain:
 
 Project-local mining config lives separately in `.swampcastle.yaml`. That file can include a shared `team` list used for contributor tagging during ingest.
 
+Global and project-level mining ignore files
+
+- Per-project: create `.swampcastleignore` in project directory (or subdirectories) to exclude files from AI indexing while keeping them in version control. Syntax mirrors `.gitignore`: supports `!` negation, anchored paths, and trailing `/` for directories.
+- Global: create `~/.swampcastleignore` to apply user-wide ignore rules across all projects.
+
+Precedence (when deciding to skip a file):
+1. Project `.swampcastleignore` rules (closest ancestor directory wins)
+2. Global `~/.swampcastleignore`
+3. `.gitignore`
+
+Force-includes (CLI `--include-ignored`) still override these ignores for one-off ingests.
+
 ## Recommended backend routing
 
 Use `factory_from_settings()` rather than importing a backend directly when you want configuration-driven behavior:

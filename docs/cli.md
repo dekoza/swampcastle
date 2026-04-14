@@ -50,6 +50,7 @@ Options:
 - `--limit N`
 - `--dry-run`
 - `--extract {exchange,general}` (conversation mode)
+- `--explain` — print skip reasons for files flagged by mining heuristics (useful for debugging why files were ignored)
 
 Examples:
 

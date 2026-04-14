@@ -30,12 +30,14 @@ The fix hashes the full content. This changes all drawer IDs, so:
 
 **Migration steps for existing castles:**
 ```bash
-# Remove old castle and re-mine from scratch (safest)
+# Safest: delete the old castle and re-mine from scratch.
+# Do NOT just re-run gather on an existing castle — old drawers under
+# stale IDs are not deleted automatically and will create duplicates.
 rm -rf ~/.swampcastle/castle
 swampcastle gather <project-dir>
 ```
 Or wait for `swampcastle migrate-ids` (planned) which will reassign IDs
-in-place without re-mining.
+and delete the stale drawers in-place without re-mining.
 
 | What | Before (v3.x) | After (v4.0) |
 |------|---------------|--------------|

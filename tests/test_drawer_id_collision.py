@@ -76,6 +76,23 @@ class TestDrawerIdUniqueness:
         cmd = _cmd("stable content")
         assert cmd.drawer_id() == cmd.drawer_id()
 
+    def test_separator_prevents_hash_collision_across_wing_room_boundary(self):
+        """wing+room+content is ambiguous without separators.
+
+        wing='key', room='ring', content='abc' concatenates to 'keyringabc'.
+        wing='ke',  room='yring', content='abc' also concatenates to 'keyringabc'.
+        They must produce different hashes, not just different ID strings.
+        """
+        cmd1 = AddDrawerCommand(wing="key", room="ring", content="abc")
+        cmd2 = AddDrawerCommand(wing="ke", room="yring", content="abc")
+        # The full ID strings differ because wing+room are in the prefix, but
+        # the hash part (last 24 chars) must also differ.
+        hash1 = cmd1.drawer_id()[-24:]
+        hash2 = cmd2.drawer_id()[-24:]
+        assert hash1 != hash2, (
+            "Same concatenation across different (wing, room) boundaries produced the same hash"
+        )
+
 
 # ---------------------------------------------------------------------------
 # Integration: VaultService stores both documents, no silent drop

@@ -78,7 +78,7 @@ class AddDrawerCommand(BaseModel):
         return v
 
     def drawer_id(self) -> str:
-        hash_input = (self.wing + self.room + self.content).encode()
+        hash_input = f"{self.wing}\x00{self.room}\x00{self.content}".encode()
         return f"drawer_{self.wing}_{self.room}_{hashlib.sha256(hash_input).hexdigest()[:24]}"
 
 

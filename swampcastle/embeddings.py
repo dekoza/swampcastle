@@ -399,7 +399,7 @@ def get_embedder(config: dict = None) -> Embedder:
         timeout = float(options.get("timeout", 60.0))
         cache_key = f"ollama:{model}@{base_url}"
 
-        if cache_key not in _embedder_cache:
+        if cache_key not in _embedder_cache:  # unlocked read: safe on CPython (GIL)
             with _embedder_lock:
                 if cache_key not in _embedder_cache:
                     _embedder_cache[cache_key] = OllamaEmbedder(
@@ -413,7 +413,7 @@ def get_embedder(config: dict = None) -> Embedder:
     # Default model on CPU → lightweight ONNX backend
     if resolved == "all-MiniLM-L6-v2" and device == "cpu":
         cache_key = "onnx:all-MiniLM-L6-v2"
-        if cache_key not in _embedder_cache:
+        if cache_key not in _embedder_cache:  # unlocked read: safe on CPython (GIL)
             with _embedder_lock:
                 if cache_key not in _embedder_cache:
                     _embedder_cache[cache_key] = OnnxEmbedder()
@@ -421,7 +421,7 @@ def get_embedder(config: dict = None) -> Embedder:
 
     # GPU device or non-default model → sentence-transformers
     cache_key = f"st:{resolved}:{device}"
-    if cache_key not in _embedder_cache:
+    if cache_key not in _embedder_cache:  # unlocked read: safe on CPython (GIL)
         with _embedder_lock:
             if cache_key not in _embedder_cache:
                 _embedder_cache[cache_key] = SentenceTransformerEmbedder(

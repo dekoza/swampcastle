@@ -157,6 +157,29 @@ You must pass `--apply` to persist AAAK metadata. That reflects the current
 project policy: AAAK is optional and experimental, and raw verbatim drawers
 remain the primary retrieval path.
 
+## kg candidate review
+
+Knowledge-graph proposal workflow.
+
+```bash
+# Preview extraction (default)
+swampcastle kg extract
+
+# Persist candidate proposals (not accepted facts)
+swampcastle kg extract --apply
+
+# Review proposals
+swampcastle kg review
+
+# Accept or reject a proposal
+swampcastle kg accept <candidate-id>
+swampcastle kg reject <candidate-id>
+```
+
+Honest status: this is the proposal-first skeleton only. `kg extract` creates
+candidate triples, not accepted KG facts. You still need `kg accept` to write
+facts into the canonical graph.
+
 ## raise / migrate
 
 Raise a legacy ChromaDB palace into the v4 local castle layout.

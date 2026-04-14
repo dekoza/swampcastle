@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from datetime import datetime
 
+from swampcastle.mining.extractors import extract_candidate_triples_from_text
 from swampcastle.models.kg_candidates import (
     CandidateReviewCommand,
     CandidateReviewResult,
@@ -19,6 +20,74 @@ class KGProposalService:
         self._graph = graph
         self._collection = collection
         self._wal = wal
+
+    def extract_from_drawers(
+        self,
+        *,
+        wing: str | None = None,
+        room: str | None = None,
+        dry_run: bool = True,
+        limit: int = 0,
+        extractor_version: str = "rules-v1",
+    ) -> list[CandidateTriple]:
+        where = {}
+        if wing:
+            where["wing"] = wing
+        if room:
+            where["room"] = room
+
+        offset = 0
+        batch_size = 500
+        seen_drawers = 0
+        extracted: list[CandidateTriple] = []
+
+        while True:
+            remaining = batch_size
+            if limit > 0:
+                remaining = min(batch_size, limit - seen_drawers)
+                if remaining <= 0:
+                    break
+
+            batch = self._collection.get(
+                where=where or None,
+                limit=remaining,
+                offset=offset,
+                include=["documents", "metadatas"],
+            )
+            ids = batch.get("ids", [])
+            if not ids:
+                break
+
+            for drawer_id, doc, meta in zip(
+                ids, batch.get("documents", []), batch.get("metadatas", [])
+            ):
+                source_meta = dict(meta)
+                source_meta["drawer_id"] = drawer_id
+                candidates = extract_candidate_triples_from_text(
+                    doc,
+                    source_meta=source_meta,
+                    extractor_version=extractor_version,
+                )
+                extracted.extend(candidates)
+                if not dry_run:
+                    for candidate in candidates:
+                        self.propose(candidate)
+
+            seen_drawers += len(ids)
+            offset += len(ids)
+
+        self._wal.log(
+            "kg_extract",
+            {
+                "wing": wing,
+                "room": room,
+                "dry_run": dry_run,
+                "drawer_count": seen_drawers,
+                "candidate_count": len(extracted),
+                "extractor_version": extractor_version,
+            },
+        )
+        return extracted
 
     def propose(self, candidate: CandidateTriple) -> str:
         candidate_id = self._graph.propose_triple(

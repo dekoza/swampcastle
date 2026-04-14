@@ -4,6 +4,7 @@ No disk, no embeddings, no external dependencies. Provides fast,
 deterministic storage for unit tests.
 """
 
+import hashlib
 import uuid
 from datetime import date
 from typing import Any
@@ -270,8 +271,18 @@ class InMemoryGraphStore(GraphStore):
         wing=None,
         room=None,
     ):
-        self._candidate_counter += 1
-        candidate_id = f"cand_{self._candidate_counter}"
+        fingerprint = hashlib.sha256(
+            (
+                f"{subject_text}\x00{predicate}\x00{object_text}\x00{modality}\x00{polarity}\x00"
+                f"{valid_from or ''}\x00{valid_to or ''}\x00{evidence_drawer_id}\x00{evidence_text}\x00"
+                f"{source_file or ''}\x00{wing or ''}\x00{room or ''}"
+            ).encode()
+        ).hexdigest()[:16]
+        candidate_id = f"cand_{fingerprint}"
+        existing = self._candidate_triples.get(candidate_id)
+        status = existing["status"] if existing is not None else "proposed"
+        reviewed_at = existing.get("reviewed_at") if existing is not None else None
+        created_at = existing.get("created_at") if existing is not None else None
         self._candidate_triples[candidate_id] = {
             "id": candidate_id,
             "subject_text": subject_text,
@@ -287,10 +298,10 @@ class InMemoryGraphStore(GraphStore):
             "source_file": source_file,
             "wing": wing,
             "room": room,
-            "status": "proposed",
+            "status": status,
             "extractor_version": extractor_version,
-            "created_at": None,
-            "reviewed_at": None,
+            "created_at": created_at,
+            "reviewed_at": reviewed_at,
         }
         return candidate_id
 

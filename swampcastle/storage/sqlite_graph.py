@@ -4,7 +4,6 @@ import hashlib
 import json
 import sqlite3
 import threading
-import uuid
 from datetime import date, datetime
 from typing import Any
 
@@ -342,7 +341,14 @@ class SQLiteGraph(GraphStore):
         wing=None,
         room=None,
     ):
-        candidate_id = f"cand_{uuid.uuid4().hex[:16]}"
+        fingerprint = hashlib.sha256(
+            (
+                f"{subject_text}\x00{predicate}\x00{object_text}\x00{modality}\x00{polarity}\x00"
+                f"{valid_from or ''}\x00{valid_to or ''}\x00{evidence_drawer_id}\x00{evidence_text}\x00"
+                f"{source_file or ''}\x00{wing or ''}\x00{room or ''}"
+            ).encode()
+        ).hexdigest()[:16]
+        candidate_id = f"cand_{fingerprint}"
         conn = self._get_conn()
         with self._write_lock:
             with conn:

@@ -202,6 +202,12 @@ class TestParley:
 
 
 class TestKg:
+    def test_extract_dispatches(self):
+        with patch("sys.argv", ["swampcastle", "kg", "extract"]):
+            with patch("swampcastle.cli.commands.cmd_kg_extract") as mock:
+                main()
+                mock.assert_called_once()
+
     def test_review_dispatches(self):
         with patch("sys.argv", ["swampcastle", "kg", "review"]):
             with patch("swampcastle.cli.commands.cmd_kg_review") as mock:

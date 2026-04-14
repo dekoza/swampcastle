@@ -343,6 +343,80 @@ def test_cmd_distill_apply_enables_real_write(capsys):
     assert "Distilled 2 drawers with AAAK dialect." in capsys.readouterr().out
 
 
+def test_cmd_kg_extract_defaults_to_preview_mode(capsys):
+    class ProposalCastle(DummyCastle):
+        def __init__(self, settings, factory):
+            self.calls = []
+            self.catalog = SimpleNamespace(status=lambda: None)
+            self.search = SimpleNamespace(search=lambda q: None)
+            self.vault = SimpleNamespace(distill=lambda **kwargs: 0, reforge=lambda **kwargs: 0)
+            self.kg_proposals = SimpleNamespace(
+                extract_from_drawers=lambda **kwargs: self.calls.append(kwargs)
+                or [
+                    SimpleNamespace(
+                        candidate_id="cand_1",
+                        subject_text="swampcastle",
+                        predicate="uses",
+                        object_text="LanceDB",
+                        confidence=0.9,
+                        modality="asserted",
+                        status="proposed",
+                    )
+                ]
+            )
+            self._collection = object()
+
+    castle = ProposalCastle(None, None)
+    args = SimpleNamespace(
+        wing="w", room="r", dry_run=False, apply=False, limit=10, palace=None, backend=None
+    )
+
+    with patch("swampcastle.castle.Castle", lambda s, f: castle):
+        with patch("swampcastle.cli.commands.factory_from_settings", return_value=object()):
+            commands.cmd_kg_extract(args)
+
+    assert castle.calls == [{"wing": "w", "room": "r", "dry_run": True, "limit": 10}]
+    out = capsys.readouterr().out
+    assert "DRY RUN" in out
+    assert "--apply" in out
+
+
+def test_cmd_kg_extract_apply_persists_proposals(capsys):
+    class ProposalCastle(DummyCastle):
+        def __init__(self, settings, factory):
+            self.calls = []
+            self.catalog = SimpleNamespace(status=lambda: None)
+            self.search = SimpleNamespace(search=lambda q: None)
+            self.vault = SimpleNamespace(distill=lambda **kwargs: 0, reforge=lambda **kwargs: 0)
+            self.kg_proposals = SimpleNamespace(
+                extract_from_drawers=lambda **kwargs: self.calls.append(kwargs)
+                or [
+                    SimpleNamespace(
+                        candidate_id="cand_1",
+                        subject_text="swampcastle",
+                        predicate="uses",
+                        object_text="LanceDB",
+                        confidence=0.9,
+                        modality="asserted",
+                        status="proposed",
+                    )
+                ]
+            )
+            self._collection = object()
+
+    castle = ProposalCastle(None, None)
+    args = SimpleNamespace(
+        wing="w", room="r", dry_run=False, apply=True, limit=10, palace=None, backend=None
+    )
+
+    with patch("swampcastle.castle.Castle", lambda s, f: castle):
+        with patch("swampcastle.cli.commands.factory_from_settings", return_value=object()):
+            commands.cmd_kg_extract(args)
+
+    assert castle.calls == [{"wing": "w", "room": "r", "dry_run": False, "limit": 10}]
+    assert "Extracted 1 candidate triples" in capsys.readouterr().out
+
+
 def test_cmd_kg_review_lists_candidates(capsys):
     class ProposalCastle(DummyCastle):
         def __init__(self, settings, factory):

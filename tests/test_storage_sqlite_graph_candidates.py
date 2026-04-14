@@ -53,3 +53,32 @@ def test_sqlite_candidate_status_transition(tmp_path):
         assert row["reviewed_at"] is not None
     finally:
         graph.close()
+
+
+def test_sqlite_propose_same_candidate_is_idempotent(tmp_path):
+    graph = SQLiteGraph(str(tmp_path / "kg.sqlite3"))
+    try:
+        first = _propose(graph)
+        second = _propose(graph)
+        assert first == second
+        listed = graph.list_candidate_triples()
+        assert len(listed) == 1
+    finally:
+        graph.close()
+
+
+def test_sqlite_repropose_preserves_existing_review_status(tmp_path):
+    graph = SQLiteGraph(str(tmp_path / "kg.sqlite3"))
+    try:
+        candidate_id = _propose(graph)
+        graph.set_candidate_status(
+            candidate_id=candidate_id,
+            status="accepted",
+            reviewed_at="2026-01-02T00:00:00",
+        )
+        second = _propose(graph)
+        assert second == candidate_id
+        row = graph.get_candidate_triple(candidate_id=candidate_id)
+        assert row["status"] == "accepted"
+    finally:
+        graph.close()

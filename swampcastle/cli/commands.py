@@ -275,6 +275,40 @@ def cmd_distill(args):
             print(f"  Distilled {count} drawers with AAAK dialect.")
 
 
+def cmd_kg_extract(args):
+    from swampcastle.castle import Castle
+
+    settings = _settings(args)
+    effective_dry_run = args.dry_run or not getattr(args, "apply", False)
+
+    with Castle(settings, factory_from_settings(settings)) as castle:
+        candidates = castle.kg_proposals.extract_from_drawers(
+            wing=args.wing,
+            room=args.room,
+            dry_run=effective_dry_run,
+            limit=args.limit,
+        )
+
+    if not candidates:
+        print("  No candidate triples extracted.")
+        return
+
+    if effective_dry_run:
+        print(f"  DRY RUN — would extract {len(candidates)} candidate triples.")
+        if not args.dry_run and not getattr(args, "apply", False):
+            print("  Preview mode is the default. Re-run with --apply to persist proposals.")
+    else:
+        print(f"  Extracted {len(candidates)} candidate triples.")
+
+    for candidate in candidates[:10]:
+        print(
+            f"  {candidate.subject_text} --{candidate.predicate}--> {candidate.object_text} "
+            f"[{candidate.modality}, conf={candidate.confidence:.2f}]"
+        )
+    if len(candidates) > 10:
+        print(f"  ... and {len(candidates) - 10} more")
+
+
 def cmd_kg_review(args):
     from swampcastle.castle import Castle
     from swampcastle.models import CandidateTripleFilter

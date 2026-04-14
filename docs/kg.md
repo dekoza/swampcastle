@@ -84,6 +84,36 @@ Adding the exact same active fact twice does not create a second live triple. Th
 - `valid_from` is `NULL` or `<= as_of`
 - `valid_to` is `NULL` or `>= as_of`
 
+## Candidate-triple proposals (proposal-first workflow)
+
+SwampCastle now supports a separate proposal layer for extracted facts.
+
+These are **not** part of the accepted KG until you review and accept them.
+
+### Candidate proposal service
+
+`Castle` exposes:
+
+- `castle.kg_proposals.propose(candidate)`
+- `castle.kg_proposals.list_proposals(filter_params=None)`
+- `castle.kg_proposals.get_proposal(candidate_id)`
+- `castle.kg_proposals.accept(cmd)`
+- `castle.kg_proposals.reject(candidate_id)`
+- `castle.kg_proposals.extract_from_drawers(...)`
+
+### Why proposals are separate
+
+Extracted facts are guesses until reviewed. The accepted KG remains the source
+of truth; proposals are stored separately so bad extraction does not poison
+normal KG queries.
+
+### Storage status
+
+- **SQLiteGraph:** candidate proposal storage implemented
+- **InMemoryGraphStore:** candidate proposal storage implemented
+- **PostgresGraphStore:** candidate proposal storage not implemented yet
+  (raises `NotImplementedError` for the MVP)
+
 ## MCP tools
 
 The graph is available through:

@@ -168,6 +168,17 @@ def main():
     p_kg = sub.add_parser("kg", help="Review and manage KG candidate triples")
     kg_sub = p_kg.add_subparsers(dest="kg_action")
 
+    p = kg_sub.add_parser("extract", help="Extract candidate triples from drawers")
+    p.add_argument("--wing", default=None)
+    p.add_argument("--room", default=None)
+    p.add_argument("--dry-run", action="store_true")
+    p.add_argument(
+        "--apply",
+        action="store_true",
+        help="Persist extracted candidate triples. Without this flag extraction runs in preview mode.",
+    )
+    p.add_argument("--limit", type=int, default=0)
+
     p = kg_sub.add_parser("review", help="List candidate triples")
     p.add_argument("--status", choices=["proposed", "accepted", "rejected"], default=None)
     p.add_argument("--predicate", default=None)
@@ -227,7 +238,9 @@ def main():
         if not action:
             p_kg.print_help()
             return
-        if action == "review":
+        if action == "extract":
+            cmd.cmd_kg_extract(args)
+        elif action == "review":
             cmd.cmd_kg_review(args)
         elif action == "accept":
             cmd.cmd_kg_accept(args)

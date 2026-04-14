@@ -77,9 +77,20 @@ class VaultService:
             room=cmd.room,
         )
 
-    def get_drawers(self, where: dict | None = None, include: list | None = None) -> dict:
+    def get_drawers(
+        self,
+        where: dict | None = None,
+        include: list | None = None,
+        limit: int | None = None,
+        offset: int | None = None,
+    ) -> dict:
         """Retrieve drawers matching a metadata filter via the collection store."""
-        return self._col.get(where=where or {}, include=include or ["metadatas"])
+        return self._col.get(
+            where=where or {},
+            include=include or ["metadatas"],
+            limit=limit,
+            offset=offset,
+        )
 
     def delete_drawer(self, cmd: DeleteDrawerCommand) -> DeleteDrawerResult:
         existing = self._col.get(ids=[cmd.drawer_id])

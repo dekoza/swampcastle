@@ -76,6 +76,35 @@ class TestDeleteDrawer:
         assert "delete_drawer" in ops
 
 
+def test_get_drawers_forwards_limit_and_offset(wal):
+    class SpyCollection:
+        def __init__(self):
+            self.calls = []
+
+        def get(self, **kwargs):
+            self.calls.append(kwargs)
+            return {"ids": []}
+
+    collection = SpyCollection()
+    svc = VaultService(collection, wal)
+
+    svc.get_drawers(
+        where={"wing": "proj"},
+        include=["metadatas"],
+        limit=25,
+        offset=50,
+    )
+
+    assert collection.calls == [
+        {
+            "where": {"wing": "proj"},
+            "include": ["metadatas"],
+            "limit": 25,
+            "offset": 50,
+        }
+    ]
+
+
 class TestDiary:
     def test_write_and_read(self, svc):
         svc.diary_write(

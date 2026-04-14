@@ -483,3 +483,72 @@ def test_cmd_seek_prints_contributor_filter_and_hit(capsys):
     out = capsys.readouterr().out
     assert "Contributor: dekoza" in out
     assert "by dekoza" in out
+
+
+def test_cmd_deskeleton_pages_drawers_in_batches(capsys):
+    class PaginatedVault:
+        def __init__(self):
+            self.calls = []
+
+        def get_drawers(self, **kwargs):
+            self.calls.append(kwargs)
+            offset = kwargs.get("offset", 0)
+            limit = kwargs.get("limit")
+            if offset == 0:
+                return {
+                    "ids": [f"d{i}" for i in range(limit)],
+                    "metadatas": [
+                        {
+                            "wing": "alpha",
+                            "source_file": "/tmp/one.py",
+                            "is_skeleton": True,
+                        }
+                        for _ in range(limit)
+                    ],
+                }
+            if offset == limit:
+                return {
+                    "ids": ["tail"],
+                    "metadatas": [
+                        {
+                            "wing": "beta",
+                            "source_file": "/tmp/two.py",
+                            "is_skeleton": True,
+                        }
+                    ],
+                }
+            return {"ids": [], "metadatas": []}
+
+    vault = PaginatedVault()
+
+    class DeskeletonCastle:
+        def __init__(self, settings, factory):
+            self.vault = vault
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *exc):
+            return None
+
+    args = SimpleNamespace(
+        palace="/tmp/castle",
+        backend=None,
+        wing=None,
+        room=None,
+        dry_run=True,
+    )
+
+    with patch("swampcastle.castle.Castle", DeskeletonCastle):
+        with patch("swampcastle.cli.commands.factory_from_settings", return_value=object()):
+            commands.cmd_deskeleton(args)
+
+    assert len(vault.calls) == 2
+    assert vault.calls[0]["limit"] == 1000
+    assert vault.calls[0]["offset"] == 0
+    assert vault.calls[1]["limit"] == 1000
+    assert vault.calls[1]["offset"] == 1000
+
+    out = capsys.readouterr().out
+    assert "/tmp/one.py" in out
+    assert "/tmp/two.py" in out

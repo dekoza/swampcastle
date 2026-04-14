@@ -11,6 +11,9 @@ from swampcastle.settings import CastleSettings
 from swampcastle.storage import factory_from_settings
 
 
+DESKELETON_BATCH_SIZE = 1000
+
+
 def _print_section(title: str) -> None:
     print(f"  SwampCastle {title}")
 
@@ -380,16 +383,31 @@ def cmd_deskeleton(args):
         if args.room:
             where["room"] = args.room
 
-        results = castle.vault.get_drawers(where=where or None, include=["metadatas"])
         skeleton_targets = []
-        for meta in results.get("metadatas", []):
-            if not meta.get("is_skeleton"):
-                continue
-            source_file = meta.get("source_file")
-            source_wing = meta.get("wing")
-            if not source_file or not source_wing:
-                continue
-            skeleton_targets.append((source_wing, source_file))
+        offset = 0
+        while True:
+            results = castle.vault.get_drawers(
+                where=where or None,
+                include=["metadatas"],
+                limit=DESKELETON_BATCH_SIZE,
+                offset=offset,
+            )
+            metadatas = results.get("metadatas", [])
+            if not metadatas:
+                break
+
+            for meta in metadatas:
+                if not meta.get("is_skeleton"):
+                    continue
+                source_file = meta.get("source_file")
+                source_wing = meta.get("wing")
+                if not source_file or not source_wing:
+                    continue
+                skeleton_targets.append((source_wing, source_file))
+
+            if len(metadatas) < DESKELETON_BATCH_SIZE:
+                break
+            offset += DESKELETON_BATCH_SIZE
 
         if not skeleton_targets:
             print("  No skeleton drawers found.")

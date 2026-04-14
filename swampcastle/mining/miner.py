@@ -679,12 +679,13 @@ def process_file(
     registry=None,
     verbose: bool = False,
     embed_buffer=None,
+    force_no_skeleton: bool = False,
 ) -> tuple:
     """Read, chunk, route, and file one file. Returns (drawer_count, room_name)."""
 
     # Skip if already filed
     source_file = str(filepath)
-    if not dry_run and _file_already_mined(collection, source_file, check_mtime=True):
+    if not dry_run and not force_no_skeleton and _file_already_mined(collection, source_file, check_mtime=True):
         return 0, None
 
     try:
@@ -713,7 +714,7 @@ def process_file(
     is_skeleton = False
     extractor = None
     # Trigger: lines > 2000 or size > 200KB
-    if content.count("\n") > 2000 or len(content) > 200_000:
+    if not force_no_skeleton and (content.count("\n") > 2000 or len(content) > 200_000):
         extractor = get_skeleton_extractor(source_file)
 
     if extractor:
@@ -790,6 +791,7 @@ def scan_project(
     project_dir: str,
     respect_gitignore: bool = True,
     include_ignored: list = None,
+    only_force_included: bool = False,
 ) -> list:
     """Return list of all readable file paths."""
     project_path = Path(project_dir).expanduser().resolve()
@@ -799,6 +801,9 @@ def scan_project(
     matcher_cache = {}
     swamp_cache = {}
     include_paths = normalize_include_paths(include_ignored)
+
+    if only_force_included and not include_paths:
+        return []
 
     # load global ~/.swampcastleignore if present
     try:
@@ -859,6 +864,9 @@ def scan_project(
             force_include = is_force_included(filepath, project_path, include_paths)
             exact_force_include = is_exact_force_include(filepath, project_path, include_paths)
 
+            if only_force_included and not force_include:
+                continue
+
             if not force_include and filename in SKIP_FILENAMES:
                 continue
             if filepath.suffix.lower() not in READABLE_EXTENSIONS and not exact_force_include:
@@ -903,6 +911,8 @@ def mine(
     include_ignored: list = None,
     storage_factory: StorageFactory | None = None,
     explain: bool = False,
+    force_no_skeleton: bool = False,
+    only_force_included: bool = False,
 ):
     """Mine a project directory into the palace."""
 
@@ -927,6 +937,7 @@ def mine(
         project_dir,
         respect_gitignore=respect_gitignore,
         include_ignored=include_ignored,
+        only_force_included=only_force_included,
     )
     if limit > 0:
         files = files[:limit]
@@ -975,6 +986,7 @@ def mine(
             registry=registry,
             verbose=explain,
             embed_buffer=embed_buffer,
+            force_no_skeleton=force_no_skeleton,
         )
         if drawers == 0:
             if not dry_run:

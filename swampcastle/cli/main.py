@@ -87,8 +87,16 @@ def main():
     p.add_argument("--contributor", default=None)
     p.add_argument("--results", type=int, default=5)
 
-    # survey (status)
-    sub.add_parser("survey", aliases=["status"], help="Survey the castle")
+    p = sub.add_parser("survey", aliases=["status"], help="Survey the castle")
+
+    # deskeleton
+    p = sub.add_parser(
+        "deskeleton",
+        help="Identify and replace skeleton drawers with full implementations",
+    )
+    p.add_argument("--wing", default=None, help="Filter by wing")
+    p.add_argument("--room", default=None, help="Filter by room")
+    p.add_argument("--dry-run", action="store_true", help="Show what would be deskeletonized")
 
     # drawbridge (mcp)
     p_db = sub.add_parser("drawbridge", aliases=["mcp"], help="Lower the drawbridge — MCP server")
@@ -232,6 +240,7 @@ def main():
         "parley": cmd.cmd_parley,
         "sync": cmd.cmd_parley,
         "ni": cmd.cmd_ni,
+        "deskeleton": cmd.cmd_deskeleton,
     }
 
     handler = dispatch.get(args.command)

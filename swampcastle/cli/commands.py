@@ -363,3 +363,76 @@ def cmd_parley(args):
 def cmd_ni(args):
     print("\n  We are the Knights who say... Ni!")
     print("  Bring us a shrubbery! (Or run: swampcastle build <dir>)\n")
+
+
+def cmd_deskeleton(args):
+    """Identify and replace skeleton drawers with full implementations."""
+    from swampcastle.castle import Castle
+    from swampcastle.mining.miner import mine
+
+    settings = _settings(args)
+    factory = factory_from_settings(settings)
+    with Castle(settings, factory) as castle:
+        where = {"is_skeleton": True}
+        if args.wing:
+            where["wing"] = args.wing
+        if args.room:
+            where["room"] = args.room
+
+        results = castle._collection.get(where=where, include=["metadatas"])
+        if not results["ids"]:
+            print("  No skeleton drawers found.")
+            return
+
+        # Group by source_file to re-mine each file once
+        source_files = set()
+        for meta in results["metadatas"]:
+            sf = meta.get("source_file")
+            if sf:
+                source_files.add(sf)
+
+        _print_section("Deskeleton")
+        _print_kv("Skeletons found", len(results["ids"]))
+        _print_kv("Source files", len(source_files))
+
+        if args.dry_run:
+            for sf in sorted(source_files):
+                print(f"  [DRY RUN] Would re-mine: {sf}")
+            return
+
+        for sf in sorted(source_files):
+            sf_path = Path(sf)
+            if not sf_path.exists():
+                print(f"  Warning: source file missing, skipping: {sf}")
+                continue
+
+            # Project dir is parent of .swampcastle.yaml
+            from swampcastle.project_config import resolve_project_config
+
+            config_path = resolve_project_config(str(sf_path.parent))
+            if not config_path:
+                # search up
+                curr = sf_path.parent
+                while curr != curr.parent:
+                    config_path = resolve_project_config(str(curr))
+                    if config_path:
+                        break
+                    curr = curr.parent
+
+            if not config_path:
+                print(f"  Warning: No .swampcastle.yaml found for {sf}, skipping.")
+                continue
+
+            project_dir = str(config_path.parent)
+            print(f"  Deskeletonizing: {sf}")
+            # Re-mine the single file
+            mine(
+                project_dir=project_dir,
+                palace_path=str(settings.castle_path),
+                agent="swampcastle-deskeleton",
+                storage_factory=factory,
+                force_no_skeleton=True,
+                only_force_included=True,
+                include_ignored=[str(sf_path.relative_to(project_dir))],
+                respect_gitignore=False,
+            )

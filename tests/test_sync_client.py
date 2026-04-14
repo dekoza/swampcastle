@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import json
 from types import SimpleNamespace
-from urllib.error import URLError
+from urllib.error import HTTPError, URLError
 
 import pytest
 
@@ -34,6 +34,7 @@ def test_request_builds_json_body_and_parses_response(monkeypatch):
         captured["method"] = req.get_method()
         captured["body"] = req.data.decode("utf-8")
         captured["timeout"] = timeout
+        captured["auth"] = req.headers.get("Authorization")
         return _FakeResponse({"ok": True})
 
     monkeypatch.setattr("swampcastle.sync_client.urlopen", fake_urlopen)
@@ -47,7 +48,39 @@ def test_request_builds_json_body_and_parses_response(monkeypatch):
         "method": "POST",
         "body": '{"x": 1}',
         "timeout": 9.0,
+        "auth": None,
     }
+
+
+def test_request_adds_bearer_header_when_api_key_passed(monkeypatch):
+    captured = {}
+
+    def fake_urlopen(req, timeout):
+        captured["auth"] = req.headers.get("Authorization")
+        return _FakeResponse({"ok": True})
+
+    monkeypatch.setattr("swampcastle.sync_client.urlopen", fake_urlopen)
+
+    client = SyncClient("http://server:7433", api_key="secret-token")
+    client._request("POST", "/sync/push", {"x": 1})
+
+    assert captured["auth"] == "Bearer secret-token"
+
+
+def test_request_reads_api_key_from_env(monkeypatch):
+    captured = {}
+
+    def fake_urlopen(req, timeout):
+        captured["auth"] = req.headers.get("Authorization")
+        return _FakeResponse({"ok": True})
+
+    monkeypatch.setenv("SWAMPCASTLE_SYNC_API_KEY", "env-token")
+    monkeypatch.setattr("swampcastle.sync_client.urlopen", fake_urlopen)
+
+    client = SyncClient("http://server:7433")
+    client._request("POST", "/sync/push", {"x": 1})
+
+    assert captured["auth"] == "Bearer env-token"
 
 
 def test_is_reachable_returns_true_for_ok_status(monkeypatch):
@@ -61,6 +94,19 @@ def test_is_reachable_returns_false_on_error(monkeypatch):
 
     monkeypatch.setattr(SyncClient, "_request", fail)
     assert SyncClient("http://server").is_reachable() is False
+
+
+def test_get_status_propagates_http_401(monkeypatch):
+    def fake_urlopen(req, timeout):
+        raise HTTPError(req.full_url, 401, "Unauthorized", hdrs=None, fp=None)
+
+    monkeypatch.setattr("swampcastle.sync_client.urlopen", fake_urlopen)
+    client = SyncClient("http://server", api_key="wrong-token")
+
+    with pytest.raises(HTTPError) as exc:
+        client.get_status()
+
+    assert exc.value.code == 401
 
 
 def test_get_status_push_and_pull_delegate_to_request(monkeypatch):

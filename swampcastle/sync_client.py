@@ -6,15 +6,21 @@ Usage:
     client = SyncClient("http://homeserver:7433")
     client.sync(engine)           # push + pull
     client.is_reachable()         # health check
+
+Optional auth:
+    export SWAMPCASTLE_SYNC_API_KEY=secret
+    client = SyncClient("http://homeserver:7433")
+    # or: SyncClient("http://homeserver:7433", api_key="secret")
 """
 
 from __future__ import annotations
 
-import logging
-from urllib.request import Request, urlopen
 import json
+import logging
+import os
+from urllib.request import Request, urlopen
 
-from .sync import SyncEngine, ChangeSet
+from .sync import ChangeSet, SyncEngine
 
 logger = logging.getLogger("swampcastle.sync_client")
 
@@ -22,15 +28,25 @@ logger = logging.getLogger("swampcastle.sync_client")
 class SyncClient:
     """HTTP client that talks to a swampcastle sync server."""
 
-    def __init__(self, server_url: str, timeout: float = 30.0):
+    def __init__(
+        self,
+        server_url: str,
+        timeout: float = 30.0,
+        api_key: str | None = None,
+    ):
         self._url = server_url.rstrip("/")
         self._timeout = timeout
+        self._api_key = (
+            api_key if api_key is not None else os.environ.get("SWAMPCASTLE_SYNC_API_KEY")
+        )
 
     def _request(self, method: str, path: str, body: dict = None) -> dict:
         """Make an HTTP request and return parsed JSON."""
         url = f"{self._url}{path}"
         data = json.dumps(body).encode("utf-8") if body else None
         headers = {"Content-Type": "application/json"} if data else {}
+        if self._api_key:
+            headers["Authorization"] = f"Bearer {self._api_key}"
         req = Request(url, data=data, headers=headers, method=method)
         with urlopen(req, timeout=self._timeout) as resp:
             return json.loads(resp.read().decode("utf-8"))

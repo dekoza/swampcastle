@@ -149,7 +149,7 @@ def _avg_line_length(content: str) -> float:
     lines = content.splitlines()
     if not lines:
         return 0.0
-    return sum(len(l) for l in lines) / len(lines)
+    return sum(len(line) for line in lines) / len(lines)
 
 
 def _symbol_to_alnum_ratio(content: str) -> float:
@@ -1088,16 +1088,23 @@ def status(palace_path: str):
         print("  Run: swampcastle build <dir> then swampcastle gather <dir>")
         return
 
-    # Count by wing and room
-    r = col.get(limit=10000, include=["metadatas"])
-    metas = r["metadatas"]
-
+    # Count by wing and room using paginated scans so large castles are not truncated.
+    total = col.count()
     wing_rooms = defaultdict(lambda: defaultdict(int))
-    for m in metas:
-        wing_rooms[m.get("wing", "?")][m.get("room", "?")] += 1
+    offset = 0
+    batch_size = 1000
+
+    while offset < max(total, 1):
+        batch = col.get(limit=batch_size, offset=offset, include=["metadatas"])
+        ids = batch.get("ids", [])
+        if not ids:
+            break
+        for m in batch.get("metadatas", []):
+            wing_rooms[m.get("wing", "?")][m.get("room", "?")] += 1
+        offset += len(ids)
 
     print(f"\n{'=' * 55}")
-    print(f"  SwampCastle Status — {len(metas)} drawers")
+    print(f"  SwampCastle Status — {total} drawers")
     print(f"{'=' * 55}\n")
     for wing, rooms in sorted(wing_rooms.items()):
         print(f"  WING: {wing}")

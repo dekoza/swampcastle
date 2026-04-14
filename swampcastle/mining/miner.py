@@ -353,26 +353,24 @@ def load_swampignore_matcher(dir_path: Path, cache: dict):
     return cache[dir_path]
 
 
+def _ignore_decision(path: Path, matchers: list, is_dir: bool = False) -> bool | None:
+    """Return the last ignore decision for a path, or None when no rule matched."""
+    decision = None
+    for matcher in matchers:
+        matched = matcher.matches(path, is_dir=is_dir)
+        if matched is not None:
+            decision = matched
+    return decision
+
+
 def is_gitignored(path: Path, matchers: list, is_dir: bool = False) -> bool:
     """Apply active .gitignore matchers in ancestor order; last match wins."""
-    ignored = False
-    for matcher in matchers:
-        decision = matcher.matches(path, is_dir=is_dir)
-        if decision is not None:
-            ignored = decision
-    return ignored
+    return _ignore_decision(path, matchers, is_dir=is_dir) is True
 
 
 def is_swampignored(path: Path, matchers: list, is_dir: bool = False) -> bool:
     """Apply active .swampcastleignore matchers in ancestor order; last match wins."""
-    if not matchers:
-        return False
-    ignored = False
-    for matcher in matchers:
-        decision = matcher.matches(path, is_dir=is_dir)
-        if decision is not None:
-            ignored = decision
-    return ignored
+    return _ignore_decision(path, matchers, is_dir=is_dir) is True
 
 
 def should_skip_dir(dirname: str) -> bool:
@@ -856,26 +854,48 @@ def scan_project(
     except Exception:
         global_swamp = None
 
-    def _global_matches(path: Path) -> bool:
-        """Match path against global_swamp rules using project-relative path then filename."""
+    def _global_decision(path: Path, *, is_dir: bool) -> bool | None:
+        """Return the global ~/.swampcastleignore decision, or None when no rule matched."""
         if global_swamp is None:
-            return False
-        # Try project-relative path first
+            return None
         try:
             relative = path.relative_to(project_path).as_posix().strip("/")
         except Exception:
             relative = path.name
-        decision = False
+        decision = None
         for rule in global_swamp.rules:
             try:
-                if global_swamp._rule_matches(rule, relative, False):
+                if global_swamp._rule_matches(rule, relative, is_dir):
                     decision = not rule["negated"]
             except Exception:
                 continue
         return decision
 
+    def _is_ignored_by_precedence(path: Path, *, is_dir: bool) -> bool:
+        """Apply project swampignore > global swampignore > gitignore precedence."""
+        project_decision = _ignore_decision(path, active_swamp_matchers, is_dir=is_dir)
+        if project_decision is not None:
+            return project_decision
+
+        global_decision = _global_decision(path, is_dir=is_dir)
+        if global_decision is not None:
+            return global_decision
+
+        if respect_gitignore:
+            return is_gitignored(path, active_matchers, is_dir=is_dir)
+        return False
+
     for root, dirs, filenames in os.walk(project_path):
         root_path = Path(root)
+
+        active_swamp_matchers = [
+            matcher
+            for matcher in active_swamp_matchers
+            if root_path == matcher.base_dir or matcher.base_dir in root_path.parents
+        ]
+        current_swamp = load_swampignore_matcher(root_path, swamp_cache)
+        if current_swamp is not None:
+            active_swamp_matchers.append(current_swamp)
 
         if respect_gitignore:
             active_matchers = [
@@ -886,14 +906,6 @@ def scan_project(
             current_matcher = load_gitignore_matcher(root_path, matcher_cache)
             if current_matcher is not None:
                 active_matchers.append(current_matcher)
-            active_swamp_matchers = [
-                matcher
-                for matcher in active_swamp_matchers
-                if root_path == matcher.base_dir or matcher.base_dir in root_path.parents
-            ]
-            current_swamp = load_swampignore_matcher(root_path, swamp_cache)
-            if current_swamp is not None:
-                active_swamp_matchers.append(current_swamp)
 
         dirs[:] = [
             d
@@ -901,13 +913,12 @@ def scan_project(
             if is_force_included(root_path / d, project_path, include_paths)
             or not should_skip_dir(d)
         ]
-        if respect_gitignore and active_matchers:
-            dirs[:] = [
-                d
-                for d in dirs
-                if is_force_included(root_path / d, project_path, include_paths)
-                or not is_gitignored(root_path / d, active_matchers, is_dir=True)
-            ]
+        dirs[:] = [
+            d
+            for d in dirs
+            if is_force_included(root_path / d, project_path, include_paths)
+            or not _is_ignored_by_precedence(root_path / d, is_dir=True)
+        ]
 
         for filename in filenames:
             filepath = root_path / filename
@@ -921,17 +932,8 @@ def scan_project(
                 continue
             if filepath.suffix.lower() not in READABLE_EXTENSIONS and not exact_force_include:
                 continue
-            # swampcastleignore takes precedence over gitignore; still allow force_include
-            if active_swamp_matchers and not force_include:
-                if is_swampignored(filepath, active_swamp_matchers, is_dir=False):
-                    continue
-            # apply global ~/.swampcastleignore (lower precedence than project-level swampignore)
-            if global_swamp is not None and not force_include:
-                if _global_matches(filepath):
-                    continue
-            if respect_gitignore and active_matchers and not force_include:
-                if is_gitignored(filepath, active_matchers, is_dir=False):
-                    continue
+            if not force_include and _is_ignored_by_precedence(filepath, is_dir=False):
+                continue
             # Skip symlinks — prevents following links to /dev/urandom, etc.
             if filepath.is_symlink():
                 continue

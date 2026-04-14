@@ -17,6 +17,7 @@ Config in ~/.swampcastle/config.json:
 from __future__ import annotations
 
 import logging
+import threading
 from typing import Protocol, runtime_checkable
 
 logger = logging.getLogger("swampcastle")
@@ -353,6 +354,7 @@ class OllamaEmbedder:
 # ── Embedder cache & factory ─────────────────────────────────────────────────
 
 _embedder_cache: dict[str, Embedder] = {}
+_embedder_lock = threading.Lock()
 
 
 # Well-known model aliases that map to full HuggingFace names.
@@ -398,9 +400,11 @@ def get_embedder(config: dict = None) -> Embedder:
         cache_key = f"ollama:{model}@{base_url}"
 
         if cache_key not in _embedder_cache:
-            _embedder_cache[cache_key] = OllamaEmbedder(
-                model=model, base_url=base_url, timeout=timeout
-            )
+            with _embedder_lock:
+                if cache_key not in _embedder_cache:
+                    _embedder_cache[cache_key] = OllamaEmbedder(
+                        model=model, base_url=base_url, timeout=timeout
+                    )
         return _embedder_cache[cache_key]
 
     resolved = resolve_model_name(name)
@@ -410,13 +414,19 @@ def get_embedder(config: dict = None) -> Embedder:
     if resolved == "all-MiniLM-L6-v2" and device == "cpu":
         cache_key = "onnx:all-MiniLM-L6-v2"
         if cache_key not in _embedder_cache:
-            _embedder_cache[cache_key] = OnnxEmbedder()
+            with _embedder_lock:
+                if cache_key not in _embedder_cache:
+                    _embedder_cache[cache_key] = OnnxEmbedder()
         return _embedder_cache[cache_key]
 
     # GPU device or non-default model → sentence-transformers
     cache_key = f"st:{resolved}:{device}"
     if cache_key not in _embedder_cache:
-        _embedder_cache[cache_key] = SentenceTransformerEmbedder(model_name=resolved, device=device)
+        with _embedder_lock:
+            if cache_key not in _embedder_cache:
+                _embedder_cache[cache_key] = SentenceTransformerEmbedder(
+                    model_name=resolved, device=device
+                )
     return _embedder_cache[cache_key]
 
 

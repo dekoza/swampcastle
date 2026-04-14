@@ -374,37 +374,42 @@ def cmd_deskeleton(args):
     settings = _settings(args)
     factory = factory_from_settings(settings)
     with Castle(settings, factory) as castle:
-        where = {"is_skeleton": True}
+        where = {}
         if args.wing:
             where["wing"] = args.wing
         if args.room:
             where["room"] = args.room
 
-        results = castle.vault.get_drawers(where=where, include=["metadatas"])
-        if not results["ids"]:
+        results = castle.vault.get_drawers(where=where or None, include=["metadatas"])
+        skeleton_targets = []
+        for meta in results.get("metadatas", []):
+            if not meta.get("is_skeleton"):
+                continue
+            source_file = meta.get("source_file")
+            source_wing = meta.get("wing")
+            if not source_file or not source_wing:
+                continue
+            skeleton_targets.append((source_wing, source_file))
+
+        if not skeleton_targets:
             print("  No skeleton drawers found.")
             return
 
-        # Group by source_file to re-mine each file once
-        source_files = set()
-        for meta in results["metadatas"]:
-            sf = meta.get("source_file")
-            if sf:
-                source_files.add(sf)
+        grouped_targets = sorted(set(skeleton_targets))
 
         _print_section("Deskeleton")
-        _print_kv("Skeletons found", len(results["ids"]))
-        _print_kv("Source files", len(source_files))
+        _print_kv("Skeletons found", len(skeleton_targets))
+        _print_kv("Source files", len(grouped_targets))
 
         if args.dry_run:
-            for sf in sorted(source_files):
-                print(f"  [DRY RUN] Would re-mine: {sf}")
+            for source_wing, source_file in grouped_targets:
+                print(f"  [DRY RUN] Would re-mine ({source_wing}): {source_file}")
             return
 
-        for sf in sorted(source_files):
-            sf_path = Path(sf)
+        for source_wing, source_file in grouped_targets:
+            sf_path = Path(source_file)
             if not sf_path.exists():
-                print(f"  Warning: source file missing, skipping: {sf}")
+                print(f"  Warning: source file missing, skipping: {source_file}")
                 continue
 
             config_path = resolve_project_config(str(sf_path.parent))
@@ -417,20 +422,21 @@ def cmd_deskeleton(args):
                     curr = curr.parent
 
             if not config_path:
-                print(f"  Warning: No .swampcastle.yaml found for {sf}, skipping.")
+                print(f"  Warning: No .swampcastle.yaml found for {source_file}, skipping.")
                 continue
 
             project_dir = str(config_path.parent)
             try:
                 rel = str(sf_path.relative_to(project_dir))
             except ValueError:
-                print(f"  Warning: {sf} is not under project dir {project_dir}, skipping.")
+                print(f"  Warning: {source_file} is not under project dir {project_dir}, skipping.")
                 continue
 
-            print(f"  Deskeletonizing: {sf}")
+            print(f"  Deskeletonizing ({source_wing}): {source_file}")
             mine(
                 project_dir=project_dir,
                 palace_path=str(settings.castle_path),
+                wing=source_wing,
                 agent="swampcastle-deskeleton",
                 storage_factory=factory,
                 force_no_skeleton=True,

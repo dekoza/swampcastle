@@ -53,9 +53,18 @@ SKIP_DIRS = {
 }
 
 
-def _file_already_mined(collection, source_file: str, check_mtime: bool = False) -> bool:
+def _file_already_mined(
+    collection,
+    source_file: str,
+    *,
+    wing: str | None = None,
+    check_mtime: bool = False,
+) -> bool:
     try:
-        results = collection.get(where={"source_file": source_file}, limit=1)
+        where = {"source_file": source_file}
+        if wing is not None:
+            where = {"$and": [{"source_file": source_file}, {"wing": wing}]}
+        results = collection.get(where=where, limit=1)
         if not results.get("ids"):
             return False
         if check_mtime:
@@ -63,8 +72,6 @@ def _file_already_mined(collection, source_file: str, check_mtime: bool = False)
             stored_mtime = stored_meta.get("source_mtime")
             if stored_mtime is None:
                 return False
-            import os
-
             current_mtime = os.path.getmtime(source_file)
             return abs(float(stored_mtime) - current_mtime) < 0.001
         return True
@@ -726,7 +733,7 @@ def process_file(
     if (
         not dry_run
         and not _force_remine
-        and _file_already_mined(collection, source_file, check_mtime=True)
+        and _file_already_mined(collection, source_file, wing=wing, check_mtime=True)
     ):
         return 0, None
 

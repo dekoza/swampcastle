@@ -67,6 +67,27 @@ class TestCastleRoundtrip:
         result = castle.graph.kg_query(entity="Kai")
         assert result.count == 1
 
+    def test_vault_write_invalidates_graph_cache(self, castle, monkeypatch):
+        calls = []
+        original = castle.graph._build_graph
+
+        def wrapped():
+            calls.append(True)
+            return original()
+
+        monkeypatch.setattr(castle.graph, "_build_graph", wrapped)
+
+        castle.vault.add_drawer(AddDrawerCommand(wing="proj", room="auth", content="a"))
+        castle.graph.traverse("auth")
+        assert len(calls) == 1
+
+        castle.graph.traverse("auth")
+        assert len(calls) == 1, "Second read should use cached summary"
+
+        castle.vault.add_drawer(AddDrawerCommand(wing="personal", room="auth", content="b"))
+        castle.graph.traverse("auth")
+        assert len(calls) == 2, "Vault write must invalidate cached summary via Castle wiring"
+
 
 class TestAsyncCastle:
     @pytest.fixture

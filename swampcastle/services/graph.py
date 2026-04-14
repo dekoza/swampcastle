@@ -19,6 +19,17 @@ class GraphService:
         self._graph = graph
         self._col = collection
         self._wal = wal
+        self._summary_cache: tuple[dict, list[dict]] | None = None
+        self._summary_cache_count: int | None = None
+
+    def invalidate_cache(self) -> None:
+        """Drop the cached room graph summary.
+
+        Called after drawer writes/deletes so read-only graph operations do not
+        rebuild the entire summary unless the collection actually changed.
+        """
+        self._summary_cache = None
+        self._summary_cache_count = None
 
     def kg_query(
         self, entity: str, as_of: str | None = None, direction: str = "both"
@@ -150,8 +161,19 @@ class GraphService:
             }
         return nodes, edges
 
+    def _get_graph_summary(self) -> tuple[dict, list[dict]]:
+        """Return a cached graph summary when the collection size is unchanged."""
+        total = self._col.count()
+        if self._summary_cache is not None and self._summary_cache_count == total:
+            return self._summary_cache
+
+        summary = self._build_graph()
+        self._summary_cache = summary
+        self._summary_cache_count = total
+        return summary
+
     def traverse(self, start_room: str, max_hops: int = 2) -> list[dict]:
-        nodes, edges = self._build_graph()
+        nodes, edges = self._get_graph_summary()
         if start_room not in nodes:
             return []
 
@@ -196,7 +218,7 @@ class GraphService:
         return results[:50]
 
     def find_tunnels(self, wing_a: str | None = None, wing_b: str | None = None) -> list[dict]:
-        nodes, _ = self._build_graph()
+        nodes, _ = self._get_graph_summary()
         tunnels = []
         for room, data in nodes.items():
             wings = data["wings"]
@@ -218,7 +240,7 @@ class GraphService:
         return tunnels[:50]
 
     def graph_stats(self) -> dict:
-        nodes, edges = self._build_graph()
+        nodes, edges = self._get_graph_summary()
         tunnel_rooms = sum(1 for n in nodes.values() if len(n["wings"]) >= 2)
         wing_counts = Counter()
         for data in nodes.values():

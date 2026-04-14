@@ -151,3 +151,71 @@ class TestGraphTraversal:
         s = populated.graph_stats()
         assert s["total_rooms"] > 0
         assert s["tunnel_rooms"] > 0
+
+
+class TestGraphSummaryCaching:
+    def test_read_only_calls_reuse_cached_graph_summary(self, graph, wal):
+        """Repeated graph reads without collection mutations must not rescan.
+
+        The old implementation rebuilt the whole graph on every call:
+        traverse(), find_tunnels(), and graph_stats() each re-read collection
+        metadata from storage. That is needless O(N) repeated work.
+        """
+
+        class FakeCollection:
+            def __init__(self):
+                self.get_calls = []
+
+            def count(self):
+                return 3
+
+            def get(self, *, ids=None, where=None, limit=None, offset=None, include=None):
+                self.get_calls.append({"limit": limit, "offset": offset, "include": include})
+                return {
+                    "ids": ["d1", "d2", "d3"],
+                    "metadatas": [
+                        {"wing": "proj", "room": "auth"},
+                        {"wing": "personal", "room": "auth"},
+                        {"wing": "proj", "room": "billing"},
+                    ],
+                }
+
+        col = FakeCollection()
+        svc = GraphService(graph, col, wal)
+
+        rooms = {r["room"] for r in svc.traverse("auth")}
+        assert "auth" in rooms
+        svc.find_tunnels()
+        svc.graph_stats()
+
+        assert len(col.get_calls) == 1, f"Expected cached graph summary reuse, got {col.get_calls}"
+
+    def test_vault_write_invalidates_cached_graph_summary(self, graph, wal):
+        """A drawer write must invalidate the cached graph summary."""
+
+        class CountingCollection(InMemoryCollectionStore):
+            def __init__(self):
+                super().__init__()
+                self.get_calls = 0
+
+            def get(self, *args, **kwargs):
+                self.get_calls += 1
+                return super().get(*args, **kwargs)
+
+        col = CountingCollection()
+        svc = GraphService(graph, col, wal)
+        vault = VaultService(col, wal, graph_cache_invalidator=svc.invalidate_cache)
+
+        vault.add_drawer(AddDrawerCommand(wing="proj", room="auth", content="a"))
+        first = svc.traverse("auth")
+        assert first
+        calls_after_first = col.get_calls
+
+        second = svc.traverse("auth")
+        assert second
+        assert col.get_calls == calls_after_first, "Second read should hit cache, not storage"
+
+        vault.add_drawer(AddDrawerCommand(wing="personal", room="auth", content="b"))
+        third = svc.traverse("auth")
+        assert third
+        assert col.get_calls > calls_after_first, "Vault write must invalidate the graph cache"

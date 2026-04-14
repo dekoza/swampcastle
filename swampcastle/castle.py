@@ -34,8 +34,12 @@ class Castle:
 
         self.catalog = CatalogService(self._collection, str(settings.castle_path))
         self.search = SearchService(self._collection)
-        self.vault = VaultService(self._collection, wal)
         self.graph = GraphService(self._graph_store, self._collection, wal)
+        self.vault = VaultService(
+            self._collection,
+            wal,
+            graph_cache_invalidator=self.graph.invalidate_cache,
+        )
 
     @property
     def settings(self) -> CastleSettings:

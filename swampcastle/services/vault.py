@@ -33,9 +33,19 @@ class DiaryReadQuery(BaseModel):
 
 
 class VaultService:
-    def __init__(self, collection: CollectionStore, wal: WalWriter):
+    def __init__(
+        self,
+        collection: CollectionStore,
+        wal: WalWriter,
+        graph_cache_invalidator=None,
+    ):
         self._col = collection
         self._wal = wal
+        self._graph_cache_invalidator = graph_cache_invalidator
+
+    def _invalidate_graph_cache(self) -> None:
+        if self._graph_cache_invalidator is not None:
+            self._graph_cache_invalidator()
 
     def add_drawer(self, cmd: AddDrawerCommand) -> DrawerResult:
         drawer_id = cmd.drawer_id()
@@ -73,6 +83,7 @@ class VaultService:
                 }
             ],
         )
+        self._invalidate_graph_cache()
         return DrawerResult(
             success=True,
             drawer_id=drawer_id,
@@ -113,6 +124,7 @@ class VaultService:
         )
 
         self._col.delete(ids=[cmd.drawer_id])
+        self._invalidate_graph_cache()
         return DeleteDrawerResult(success=True, drawer_id=cmd.drawer_id)
 
     def diary_write(self, cmd: DiaryWriteCommand) -> DiaryWriteResult:
@@ -148,6 +160,7 @@ class VaultService:
                 }
             ],
         )
+        self._invalidate_graph_cache()
         return DiaryWriteResult(
             success=True,
             entry_id=entry_id,

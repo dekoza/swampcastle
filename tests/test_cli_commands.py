@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import io
+import json
 import os
 from types import SimpleNamespace
 from unittest.mock import patch
@@ -552,3 +554,66 @@ def test_cmd_deskeleton_pages_drawers_in_batches(capsys):
     out = capsys.readouterr().out
     assert "/tmp/one.py" in out
     assert "/tmp/two.py" in out
+
+
+def test_scan_deskeleton_targets_spools_unique_targets_per_page():
+    class PaginatedVault:
+        def __init__(self):
+            self.calls = []
+
+        def get_drawers(self, **kwargs):
+            self.calls.append(kwargs)
+            offset = kwargs.get("offset", 0)
+            limit = kwargs.get("limit")
+            if offset == 0:
+                return {
+                    "ids": [f"d{i}" for i in range(limit)],
+                    "metadatas": [
+                        {
+                            "wing": "alpha",
+                            "source_file": "/tmp/one.py",
+                            "is_skeleton": True,
+                        }
+                        for _ in range(limit)
+                    ],
+                }
+            if offset == limit:
+                return {
+                    "ids": ["dup", "tail"],
+                    "metadatas": [
+                        {
+                            "wing": "alpha",
+                            "source_file": "/tmp/one.py",
+                            "is_skeleton": True,
+                        },
+                        {
+                            "wing": "beta",
+                            "source_file": "/tmp/two.py",
+                            "is_skeleton": True,
+                        },
+                    ],
+                }
+            return {"ids": [], "metadatas": []}
+
+    vault = PaginatedVault()
+    sink = io.StringIO()
+
+    skeleton_count, unique_count = commands._scan_deskeleton_targets(
+        vault,
+        None,
+        sink,
+        batch_size=1000,
+    )
+
+    assert skeleton_count == 1002
+    assert unique_count == 2
+    assert len(vault.calls) == 2
+    assert vault.calls[0]["offset"] == 0
+    assert vault.calls[1]["offset"] == 1000
+
+    sink.seek(0)
+    rows = [json.loads(line) for line in sink.readlines()]
+    assert rows == [
+        {"wing": "alpha", "source_file": "/tmp/one.py"},
+        {"wing": "beta", "source_file": "/tmp/two.py"},
+    ]

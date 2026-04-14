@@ -1,8 +1,10 @@
 """CLI command handlers — each creates a Castle and calls services."""
 
+import json
 import os
 import shlex
 import sys
+import tempfile
 from pathlib import Path
 
 from swampcastle.project_config import resolve_project_config
@@ -369,6 +371,48 @@ def cmd_ni(args):
     print("  Bring us a shrubbery! (Or run: swampcastle build <dir>)\n")
 
 
+def _scan_deskeleton_targets(vault, where, sink, *, batch_size: int = DESKELETON_BATCH_SIZE):
+    """Scan drawers page-by-page and spool unique deskeleton targets to a sink."""
+    seen_targets = set()
+    skeleton_count = 0
+    unique_count = 0
+    offset = 0
+
+    while True:
+        results = vault.get_drawers(
+            where=where or None,
+            include=["metadatas"],
+            limit=batch_size,
+            offset=offset,
+        )
+        metadatas = results.get("metadatas", [])
+        if not metadatas:
+            break
+
+        for meta in metadatas:
+            if not meta.get("is_skeleton"):
+                continue
+            source_file = meta.get("source_file")
+            source_wing = meta.get("wing")
+            if not source_file or not source_wing:
+                continue
+
+            skeleton_count += 1
+            target = (source_wing, source_file)
+            if target in seen_targets:
+                continue
+
+            seen_targets.add(target)
+            unique_count += 1
+            sink.write(json.dumps({"wing": source_wing, "source_file": source_file}) + "\n")
+
+        if len(metadatas) < batch_size:
+            break
+        offset += batch_size
+
+    return skeleton_count, unique_count
+
+
 def cmd_deskeleton(args):
     """Identify and replace skeleton drawers with full implementations."""
     from swampcastle.castle import Castle
@@ -383,83 +427,68 @@ def cmd_deskeleton(args):
         if args.room:
             where["room"] = args.room
 
-        skeleton_targets = []
-        offset = 0
-        while True:
-            results = castle.vault.get_drawers(
-                where=where or None,
-                include=["metadatas"],
-                limit=DESKELETON_BATCH_SIZE,
-                offset=offset,
+        with tempfile.TemporaryFile(mode="w+t", encoding="utf-8") as target_spool:
+            skeleton_count, unique_count = _scan_deskeleton_targets(
+                castle.vault,
+                where or None,
+                target_spool,
             )
-            metadatas = results.get("metadatas", [])
-            if not metadatas:
-                break
 
-            for meta in metadatas:
-                if not meta.get("is_skeleton"):
+            if skeleton_count == 0:
+                print("  No skeleton drawers found.")
+                return
+
+            _print_section("Deskeleton")
+            _print_kv("Skeletons found", skeleton_count)
+            _print_kv("Source files", unique_count)
+
+            target_spool.seek(0)
+            for line in target_spool:
+                payload = json.loads(line)
+                source_wing = payload["wing"]
+                source_file = payload["source_file"]
+
+                if args.dry_run:
+                    print(f"  [DRY RUN] Would re-mine ({source_wing}): {source_file}")
                     continue
-                source_file = meta.get("source_file")
-                source_wing = meta.get("wing")
-                if not source_file or not source_wing:
+
+                sf_path = Path(source_file)
+                if not sf_path.exists():
+                    print(f"  Warning: source file missing, skipping: {source_file}")
                     continue
-                skeleton_targets.append((source_wing, source_file))
 
-            if len(metadatas) < DESKELETON_BATCH_SIZE:
-                break
-            offset += DESKELETON_BATCH_SIZE
+                config_path = resolve_project_config(str(sf_path.parent))
+                if not config_path:
+                    curr = sf_path.parent
+                    while curr != curr.parent:
+                        config_path = resolve_project_config(str(curr))
+                        if config_path:
+                            break
+                        curr = curr.parent
 
-        if not skeleton_targets:
-            print("  No skeleton drawers found.")
-            return
+                if not config_path:
+                    print(f"  Warning: No .swampcastle.yaml found for {source_file}, skipping.")
+                    continue
 
-        grouped_targets = sorted(set(skeleton_targets))
+                project_dir = str(config_path.parent)
+                try:
+                    rel = str(sf_path.relative_to(project_dir))
+                except ValueError:
+                    print(
+                        f"  Warning: {source_file} is not under project dir {project_dir}, skipping."
+                    )
+                    continue
 
-        _print_section("Deskeleton")
-        _print_kv("Skeletons found", len(skeleton_targets))
-        _print_kv("Source files", len(grouped_targets))
-
-        if args.dry_run:
-            for source_wing, source_file in grouped_targets:
-                print(f"  [DRY RUN] Would re-mine ({source_wing}): {source_file}")
-            return
-
-        for source_wing, source_file in grouped_targets:
-            sf_path = Path(source_file)
-            if not sf_path.exists():
-                print(f"  Warning: source file missing, skipping: {source_file}")
-                continue
-
-            config_path = resolve_project_config(str(sf_path.parent))
-            if not config_path:
-                curr = sf_path.parent
-                while curr != curr.parent:
-                    config_path = resolve_project_config(str(curr))
-                    if config_path:
-                        break
-                    curr = curr.parent
-
-            if not config_path:
-                print(f"  Warning: No .swampcastle.yaml found for {source_file}, skipping.")
-                continue
-
-            project_dir = str(config_path.parent)
-            try:
-                rel = str(sf_path.relative_to(project_dir))
-            except ValueError:
-                print(f"  Warning: {source_file} is not under project dir {project_dir}, skipping.")
-                continue
-
-            print(f"  Deskeletonizing ({source_wing}): {source_file}")
-            mine(
-                project_dir=project_dir,
-                palace_path=str(settings.castle_path),
-                wing=source_wing,
-                agent="swampcastle-deskeleton",
-                storage_factory=factory,
-                force_no_skeleton=True,
-                _force_remine=True,
-                only_force_included=True,
-                include_ignored=[rel],
-                respect_gitignore=False,
-            )
+                print(f"  Deskeletonizing ({source_wing}): {source_file}")
+                mine(
+                    project_dir=project_dir,
+                    palace_path=str(settings.castle_path),
+                    wing=source_wing,
+                    agent="swampcastle-deskeleton",
+                    storage_factory=factory,
+                    force_no_skeleton=True,
+                    _force_remine=True,
+                    only_force_included=True,
+                    include_ignored=[rel],
+                    respect_gitignore=False,
+                )

@@ -174,11 +174,17 @@ swampcastle kg review
 # Accept or reject a proposal
 swampcastle kg accept <candidate-id>
 swampcastle kg reject <candidate-id>
+
+# Accept and expire conflicting current facts for exclusive predicates
+swampcastle kg accept <candidate-id> --invalidate-conflicts
 ```
 
 Honest status: this is the proposal-first skeleton only. `kg extract` creates
 candidate triples, not accepted KG facts. You still need `kg accept` to write
 facts into the canonical graph.
+
+`kg review` will also surface simple conflict markers for exclusive predicates
+such as `uses` when the proposed fact disagrees with a currently-active fact.
 
 ## raise / migrate
 

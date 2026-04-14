@@ -432,6 +432,7 @@ def test_cmd_kg_review_lists_candidates(capsys):
                         object_text="LanceDB",
                         confidence=0.9,
                         status="proposed",
+                        conflicts_with=[],
                     )
                 ]
             )
@@ -459,6 +460,48 @@ def test_cmd_kg_review_lists_candidates(capsys):
     assert "uses" in out
 
 
+def test_cmd_kg_review_prints_conflict_marker(capsys):
+    class ProposalCastle(DummyCastle):
+        def __init__(self, settings, factory):
+            self.catalog = SimpleNamespace(status=lambda: None)
+            self.search = SimpleNamespace(search=lambda q: None)
+            self.vault = SimpleNamespace(distill=lambda **kwargs: 0, reforge=lambda **kwargs: 0)
+            self.kg_proposals = SimpleNamespace(
+                list_proposals=lambda filter_params=None: [
+                    SimpleNamespace(
+                        candidate_id="cand_1",
+                        subject_text="SwampCastle",
+                        predicate="uses",
+                        object_text="Clerk",
+                        confidence=0.9,
+                        status="proposed",
+                        conflicts_with=["Auth0"],
+                    )
+                ]
+            )
+            self._collection = object()
+
+    args = SimpleNamespace(
+        status="proposed",
+        predicate=None,
+        min_confidence=None,
+        wing=None,
+        room=None,
+        limit=50,
+        offset=0,
+        palace=None,
+        backend=None,
+    )
+
+    with patch("swampcastle.castle.Castle", lambda s, f: ProposalCastle(s, f)):
+        with patch("swampcastle.cli.commands.factory_from_settings", return_value=object()):
+            commands.cmd_kg_review(args)
+
+    out = capsys.readouterr().out
+    assert "CONFLICT" in out
+    assert "Auth0" in out
+
+
 def test_cmd_kg_accept_and_reject(capsys):
     calls = []
 
@@ -474,6 +517,7 @@ def test_cmd_kg_accept_and_reject(capsys):
                     candidate_id=cmd.candidate_id,
                     status="accepted",
                     triple_id="t1",
+                    invalidated_count=(1 if cmd.action == "accept_and_invalidate_conflict" else 0),
                     error=None,
                 ),
                 reject=lambda candidate_id: calls.append(("reject", candidate_id))
@@ -482,6 +526,7 @@ def test_cmd_kg_accept_and_reject(capsys):
                     candidate_id=candidate_id,
                     status="rejected",
                     triple_id=None,
+                    invalidated_count=0,
                     error=None,
                 ),
             )
@@ -494,6 +539,7 @@ def test_cmd_kg_accept_and_reject(capsys):
         object=None,
         valid_from=None,
         valid_to=None,
+        invalidate_conflicts=True,
         palace=None,
         backend=None,
     )
@@ -505,10 +551,12 @@ def test_cmd_kg_accept_and_reject(capsys):
             commands.cmd_kg_reject(reject_args)
 
     assert calls[0][0] == "accept"
+    assert calls[0][1].action == "accept_and_invalidate_conflict"
     assert calls[1] == ("reject", "cand_2")
     out = capsys.readouterr().out
     assert "accepted" in out.lower()
     assert "rejected" in out.lower()
+    assert "invalidated 1 conflicting fact" in out.lower()
 
 
 def test_cmd_wizard_runs_runtime_wizard():

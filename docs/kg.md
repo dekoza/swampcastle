@@ -101,6 +101,18 @@ These are **not** part of the accepted KG until you review and accept them.
 - `castle.kg_proposals.reject(candidate_id)`
 - `castle.kg_proposals.extract_from_drawers(...)`
 
+Accepted proposals can optionally invalidate conflicting current facts for a
+small exclusive predicate set (`uses`, `migrated_to`, `deployed_to`, etc.) via
+`CandidateReviewCommand(action="accept_and_invalidate_conflict")` or the CLI
+flag `--invalidate-conflicts`.
+
+### Conflict markers
+
+`list_proposals()` annotates proposals with `conflicts_with` when the proposed
+fact disagrees with a currently-active fact for an exclusive predicate.
+This is advisory review metadata — the proposal is still just a proposal until
+accepted.
+
 ### Why proposals are separate
 
 Extracted facts are guesses until reviewed. The accepted KG remains the source

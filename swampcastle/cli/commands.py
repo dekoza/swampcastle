@@ -334,10 +334,14 @@ def cmd_kg_review(args):
     _print_section("KG Review")
     _print_kv("Candidates", len(proposals))
     for candidate in proposals:
-        print(
+        line = (
             f"\n  {candidate.candidate_id}  [{candidate.status}]  {candidate.subject_text}"
             f" --{candidate.predicate}--> {candidate.object_text}  conf={candidate.confidence:.2f}"
         )
+        if getattr(candidate, "conflicts_with", None):
+            conflicts = ", ".join(candidate.conflicts_with)
+            line += f"  [CONFLICT with: {conflicts}]"
+        print(line)
 
 
 def cmd_kg_accept(args):
@@ -349,7 +353,11 @@ def cmd_kg_accept(args):
         result = castle.kg_proposals.accept(
             CandidateReviewCommand(
                 candidate_id=args.candidate_id,
-                action="accept",
+                action=(
+                    "accept_and_invalidate_conflict"
+                    if getattr(args, "invalidate_conflicts", False)
+                    else "accept"
+                ),
                 subject_text=args.subject,
                 predicate=args.predicate,
                 object_text=args.object,
@@ -363,6 +371,8 @@ def cmd_kg_accept(args):
         sys.exit(1)
 
     print(f"  Accepted {result.candidate_id} into KG as triple {result.triple_id}.")
+    if result.invalidated_count:
+        print(f"  Invalidated {result.invalidated_count} conflicting fact(s).")
 
 
 def cmd_kg_reject(args):

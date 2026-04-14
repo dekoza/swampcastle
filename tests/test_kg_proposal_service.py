@@ -65,3 +65,74 @@ def test_propose_list_accept_reject_flow(tmp_path):
     kg_rows = graph.query_entity(name="SwampCastle", direction="outgoing")
     predicates = {row["predicate"] for row in kg_rows}
     assert "depends_on" not in predicates
+
+
+def test_list_proposals_surfaces_conflicts_for_exclusive_predicates(tmp_path):
+    graph = InMemoryGraphStore()
+    collection = InMemoryCollectionStore()
+    wal = WalWriter(tmp_path / "wal")
+    svc = KGProposalService(graph, collection, wal)
+
+    graph.add_triple(subject="SwampCastle", predicate="uses", obj="Auth0")
+    candidate_id = svc.propose(
+        CandidateTriple(
+            candidate_id="cand_conflict",
+            subject_text="SwampCastle",
+            predicate="uses",
+            object_text="Clerk",
+            confidence=0.95,
+            modality="asserted",
+            polarity="positive",
+            evidence_drawer_id="drawer_1",
+            evidence_text="We switched from Auth0 to Clerk.",
+            status="proposed",
+            extractor_version="rules-v1",
+        )
+    )
+
+    proposals = svc.list_proposals()
+    assert len(proposals) == 1
+    assert proposals[0].candidate_id == candidate_id
+    assert proposals[0].conflicts_with == ["Auth0"]
+
+
+def test_accept_and_invalidate_conflict_expires_old_fact(tmp_path):
+    graph = InMemoryGraphStore()
+    collection = InMemoryCollectionStore()
+    wal = WalWriter(tmp_path / "wal")
+    svc = KGProposalService(graph, collection, wal)
+
+    graph.add_triple(subject="SwampCastle", predicate="uses", obj="Auth0")
+    candidate_id = svc.propose(
+        CandidateTriple(
+            candidate_id="cand_conflict",
+            subject_text="SwampCastle",
+            predicate="uses",
+            object_text="Clerk",
+            confidence=0.95,
+            modality="asserted",
+            polarity="positive",
+            evidence_drawer_id="drawer_1",
+            evidence_text="We switched from Auth0 to Clerk.",
+            status="proposed",
+            extractor_version="rules-v1",
+        )
+    )
+
+    result = svc.accept(
+        CandidateReviewCommand(
+            candidate_id=candidate_id,
+            action="accept_and_invalidate_conflict",
+        )
+    )
+    assert result.success is True
+    assert result.status == "accepted"
+    assert result.invalidated_count == 1
+
+    rows = graph.query_entity(name="SwampCastle", direction="outgoing")
+    current = [row for row in rows if row["current"]]
+    expired = [row for row in rows if not row["current"]]
+    assert len(current) == 1
+    assert current[0]["object"] == "Clerk"
+    assert len(expired) == 1
+    assert expired[0]["object"] == "Auth0"

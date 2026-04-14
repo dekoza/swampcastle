@@ -195,6 +195,11 @@ def main():
     p.add_argument("--object", default=None)
     p.add_argument("--valid-from", dest="valid_from", default=None)
     p.add_argument("--valid-to", dest="valid_to", default=None)
+    p.add_argument(
+        "--invalidate-conflicts",
+        action="store_true",
+        help="Invalidate current conflicting facts for exclusive predicates before accepting",
+    )
 
     p = kg_sub.add_parser("reject", help="Reject a candidate triple")
     p.add_argument("candidate_id")

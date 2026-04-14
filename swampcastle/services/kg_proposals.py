@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from datetime import datetime
+from datetime import date, datetime
 
 from swampcastle.mining.extractors import extract_candidate_triples_from_text
 from swampcastle.models.kg_candidates import (
@@ -15,11 +15,50 @@ from swampcastle.storage.base import CollectionStore, GraphStore
 from swampcastle.wal import WalWriter
 
 
+_EXCLUSIVE_PREDICATES = {
+    "uses",
+    "migrated_to",
+    "deployed_to",
+    "owned_by",
+    "replaced_by",
+    "superseded_by",
+}
+
+
 class KGProposalService:
     def __init__(self, graph: GraphStore, collection: CollectionStore, wal: WalWriter):
         self._graph = graph
         self._collection = collection
         self._wal = wal
+
+    def _find_conflicting_objects(
+        self,
+        *,
+        subject_text: str,
+        predicate: str,
+        object_text: str,
+        modality: str = "asserted",
+        polarity: str = "positive",
+    ) -> list[str]:
+        if predicate not in _EXCLUSIVE_PREDICATES:
+            return []
+        if modality != "asserted" or polarity != "positive":
+            return []
+
+        rows = self._graph.query_entity(name=subject_text, direction="outgoing")
+        conflicts = []
+        for row in rows:
+            if row.get("predicate") != predicate:
+                continue
+            is_current = row.get("current")
+            if is_current is None:
+                is_current = row.get("valid_to") is None
+            if not is_current:
+                continue
+            existing_object = row.get("object")
+            if existing_object and existing_object != object_text:
+                conflicts.append(existing_object)
+        return sorted(set(conflicts))
 
     def extract_from_drawers(
         self,
@@ -140,6 +179,13 @@ class KGProposalService:
             extractor_version=row["extractor_version"],
             created_at=row.get("created_at"),
             reviewed_at=row.get("reviewed_at"),
+            conflicts_with=self._find_conflicting_objects(
+                subject_text=row["subject_text"],
+                predicate=row["predicate"],
+                object_text=row["object_text"],
+                modality=row["modality"],
+                polarity=row["polarity"],
+            ),
         )
 
     def list_proposals(
@@ -175,6 +221,13 @@ class KGProposalService:
                 extractor_version=row["extractor_version"],
                 created_at=row.get("created_at"),
                 reviewed_at=row.get("reviewed_at"),
+                conflicts_with=self._find_conflicting_objects(
+                    subject_text=row["subject_text"],
+                    predicate=row["predicate"],
+                    object_text=row["object_text"],
+                    modality=row["modality"],
+                    polarity=row["polarity"],
+                ),
             )
             for row in rows
         ]
@@ -193,6 +246,23 @@ class KGProposalService:
         obj = cmd.object_text or proposal.object_text
         valid_from = cmd.valid_from if cmd.valid_from is not None else proposal.valid_from
         valid_to = cmd.valid_to if cmd.valid_to is not None else proposal.valid_to
+
+        invalidated_count = 0
+        if cmd.action == "accept_and_invalidate_conflict":
+            for conflict_object in self._find_conflicting_objects(
+                subject_text=subject,
+                predicate=predicate,
+                object_text=obj,
+                modality=proposal.modality,
+                polarity=proposal.polarity,
+            ):
+                self._graph.invalidate(
+                    subject=subject,
+                    predicate=predicate,
+                    obj=conflict_object,
+                    ended=valid_from or date.today().isoformat(),
+                )
+                invalidated_count += 1
 
         triple_id = self._graph.add_triple(
             subject=subject,
@@ -215,6 +285,7 @@ class KGProposalService:
                 "candidate_id": cmd.candidate_id,
                 "triple_id": triple_id,
                 "predicate": predicate,
+                "invalidated_count": invalidated_count,
             },
         )
         return CandidateReviewResult(
@@ -222,6 +293,7 @@ class KGProposalService:
             candidate_id=cmd.candidate_id,
             status="accepted",
             triple_id=triple_id,
+            invalidated_count=invalidated_count,
         )
 
     def reject(self, candidate_id: str) -> CandidateReviewResult:

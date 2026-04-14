@@ -50,6 +50,32 @@ def test_candidate_review_command_valid_accept():
     assert cmd.predicate == "uses"
 
 
+def test_candidate_review_command_valid_accept_and_invalidate_conflict():
+    cmd = CandidateReviewCommand(
+        candidate_id="cand_1",
+        action="accept_and_invalidate_conflict",
+        predicate="uses",
+    )
+    assert cmd.action == "accept_and_invalidate_conflict"
+
+
+def test_candidate_triple_conflicts_default_empty():
+    candidate = CandidateTriple(
+        candidate_id="cand_1",
+        subject_text="SwampCastle",
+        predicate="uses",
+        object_text="LanceDB",
+        confidence=0.82,
+        modality="asserted",
+        polarity="positive",
+        evidence_drawer_id="drawer_1",
+        evidence_text="SwampCastle uses LanceDB for vector storage.",
+        status="proposed",
+        extractor_version="rules-v1",
+    )
+    assert candidate.conflicts_with == []
+
+
 def test_candidate_review_command_rejects_unknown_predicate_override():
     with pytest.raises(Exception):
         CandidateReviewCommand(

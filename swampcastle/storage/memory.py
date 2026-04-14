@@ -207,7 +207,9 @@ class InMemoryGraphStore(GraphStore):
                 continue
             if as_of and not self._is_valid_at(t, as_of):
                 continue
-            results.append(dict(t))
+            row = dict(t)
+            row["current"] = row["valid_to"] is None
+            results.append(row)
         return results
 
     def query_relationship(self, *, predicate, as_of=None):
@@ -217,7 +219,9 @@ class InMemoryGraphStore(GraphStore):
                 continue
             if as_of and not self._is_valid_at(t, as_of):
                 continue
-            results.append(dict(t))
+            row = dict(t)
+            row["current"] = row["valid_to"] is None
+            results.append(row)
         return results
 
     def invalidate(self, *, subject, predicate, obj, ended=None):
@@ -239,7 +243,12 @@ class InMemoryGraphStore(GraphStore):
             triples = [t for t in self._triples if t["subject_id"] == eid or t["object_id"] == eid]
         else:
             triples = list(self._triples)
-        return sorted(triples, key=lambda t: t.get("valid_from") or "")
+        out = []
+        for triple in triples:
+            row = dict(triple)
+            row["current"] = row["valid_to"] is None
+            out.append(row)
+        return sorted(out, key=lambda t: t.get("valid_from") or "")
 
     def stats(self):
         current = sum(1 for t in self._triples if t["valid_to"] is None)

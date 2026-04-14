@@ -45,6 +45,7 @@ class CandidateTriple(BaseModel):
     extractor_version: str
     created_at: Optional[str] = None
     reviewed_at: Optional[str] = None
+    conflicts_with: list[str] = Field(default_factory=list)
 
     @field_validator("predicate")
     @classmethod
@@ -86,7 +87,7 @@ class CandidateTripleFilter(BaseModel):
 
 class CandidateReviewCommand(BaseModel):
     candidate_id: str
-    action: Literal["accept", "reject"]
+    action: Literal["accept", "reject", "accept_and_invalidate_conflict"]
     subject_text: str | None = None
     predicate: str | None = None
     object_text: str | None = None
@@ -110,4 +111,5 @@ class CandidateReviewResult(BaseModel):
     candidate_id: str
     status: Literal["accepted", "rejected"] | None = None
     triple_id: str | None = None
+    invalidated_count: int = 0
     error: str | None = None

@@ -1,6 +1,7 @@
 """VaultService — drawer and diary write operations."""
 
 import hashlib
+import heapq
 import logging
 from datetime import datetime
 
@@ -22,6 +23,8 @@ from swampcastle.storage.base import CollectionStore
 from swampcastle.wal import WalWriter
 
 logger = logging.getLogger("swampcastle.vault")
+
+_DIARY_READ_SCAN_LIMIT = 100_000
 
 
 class DiaryReadQuery(BaseModel):
@@ -157,54 +160,51 @@ class VaultService:
         """Return the most recent `last_n` diary entries for the agent.
 
         Implementation notes:
-        - Backends may not support server-side sort; we therefore scan in
-          bounded batches and maintain a bounded heap of size `last_n` so
-          memory usage is O(last_n) rather than O(total_entries).
+        - Backends do not expose server-side sort on `filed_at` because that
+          timestamp lives in metadata, not in a dedicated indexed column.
+        - Offset pagination on LanceDB is O(N²) over many pages, so we avoid
+          it entirely and fetch diary rows in a single call.
+        - We still keep Python-side memory bounded for the *selected* results:
+          a min-heap of size `last_n` retains only the most recent entries.
+        - The overall scan is capped at `_DIARY_READ_SCAN_LIMIT` rows to avoid
+          unbounded reads on pathological castles.
         - We expect `filed_at` to be an ISO8601 string so lexicographic
           ordering corresponds to chronological ordering.
         """
-        import heapq
-
         wing = f"wing_{query.agent_name.lower().replace(' ', '_')}"
-        batch_size = 1000
-        offset = 0
+
+        results = self._col.get(
+            where={"$and": [{"wing": wing}, {"room": "diary"}]},
+            include=["documents", "metadatas"],
+            limit=_DIARY_READ_SCAN_LIMIT,
+        )
+
+        if not results.get("ids"):
+            return DiaryResponse(
+                agent=query.agent_name,
+                entries=[],
+                message="No diary entries yet.",
+            )
 
         # Min-heap of (timestamp_str, counter, document, metadata)
         heap: list[tuple[str, int, str, dict]] = []
         counter = 0
+        for doc, meta in zip(results.get("documents", []), results.get("metadatas", [])):
+            ts = meta.get("filed_at", "") or ""
+            heapq.heappush(heap, (ts, counter, doc, meta))
+            counter += 1
+            if len(heap) > query.last_n:
+                heapq.heappop(heap)
 
-        while True:
-            results = self._col.get(
-                where={"$and": [{"wing": wing}, {"room": "diary"}]},
-                include=["documents", "metadatas"],
-                limit=batch_size,
-                offset=offset,
-            )
-
-            ids = results.get("ids", [])
-            if not ids:
-                break
-
-            for doc, meta in zip(results.get("documents", []), results.get("metadatas", [])):
-                ts = meta.get("filed_at", "") or ""
-                # Use counter to make tuples unique and stable
-                heapq.heappush(heap, (ts, counter, doc, meta))
-                counter += 1
-                if len(heap) > query.last_n:
-                    heapq.heappop(heap)
-
-            offset += len(ids)
-
-        if not heap:
-            return DiaryResponse(
-                agent=query.agent_name, entries=[], message="No diary entries yet."
-            )
-
-        # Extract in descending timestamp order
         items = sorted(heap, key=lambda x: (x[0], x[1]), reverse=True)
         entries = [
-            DiaryEntry(date=m.get("date", ""), timestamp=ts, topic=m.get("topic", ""), content=doc)
-            for ts, _, doc, m in items
+            DiaryEntry(
+                date=meta.get("date", ""),
+                timestamp=ts,
+                topic=meta.get("topic", ""),
+                content=doc,
+            )
+            for ts, _, doc, meta in items
         ]
 
         return DiaryResponse(agent=query.agent_name, entries=entries)

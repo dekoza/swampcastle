@@ -166,6 +166,34 @@ class TestMetadata:
         assert result["was_sanitized"] is False
 
 
+class TestLabeledTailExtraction:
+    """Prefer explicit tail labels over generic tail truncation."""
+
+    def test_single_line_query_label_extracts_tail(self):
+        system_prompt = "System rules. " * 80
+        query = system_prompt + "Query: auth migration clerk rollback notes"
+        result = sanitize_query(query)
+        assert result["was_sanitized"] is True
+        assert result["clean_query"] == "auth migration clerk rollback notes"
+        assert result["method"] == "labeled_tail"
+
+    def test_single_line_search_query_label_beats_earlier_prompt_question(self):
+        system_prompt = "Are you ready to help? " * 40
+        query = system_prompt + "Search query: auth migration clerk rollback notes"
+        result = sanitize_query(query)
+        assert result["was_sanitized"] is True
+        assert result["clean_query"] == "auth migration clerk rollback notes"
+        assert result["method"] == "labeled_tail"
+
+    def test_xml_user_query_tag_extracts_inner_text(self):
+        system_prompt = "<system>You are helpful. Follow policy. </system>" * 30
+        query = system_prompt + "<user_query>auth migration clerk</user_query>"
+        result = sanitize_query(query)
+        assert result["was_sanitized"] is True
+        assert result["clean_query"] == "auth migration clerk"
+        assert result["method"] == "labeled_tail"
+
+
 class TestRealWorldScenarios:
     """Simulate realistic system prompt contamination patterns."""
 

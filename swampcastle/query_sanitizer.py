@@ -34,6 +34,36 @@ _SENTENCE_SPLIT = re.compile(r"[.!?。！？\n]+")
 # Question detector: ends with ? or ？ (possibly with trailing whitespace/quotes)
 _QUESTION_MARK = re.compile(r'[?？]\s*["\']?\s*$')
 
+# Explicit tail labels often appear in contaminated one-line prompts.
+# We prefer these over generic tail truncation because they point directly at
+# the caller's real intent.
+_LABELED_TAG_PATTERNS = (
+    re.compile(r"<user_query>(.*?)</user_query>", re.IGNORECASE | re.DOTALL),
+    re.compile(r"<query>(.*?)</query>", re.IGNORECASE | re.DOTALL),
+)
+_LABELED_LINE_PATTERN = re.compile(
+    r"\b(?:search\s+query|user\s+query|actual\s+query|query|question|task)\b\s*:\s*(.+)$",
+    re.IGNORECASE | re.DOTALL,
+)
+
+
+def _extract_labeled_tail(raw_query: str) -> str | None:
+    """Extract explicit tail labels like `Query: ...` or `<user_query>...`.
+
+    We take the *last* explicit label because system prompts may contain earlier
+    examples or boilerplate. Returned text is stripped and may be empty.
+    """
+    tagged_candidates = []
+    for pattern in _LABELED_TAG_PATTERNS:
+        tagged_candidates.extend(match.group(1).strip() for match in pattern.finditer(raw_query))
+    if tagged_candidates:
+        return tagged_candidates[-1]
+
+    matches = list(_LABELED_LINE_PATTERN.finditer(raw_query))
+    if matches:
+        return matches[-1].group(1).strip()
+    return None
+
 
 def sanitize_query(raw_query: str) -> dict:
     """
@@ -51,6 +81,7 @@ def sanitize_query(raw_query: str) -> dict:
             clean_length (int): Length of the sanitized output
             method (str): Which extraction method was used
                 - "passthrough": query was short enough, no action taken
+                - "labeled_tail": extracted explicit `Query: ...` / XML tail label
                 - "question_extraction": found and extracted a question sentence
                 - "tail_sentence": extracted the last meaningful sentence
                 - "tail_truncation": fallback — took the last MAX_QUERY_LENGTH chars
@@ -75,6 +106,24 @@ def sanitize_query(raw_query: str) -> dict:
             "original_length": original_length,
             "clean_length": original_length,
             "method": "passthrough",
+        }
+
+    # --- Step 1.5: Explicit tail label extraction ---
+    labeled = _extract_labeled_tail(raw_query)
+    if labeled and len(labeled) >= MIN_QUERY_LENGTH:
+        if len(labeled) > MAX_QUERY_LENGTH:
+            labeled = labeled[-MAX_QUERY_LENGTH:]
+        logger.warning(
+            "Query sanitized: %d → %d chars (method=labeled_tail)",
+            original_length,
+            len(labeled),
+        )
+        return {
+            "clean_query": labeled,
+            "was_sanitized": True,
+            "original_length": original_length,
+            "clean_length": len(labeled),
+            "method": "labeled_tail",
         }
 
     # --- Step 2: Question extraction ---

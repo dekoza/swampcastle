@@ -137,6 +137,7 @@ def cmd_gather(args):
             dry_run=args.dry_run,
             limit=args.limit,
             storage_factory=storage_factory,
+            explain=getattr(args, "explain", False),
         )
 
 

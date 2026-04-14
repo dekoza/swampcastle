@@ -77,6 +77,7 @@ def main():
     p.add_argument("--limit", type=int, default=0)
     p.add_argument("--dry-run", action="store_true")
     p.add_argument("--extract", choices=["exchange", "general"], default="exchange")
+    p.add_argument("--explain", action="store_true", help="Print skip reasons for files during mining")
 
     # seek (search)
     p = sub.add_parser("seek", aliases=["search"], help="Seek anything in the castle")

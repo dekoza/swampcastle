@@ -591,6 +591,7 @@ def process_file(
     dry_run: bool,
     team: list[str] | None = None,
     registry=None,
+    verbose: bool = False,
 ) -> tuple:
     """Read, chunk, route, and file one file. Returns (drawer_count, room_name)."""
 
@@ -608,6 +609,12 @@ def process_file(
     skip_reason = _mining_rejection_reason(filepath, content)
     if skip_reason is not None:
         logger.debug("Skipping mined file %s: %s", filepath, skip_reason)
+        if verbose:
+            try:
+                rel = filepath.relative_to(project_path)
+            except Exception:
+                rel = filepath
+            print(f"  - SKIP {rel}: {skip_reason}")
         return 0, None
 
     if len(content) < MIN_CHUNK_SIZE:
@@ -669,6 +676,30 @@ def scan_project(
     swamp_cache = {}
     include_paths = normalize_include_paths(include_ignored)
 
+    # load global ~/.swampcastleignore if present
+    try:
+        global_swamp = GitignoreMatcher.from_swampignore(Path.home())
+    except Exception:
+        global_swamp = None
+
+    def _global_matches(path: Path) -> bool:
+        """Match path against global_swamp rules using project-relative path then filename."""
+        if global_swamp is None:
+            return False
+        # Try project-relative path first
+        try:
+            relative = path.relative_to(project_path).as_posix().strip("/")
+        except Exception:
+            relative = path.name
+        decision = False
+        for rule in global_swamp.rules:
+            try:
+                if global_swamp._rule_matches(rule, relative, False):
+                    decision = not rule["negated"]
+            except Exception:
+                continue
+        return decision
+
     for root, dirs, filenames in os.walk(project_path):
         root_path = Path(root)
 
@@ -712,6 +743,10 @@ def scan_project(
             if active_swamp_matchers and not force_include:
                 if is_swampignored(filepath, active_swamp_matchers, is_dir=False):
                     continue
+            # apply global ~/.swampcastleignore (lower precedence than project-level swampignore)
+            if global_swamp is not None and not force_include:
+                if _global_matches(filepath):
+                    continue
             if respect_gitignore and active_matchers and not force_include:
                 if is_gitignored(filepath, active_matchers, is_dir=False):
                     continue
@@ -743,6 +778,7 @@ def mine(
     respect_gitignore: bool = True,
     include_ignored: list = None,
     storage_factory: StorageFactory | None = None,
+    explain: bool = False,
 ):
     """Mine a project directory into the palace."""
 
@@ -809,14 +845,18 @@ def mine(
             dry_run=dry_run,
             team=team,
             registry=registry,
+            verbose=explain,
         )
-        if drawers == 0 and not dry_run:
-            files_skipped += 1
-        else:
-            total_drawers += drawers
-            room_counts[room] += 1
+        if drawers == 0:
             if not dry_run:
-                print(f"  ✓ [{i:4}/{len(files)}] {filepath.name[:50]:50} +{drawers}")
+                files_skipped += 1
+            # nothing to add to counts when drawers == 0
+            continue
+
+        total_drawers += drawers
+        room_counts[room] += 1
+        if not dry_run:
+            print(f"  ✓ [{i:4}/{len(files)}] {filepath.name[:50]:50} +{drawers}")
 
     print(f"\n{'=' * 55}")
     print("  Done.")

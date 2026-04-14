@@ -9,6 +9,7 @@ Stores verbatim chunks as drawers. No summaries. Ever.
 
 import fnmatch
 import hashlib
+import inspect
 import logging
 import os
 import re
@@ -546,14 +547,13 @@ class EmbeddingBuffer:
     """
 
     def __init__(self, collection, embedder=None, batch_size=None, max_chars=None):
-        import inspect
-
         self.collection = collection
         self._docs = []
         self._ids = []
         self._metas = []
         self._chars = 0
         self._embedder = embedder
+        self.stored_count = 0
         self._supports_embeddings = False
         try:
             sig = inspect.signature(collection.upsert)
@@ -561,29 +561,28 @@ class EmbeddingBuffer:
         except Exception:
             self._supports_embeddings = False
 
-        # determine batch_size
+        # determine batch_size: explicit arg > env var > cpu-scaled default
         env_bs = os.environ.get("SWAMPCASTLE_EMBED_BATCH_SIZE")
+        env_bs_v = None
         if env_bs:
             try:
                 env_bs_v = int(env_bs)
-            except Exception:
-                env_bs_v = None
-        else:
-            env_bs_v = None
+            except (ValueError, TypeError):
+                pass
 
         cpu = os.cpu_count() or 1
         default_bs = max(32, min(512, cpu * 16))
-        self.batch_size = batch_size or env_bs_v or default_bs
+        self.batch_size = batch_size if batch_size is not None else (env_bs_v if env_bs_v is not None else default_bs)
 
-        # determine max_chars
+        # determine max_chars: explicit arg > env var > default
         env_mc = os.environ.get("SWAMPCASTLE_EMBED_MAX_CHARS")
+        env_mc_v = None
         if env_mc:
             try:
-                self.max_chars = int(env_mc)
-            except Exception:
-                self.max_chars = max_chars or 2_000_000
-        else:
-            self.max_chars = max_chars or 2_000_000
+                env_mc_v = int(env_mc)
+            except (ValueError, TypeError):
+                pass
+        self.max_chars = max_chars if max_chars is not None else (env_mc_v if env_mc_v is not None else 2_000_000)
 
     def add(self, document: str, id_: str, metadata: dict):
         self._docs.append(document)
@@ -593,9 +592,10 @@ class EmbeddingBuffer:
         if len(self._docs) >= self.batch_size or self._chars >= self.max_chars:
             self.flush()
 
-    def flush(self):
+    def flush(self) -> int:
+        """Flush buffered documents to storage. Returns count stored. Propagates errors."""
         if not self._docs:
-            return
+            return 0
 
         # resolve embedder
         embedder = self._embedder
@@ -606,22 +606,28 @@ class EmbeddingBuffer:
 
             embedder = get_embedder()
 
+        count = len(self._docs)
         texts = list(self._docs)
+        ids = list(self._ids)
+        metas = list(self._metas)
+
+        # Clear buffer before upsert so a re-raised exception doesn't leave
+        # stale data that would be double-flushed on retry.
+        self._docs = []
+        self._ids = []
+        self._metas = []
+        self._chars = 0
+
         embeddings = embedder.embed(texts)
 
-        # call upsert with embeddings if supported
-        try:
-            if self._supports_embeddings:
-                self.collection.upsert(documents=texts, ids=self._ids, metadatas=self._metas, embeddings=embeddings)
-            else:
-                # fallback: upsert without embeddings (backend will re-embed)
-                self.collection.upsert(documents=texts, ids=self._ids, metadatas=self._metas)
-        finally:
-            # clear buffer
-            self._docs = []
-            self._ids = []
-            self._metas = []
-            self._chars = 0
+        if self._supports_embeddings:
+            self.collection.upsert(documents=texts, ids=ids, metadatas=metas, embeddings=embeddings)
+        else:
+            # fallback: upsert without embeddings (backend will re-embed)
+            self.collection.upsert(documents=texts, ids=ids, metadatas=metas)
+
+        self.stored_count += count
+        return count
 
 
 def add_drawer(
@@ -719,8 +725,9 @@ def process_file(
 
     if extractor:
         skeleton_content = extractor.extract(content)
-        # Check if skeleton extraction actually reduced the size significantly
-        if skeleton_content and len(skeleton_content) < len(content) * 0.9:
+        # Require at least 50% size reduction to justify storing as a skeleton;
+        # anything less doesn't meaningfully compress and isn't worth deskeletonizing.
+        if skeleton_content and len(skeleton_content) < len(content) * 0.5:
             content = skeleton_content
             is_skeleton = True
 
@@ -999,9 +1006,10 @@ def mine(
         if not dry_run:
             print(f"  ✓ [{i:4}/{len(files)}] {filepath.name[:50]:50} +{drawers}")
 
-    # flush any remaining buffered embeddings
+    # flush any remaining buffered embeddings; update total from actual stored count
     if embed_buffer is not None:
         embed_buffer.flush()
+        total_drawers = embed_buffer.stored_count
 
     print(f"\n{'=' * 55}")
     print("  Done.")

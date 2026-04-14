@@ -44,42 +44,40 @@ def test_miner_uses_skeleton(tmp_path):
     project = tmp_path / "proj"
     project.mkdir()
     make_project(project)
-    
-    # Large python file > 2000 lines to trigger skeleton
+
+    # Large python file > 2000 lines with substantial bodies (10 lines each)
+    # so skeleton (definition + pass) reduces size by >50%.
     large_py = project / "large.py"
-    # Create 2500 small functions. Each function 2 lines. Total 5000 lines.
-    lines = ["def func_{}(x):\n    return x + 1".format(i) for i in range(2500)]
-    large_py.write_text("\n\n".join(lines))
-    
+    func_blocks = []
+    for i in range(300):
+        body = "\n".join([f"    line_{j} = {j} * 2  # padding" for j in range(10)])
+        func_blocks.append(f"def func_{i}(x, y=None):\n{body}\n    return x")
+    large_py.write_text("\n\n".join(func_blocks))
+
     # Small python file
-    small_py = project / "small.py"
-    small_py.write_text("def small(): pass")
-    
+    (project / "small.py").write_text("def small(): pass")
+
     fake_coll = FakeCollection()
     fake_factory = FakeFactory(fake_coll)
-    
-    # Run mine with skeleton enabled
+
     mine(str(project), str(tmp_path / "palace"), dry_run=False, storage_factory=fake_factory)
-    
-    # Check upserts for large.py
-    # Since it's a skeleton, it should be marked in metadata.
-    # The actual implementation of miner needs to be updated.
-    skeleton_upserts = [up for up in fake_coll.upserts if any(m.get('is_skeleton') for m in up['metadatas'])]
+
+    skeleton_upserts = [
+        up for up in fake_coll.upserts
+        if any(m.get("is_skeleton") for m in up["metadatas"])
+    ]
     assert len(skeleton_upserts) >= 1
-    
-    # Check that it's much smaller than the original 2500*2 lines
-    # We check the first drawer's content (which is what chunk_text returned)
-    # The miner chunks the skeleton content too.
-    # We should look at ALL drawers for large.py
-    large_py_drawers = []
+
+    # Skeleton must omit bodies but retain all function names
+    large_py_docs = []
     for up in fake_coll.upserts:
-        for doc, meta in zip(up['documents'], up['metadatas']):
-            if meta.get('source_file') == str(large_py):
-                large_py_drawers.append(doc)
-    
-    full_skeleton = "\n".join(large_py_drawers)
-    assert "func_2499" in full_skeleton
-    assert "return x + 1" not in full_skeleton
+        for doc, meta in zip(up["documents"], up["metadatas"]):
+            if meta.get("source_file") == str(large_py):
+                large_py_docs.append(doc)
+
+    full_skeleton = "\n".join(large_py_docs)
+    assert "func_299" in full_skeleton
+    assert "line_0 = 0 * 2" not in full_skeleton
 
 
 class FakeCollection:

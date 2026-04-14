@@ -379,7 +379,7 @@ def cmd_deskeleton(args):
         if args.room:
             where["room"] = args.room
 
-        results = castle._collection.get(where=where, include=["metadatas"])
+        results = castle.vault.get_drawers(where=where, include=["metadatas"])
         if not results["ids"]:
             print("  No skeleton drawers found.")
             return

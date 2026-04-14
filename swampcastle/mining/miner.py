@@ -538,6 +538,91 @@ def chunk_text(content: str, source_file: str) -> list:
 # =============================================================================
 
 
+class EmbeddingBuffer:
+    """Buffer documents for batch embedding and bulk upsert.
+
+    Uses resource-aware defaults. Flushes when batch_size or max_chars reached.
+    """
+
+    def __init__(self, collection, embedder=None, batch_size=None, max_chars=None):
+        import inspect
+
+        self.collection = collection
+        self._docs = []
+        self._ids = []
+        self._metas = []
+        self._chars = 0
+        self._embedder = embedder
+        self._supports_embeddings = False
+        try:
+            sig = inspect.signature(collection.upsert)
+            self._supports_embeddings = "embeddings" in sig.parameters
+        except Exception:
+            self._supports_embeddings = False
+
+        # determine batch_size
+        env_bs = os.environ.get("SWAMPCASTLE_EMBED_BATCH_SIZE")
+        if env_bs:
+            try:
+                env_bs_v = int(env_bs)
+            except Exception:
+                env_bs_v = None
+        else:
+            env_bs_v = None
+
+        cpu = os.cpu_count() or 1
+        default_bs = max(32, min(512, cpu * 16))
+        self.batch_size = batch_size or env_bs_v or default_bs
+
+        # determine max_chars
+        env_mc = os.environ.get("SWAMPCASTLE_EMBED_MAX_CHARS")
+        if env_mc:
+            try:
+                self.max_chars = int(env_mc)
+            except Exception:
+                self.max_chars = max_chars or 2_000_000
+        else:
+            self.max_chars = max_chars or 2_000_000
+
+    def add(self, document: str, id_: str, metadata: dict):
+        self._docs.append(document)
+        self._ids.append(id_)
+        self._metas.append(metadata)
+        self._chars += len(document)
+        if len(self._docs) >= self.batch_size or self._chars >= self.max_chars:
+            self.flush()
+
+    def flush(self):
+        if not self._docs:
+            return
+
+        # resolve embedder
+        embedder = self._embedder
+        if embedder is None:
+            embedder = getattr(self.collection, "_embedder", None)
+        if embedder is None:
+            from ..embeddings import get_embedder
+
+            embedder = get_embedder()
+
+        texts = list(self._docs)
+        embeddings = embedder.embed(texts)
+
+        # call upsert with embeddings if supported
+        try:
+            if self._supports_embeddings:
+                self.collection.upsert(documents=texts, ids=self._ids, metadatas=self._metas, embeddings=embeddings)
+            else:
+                # fallback: upsert without embeddings (backend will re-embed)
+                self.collection.upsert(documents=texts, ids=self._ids, metadatas=self._metas)
+        finally:
+            # clear buffer
+            self._docs = []
+            self._ids = []
+            self._metas = []
+            self._chars = 0
+
+
 def add_drawer(
     collection,
     wing: str,
@@ -592,6 +677,7 @@ def process_file(
     team: list[str] | None = None,
     registry=None,
     verbose: bool = False,
+    embed_buffer=None,
 ) -> tuple:
     """Read, chunk, route, and file one file. Returns (drawer_count, room_name)."""
 
@@ -641,18 +727,38 @@ def process_file(
 
     drawers_added = 0
     for chunk in chunks:
-        added = add_drawer(
-            collection=collection,
-            wing=wing,
-            room=room,
-            content=chunk["content"],
-            source_file=source_file,
-            chunk_index=chunk["chunk_index"],
-            agent=agent,
-            contributor=contributor,
-        )
-        if added:
+        drawer_id = f"drawer_{wing}_{room}_{hashlib.sha256((source_file + str(chunk['chunk_index'])).encode()).hexdigest()[:24]}"
+        metadata = {
+            "wing": wing,
+            "room": room,
+            "source_file": source_file,
+            "chunk_index": chunk["chunk_index"],
+            "added_by": agent,
+            "filed_at": datetime.now().isoformat(),
+        }
+        if contributor:
+            metadata["contributor"] = contributor
+        try:
+            metadata["source_mtime"] = os.path.getmtime(source_file)
+        except OSError:
+            pass
+
+        if embed_buffer is not None:
+            embed_buffer.add(chunk["content"], drawer_id, metadata)
             drawers_added += 1
+        else:
+            added = add_drawer(
+                collection=collection,
+                wing=wing,
+                room=room,
+                content=chunk["content"],
+                source_file=source_file,
+                chunk_index=chunk["chunk_index"],
+                agent=agent,
+                contributor=contributor,
+            )
+            if added:
+                drawers_added += 1
 
     return drawers_added, room
 
@@ -827,8 +933,12 @@ def mine(
             settings = CastleSettings(castle_path=palace_path, _env_file=None)
             storage_factory = factory_from_settings(settings)
         collection = storage_factory.open_collection("swampcastle_chests")
+        # prepare embedding buffer
+        embedder = getattr(storage_factory, "_embedder", None)
+        embed_buffer = EmbeddingBuffer(collection, embedder=embedder)
     else:
         collection = None
+        embed_buffer = None
 
     total_drawers = 0
     files_skipped = 0
@@ -846,6 +956,7 @@ def mine(
             team=team,
             registry=registry,
             verbose=explain,
+            embed_buffer=embed_buffer,
         )
         if drawers == 0:
             if not dry_run:
@@ -857,6 +968,10 @@ def mine(
         room_counts[room] += 1
         if not dry_run:
             print(f"  ✓ [{i:4}/{len(files)}] {filepath.name[:50]:50} +{drawers}")
+
+    # flush any remaining buffered embeddings
+    if embed_buffer is not None:
+        embed_buffer.flush()
 
     print(f"\n{'=' * 55}")
     print("  Done.")

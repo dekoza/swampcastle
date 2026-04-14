@@ -127,8 +127,18 @@ def test_vector_search_and_where_filters(factory, database_url):
             ],
             ids=["auth-1", "billing-1", "general-1"],
             metadatas=[
-                {"wing": "proj", "room": "auth", "source_file": "auth.py"},
-                {"wing": "proj", "room": "billing", "source_file": "billing.py"},
+                {
+                    "wing": "proj",
+                    "room": "auth",
+                    "source_file": "auth.py",
+                    "is_skeleton": True,
+                },
+                {
+                    "wing": "proj",
+                    "room": "billing",
+                    "source_file": "billing.py",
+                    "is_skeleton": False,
+                },
                 {"wing": "notes", "room": "general", "source_file": "notes.md"},
             ],
         )
@@ -147,6 +157,13 @@ def test_vector_search_and_where_filters(factory, database_url):
             include=["documents", "metadatas", "distances"],
         )
         assert filtered["ids"][0] == ["billing-1"]
+
+        skeleton_rows = collection.get(
+            where={"is_skeleton": True},
+            include=["documents", "metadatas"],
+        )
+        assert skeleton_rows["ids"] == ["auth-1"]
+        assert skeleton_rows["metadatas"][0]["is_skeleton"] is True
     finally:
         _drop_collection(database_url, collection_name)
 

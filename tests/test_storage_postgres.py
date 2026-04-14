@@ -122,6 +122,28 @@ class TestWhereToSql:
         assert sql == "(wing = ANY(%s)) AND (NOT (room = ANY(%s)))"
         assert params == [["proj", "infra"], ["tmp"]]
 
+    def test_boolean_metadata_filter_uses_boolean_cast(self):
+        sql, params = _where_to_sql({"is_skeleton": True})
+        assert sql == "CAST(metadata ->> %s AS BOOLEAN) = %s"
+        assert params == ["is_skeleton", True]
+
+    def test_boolean_metadata_operators_use_boolean_cast(self):
+        sql, params = _where_to_sql(
+            {
+                "$and": [
+                    {"is_skeleton": {"$eq": True}},
+                    {"published": {"$ne": False}},
+                    {"visible": {"$in": [True, False]}},
+                ]
+            }
+        )
+        assert sql == (
+            "(CAST(metadata ->> %s AS BOOLEAN) = %s) AND "
+            "(CAST(metadata ->> %s AS BOOLEAN) != %s) AND "
+            "(CAST(metadata ->> %s AS BOOLEAN) = ANY(%s))"
+        )
+        assert params == ["is_skeleton", True, "published", False, "visible", [True, False]]
+
 
 class TestPostgresCollectionStore:
     def test_is_collection_store(self):

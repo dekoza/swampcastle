@@ -36,6 +36,25 @@ _FILTER_COLUMNS = {"id", "wing", "room", "source_file", "node_id", "seq"}
 _NUMERIC_FIELDS = {"seq"}
 
 
+def _is_numeric_value(value: Any) -> bool:
+    return isinstance(value, (int, float)) and not isinstance(value, bool)
+
+
+def _expression_kind(field: str, value: Any = None, *, numeric: bool = False) -> str:
+    if field in _NUMERIC_FIELDS or numeric:
+        return "numeric"
+    if isinstance(value, bool):
+        return "boolean"
+    if _is_numeric_value(value):
+        return "numeric"
+    if isinstance(value, (list, tuple)) and value:
+        if all(isinstance(item, bool) for item in value):
+            return "boolean"
+        if all(_is_numeric_value(item) for item in value):
+            return "numeric"
+    return "text"
+
+
 def _require_postgres_dependencies() -> None:
     if psycopg is None or ConnectionPool is None or register_vector is None or Vector is None:
         raise ImportError(
@@ -50,11 +69,13 @@ def _validate_identifier(name: str) -> str:
     return name
 
 
-def _metadata_expression(field: str, *, numeric: bool) -> tuple[str, list[Any]]:
+def _metadata_expression(field: str, *, kind: str) -> tuple[str, list[Any]]:
     if field in _FILTER_COLUMNS:
         return field, []
-    if numeric:
+    if kind == "numeric":
         return "CAST(metadata ->> %s AS DOUBLE PRECISION)", [field]
+    if kind == "boolean":
+        return "CAST(metadata ->> %s AS BOOLEAN)", [field]
     return "metadata ->> %s", [field]
 
 
@@ -63,8 +84,12 @@ def _field_condition(field: str, value: Any) -> tuple[str, list[Any]]:
         clauses = []
         params: list[Any] = []
         for op, expected in value.items():
-            numeric = op in {"$gt", "$gte", "$lt", "$lte"} or field in _NUMERIC_FIELDS
-            expr, expr_params = _metadata_expression(field, numeric=numeric)
+            kind = _expression_kind(
+                field,
+                expected,
+                numeric=op in {"$gt", "$gte", "$lt", "$lte"},
+            )
+            expr, expr_params = _metadata_expression(field, kind=kind)
             if op == "$gt":
                 clauses.append(f"{expr} > %s")
                 params.extend(expr_params + [expected])
@@ -93,8 +118,8 @@ def _field_condition(field: str, value: Any) -> tuple[str, list[Any]]:
                 raise ValueError(f"Unsupported where operator: {op}")
         return " AND ".join(clauses), params
 
-    numeric = isinstance(value, (int, float)) or field in _NUMERIC_FIELDS
-    expr, expr_params = _metadata_expression(field, numeric=numeric)
+    kind = _expression_kind(field, value)
+    expr, expr_params = _metadata_expression(field, kind=kind)
     return f"{expr} = %s", expr_params + [value]
 
 

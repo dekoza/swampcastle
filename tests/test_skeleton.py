@@ -1,8 +1,11 @@
+import ast
+
 import pytest
+import yaml
 from pathlib import Path
 from swampcastle.mining.miner import mine
-import yaml
 from swampcastle.mining.skeleton import PythonSkeletonExtractor, get_skeleton_extractor
+
 
 def make_project(tmp_path: Path):
     cfg = {"wing": "test", "rooms": [{"name": "general", "description": "All files"}]}
@@ -27,7 +30,7 @@ def top_level_func(a, b):
 """
     extractor = PythonSkeletonExtractor()
     skeleton = extractor.extract(code)
-    
+
     assert "class MyClass:" in skeleton
     assert "def __init__(self, x):" in skeleton
     assert "def method_one(self):" in skeleton
@@ -36,9 +39,118 @@ def top_level_func(a, b):
     assert "return a + b" not in skeleton
     assert '"""Docstring."""' in skeleton
 
+
+def test_skeleton_output_is_valid_python():
+    """Extracted skeleton must be parseable as valid Python."""
+    code = """
+import os
+from typing import Optional
+
+MAX_RETRIES = 3
+DEFAULT_TIMEOUT: int = 30
+
+class MyClass:
+    id: int
+    name: str
+
+    def __init__(self, x: int) -> None:
+        self.x = x
+
+    def method_one(self) -> Optional[str]:
+        return None
+
+def top_level_func(a: int, b: int) -> int:
+    return a + b
+"""
+    extractor = PythonSkeletonExtractor()
+    skeleton = extractor.extract(code)
+    # Must not raise SyntaxError
+    ast.parse(skeleton)
+
+
+def test_skeleton_preserves_dataclass_fields():
+    """Class-level annotated assignments (dataclass fields, TypedDict keys) must be preserved."""
+    code = """
+from dataclasses import dataclass
+
+@dataclass
+class User:
+    id: int
+    name: str
+    email: str
+
+    def greet(self) -> str:
+        return f"Hello {self.name}"
+"""
+    extractor = PythonSkeletonExtractor()
+    skeleton = extractor.extract(code)
+
+    assert "id: int" in skeleton
+    assert "name: str" in skeleton
+    assert "email: str" in skeleton
+    assert "return" not in skeleton
+    ast.parse(skeleton)
+
+
+def test_skeleton_preserves_decorators():
+    """Decorators on classes and functions must be preserved."""
+    code = """
+import dataclasses
+
+@dataclasses.dataclass
+class Config:
+    host: str
+    port: int = 8080
+
+@staticmethod
+def helper():
+    pass
+"""
+    extractor = PythonSkeletonExtractor()
+    skeleton = extractor.extract(code)
+
+    assert "@dataclasses.dataclass" in skeleton
+    ast.parse(skeleton)
+
+
+def test_skeleton_preserves_return_type_annotations():
+    """Return type annotations must survive extraction."""
+    code = """
+from typing import Optional
+
+def get_user(user_id: int) -> Optional[str]:
+    return None
+"""
+    extractor = PythonSkeletonExtractor()
+    skeleton = extractor.extract(code)
+
+    assert "-> Optional[str]" in skeleton
+    ast.parse(skeleton)
+
+
+def test_skeleton_preserves_module_constants():
+    """Module-level assignments and annotated constants must be preserved."""
+    code = """
+MAX_RETRIES = 3
+TIMEOUT: int = 30
+BASE_URL = 'https://api.example.com'
+
+def fetch():
+    return BASE_URL
+"""
+    extractor = PythonSkeletonExtractor()
+    skeleton = extractor.extract(code)
+
+    assert "MAX_RETRIES" in skeleton
+    assert "TIMEOUT" in skeleton
+    assert "return BASE_URL" not in skeleton
+    ast.parse(skeleton)
+
+
 def test_get_skeleton_extractor():
     assert isinstance(get_skeleton_extractor("test.py"), PythonSkeletonExtractor)
     assert get_skeleton_extractor("test.txt") is None
+
 
 def test_miner_uses_skeleton(tmp_path):
     project = tmp_path / "proj"

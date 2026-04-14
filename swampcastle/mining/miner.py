@@ -589,7 +589,9 @@ class EmbeddingBuffer:
         self._ids.append(id_)
         self._metas.append(metadata)
         self._chars += len(document)
-        if len(self._docs) >= self.batch_size or self._chars >= self.max_chars:
+        if self.batch_size > 0 and len(self._docs) >= self.batch_size:
+            self.flush()
+        elif self.max_chars > 0 and self._chars >= self.max_chars:
             self.flush()
 
     def flush(self) -> int:
@@ -611,14 +613,26 @@ class EmbeddingBuffer:
         ids = list(self._ids)
         metas = list(self._metas)
 
-        # Clear buffer before upsert so a re-raised exception doesn't leave
-        # stale data that would be double-flushed on retry.
+        # Embed first; if this raises, restore the buffer so the caller can retry
+        # rather than silently discarding the documents.
+        try:
+            embeddings = embedder.embed(texts)
+        except Exception:
+            # Restore buffer — no data was written to storage
+            self._docs = texts
+            self._ids = ids
+            self._metas = metas
+            self._chars = sum(len(t) for t in texts)
+            raise
+
+        # Clear buffer before upsert: if upsert raises, the caller gets the
+        # exception and the documents are intentionally not retried (the embedder
+        # already ran; retrying would double-embed). Callers requiring durability
+        # should implement their own retry with a fresh buffer.
         self._docs = []
         self._ids = []
         self._metas = []
         self._chars = 0
-
-        embeddings = embedder.embed(texts)
 
         if self._supports_embeddings:
             self.collection.upsert(documents=texts, ids=ids, metadatas=metas, embeddings=embeddings)
@@ -686,12 +700,13 @@ def process_file(
     verbose: bool = False,
     embed_buffer=None,
     force_no_skeleton: bool = False,
+    _force_remine: bool = False,
 ) -> tuple:
     """Read, chunk, route, and file one file. Returns (drawer_count, room_name)."""
 
     # Skip if already filed
     source_file = str(filepath)
-    if not dry_run and not force_no_skeleton and _file_already_mined(collection, source_file, check_mtime=True):
+    if not dry_run and not _force_remine and _file_already_mined(collection, source_file, check_mtime=True):
         return 0, None
 
     try:
@@ -848,6 +863,11 @@ def scan_project(
             current_matcher = load_gitignore_matcher(root_path, matcher_cache)
             if current_matcher is not None:
                 active_matchers.append(current_matcher)
+            active_swamp_matchers = [
+                matcher
+                for matcher in active_swamp_matchers
+                if root_path == matcher.base_dir or matcher.base_dir in root_path.parents
+            ]
             current_swamp = load_swampignore_matcher(root_path, swamp_cache)
             if current_swamp is not None:
                 active_swamp_matchers.append(current_swamp)
@@ -920,6 +940,7 @@ def mine(
     explain: bool = False,
     force_no_skeleton: bool = False,
     only_force_included: bool = False,
+    _force_remine: bool = False,
 ):
     """Mine a project directory into the palace."""
 
@@ -994,6 +1015,7 @@ def mine(
             verbose=explain,
             embed_buffer=embed_buffer,
             force_no_skeleton=force_no_skeleton,
+            _force_remine=_force_remine,
         )
         if drawers == 0:
             if not dry_run:

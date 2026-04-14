@@ -48,3 +48,22 @@ def test_nested_swampcastleignore(tmp_path):
     names = [p.relative_to(project).as_posix() for p in files]
     assert 'pkg/keep.js' in names
     assert 'pkg/node_modules/vendor.js' not in names
+
+
+def test_swampcastleignore_does_not_leak_to_sibling_dirs(tmp_path):
+    """A .swampcastleignore in dir A must not affect sibling dir B."""
+    project = tmp_path
+    a = project / 'a'
+    a.mkdir()
+    b = project / 'b'
+    b.mkdir()
+
+    (a / '.swampcastleignore').write_text('secret.txt\n')
+    (a / 'secret.txt').write_text('ignored in a')
+    (b / 'secret.txt').write_text('must NOT be ignored — different dir')
+    (b / 'keep.txt').write_text('also kept')
+
+    files = scan_project(str(project))
+    names = [p.relative_to(project).as_posix() for p in files]
+    assert 'b/secret.txt' in names, "b/secret.txt incorrectly caught by a/.swampcastleignore"
+    assert 'a/secret.txt' not in names

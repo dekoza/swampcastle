@@ -5,6 +5,7 @@ import shlex
 import sys
 from pathlib import Path
 
+from swampcastle.project_config import resolve_project_config
 from swampcastle.runtime_config import ensure_runtime_config
 from swampcastle.settings import CastleSettings
 from swampcastle.storage import factory_from_settings
@@ -406,12 +407,8 @@ def cmd_deskeleton(args):
                 print(f"  Warning: source file missing, skipping: {sf}")
                 continue
 
-            # Project dir is parent of .swampcastle.yaml
-            from swampcastle.project_config import resolve_project_config
-
             config_path = resolve_project_config(str(sf_path.parent))
             if not config_path:
-                # search up
                 curr = sf_path.parent
                 while curr != curr.parent:
                     config_path = resolve_project_config(str(curr))
@@ -424,15 +421,21 @@ def cmd_deskeleton(args):
                 continue
 
             project_dir = str(config_path.parent)
+            try:
+                rel = str(sf_path.relative_to(project_dir))
+            except ValueError:
+                print(f"  Warning: {sf} is not under project dir {project_dir}, skipping.")
+                continue
+
             print(f"  Deskeletonizing: {sf}")
-            # Re-mine the single file
             mine(
                 project_dir=project_dir,
                 palace_path=str(settings.castle_path),
                 agent="swampcastle-deskeleton",
                 storage_factory=factory,
                 force_no_skeleton=True,
+                _force_remine=True,
                 only_force_included=True,
-                include_ignored=[str(sf_path.relative_to(project_dir))],
+                include_ignored=[rel],
                 respect_gitignore=False,
             )

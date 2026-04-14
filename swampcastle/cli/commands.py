@@ -168,6 +168,7 @@ def cmd_gather(args):
             extract_mode=args.extract,
             limit=args.limit,
             storage_factory=storage_factory,
+            extract_kg_proposals=getattr(args, "extract_kg_proposals", False),
         )
     else:
         from swampcastle.mining.miner import mine
@@ -183,6 +184,7 @@ def cmd_gather(args):
             limit=args.limit,
             storage_factory=storage_factory,
             explain=getattr(args, "explain", False),
+            extract_kg_proposals=getattr(args, "extract_kg_proposals", False),
         )
 
 

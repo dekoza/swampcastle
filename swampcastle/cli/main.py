@@ -78,6 +78,11 @@ def main():
     p.add_argument("--dry-run", action="store_true")
     p.add_argument("--extract", choices=["exchange", "general"], default="exchange")
     p.add_argument(
+        "--extract-kg-proposals",
+        action="store_true",
+        help="After ingest, extract candidate triples into the KG proposal store (proposal-only, opt-in).",
+    )
+    p.add_argument(
         "--explain", action="store_true", help="Print skip reasons for files during mining"
     )
 

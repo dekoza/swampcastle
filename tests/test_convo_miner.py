@@ -76,3 +76,31 @@ def test_convo_mining_tags_contributor_metadata():
     assert all(meta.get("contributor") == "dekoza" for meta in rows["metadatas"])
 
     shutil.rmtree(tmpdir, ignore_errors=True)
+
+
+def test_convo_mining_can_extract_kg_proposals():
+    tmpdir = tempfile.mkdtemp()
+    with open(os.path.join(tmpdir, "chat.txt"), "w") as f:
+        f.write(
+            "> Why did we change auth?\nWe switched from Auth0 to Clerk because local testing got simpler.\n"
+        )
+
+    factory = InMemoryStorageFactory()
+    try:
+        mine_convos(
+            tmpdir,
+            os.path.join(tmpdir, "palace"),
+            wing="test_convos",
+            storage_factory=factory,
+            extract_kg_proposals=True,
+        )
+
+        graph = factory.open_graph()
+        proposals = graph.list_candidate_triples(status="proposed")
+        assert len(proposals) >= 2
+        predicates = {(row["predicate"], row["object_text"]) for row in proposals}
+        assert ("migrated_from", "Auth0") in predicates
+        assert ("migrated_to", "Clerk") in predicates
+        assert graph.query_entity(name="test_convos", direction="outgoing") == []
+    finally:
+        shutil.rmtree(tmpdir, ignore_errors=True)

@@ -22,6 +22,7 @@ from ..project_config import PROJECT_CONFIG_NAME, resolve_project_config
 from ..settings import CastleSettings
 from ..storage import StorageFactory, factory_from_settings
 from .contributor import detect_contributor
+from .kg_extract import persist_kg_proposals_for_wing
 from .skeleton import get_skeleton_extractor
 
 logger = logging.getLogger("swampcastle.mining.miner")
@@ -1001,6 +1002,7 @@ def mine(
     explain: bool = False,
     force_no_skeleton: bool = False,
     only_force_included: bool = False,
+    extract_kg_proposals: bool = False,
     _force_remine: bool = False,
 ):
     """Mine a project directory into the palace."""
@@ -1094,11 +1096,30 @@ def mine(
         embed_buffer.flush()
         total_drawers = embed_buffer.stored_count
 
+    extracted_candidates = 0
+    if (
+        extract_kg_proposals
+        and not dry_run
+        and storage_factory is not None
+        and collection is not None
+    ):
+        extracted_candidates = persist_kg_proposals_for_wing(
+            palace_path=palace_path,
+            storage_factory=storage_factory,
+            collection=collection,
+            wing=wing,
+        )
+
     print(f"\n{'=' * 55}")
     print("  Done.")
     print(f"  Files processed: {len(files) - files_skipped}")
     print(f"  Files skipped (already filed): {files_skipped}")
     print(f"  Drawers filed: {total_drawers}")
+    if extract_kg_proposals:
+        if dry_run:
+            print("  KG proposal extraction: skipped (dry run)")
+        else:
+            print(f"  KG candidate triples: {extracted_candidates}")
     print("\n  By room:")
     for room, count in sorted(room_counts.items(), key=lambda x: x[1], reverse=True):
         print(f"    {room:20} {count} files")

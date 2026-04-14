@@ -50,6 +50,7 @@ Options:
 - `--limit N`
 - `--dry-run`
 - `--extract {exchange,general}` (conversation mode)
+- `--extract-kg-proposals` — after ingest, run proposal-only KG extraction for the ingested wing
 - `--explain` — print skip reasons for files flagged by mining heuristics (useful for debugging why files were ignored)
 
 Examples:
@@ -58,6 +59,7 @@ Examples:
 swampcastle gather ~/projects/myapp
 swampcastle gather ~/chat-exports --mode convos --wing myapp
 swampcastle gather ~/projects/myapp --dry-run --limit 10
+swampcastle gather ~/projects/myapp --extract-kg-proposals
 ```
 
 ## seek / search

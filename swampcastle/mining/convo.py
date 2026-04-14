@@ -17,6 +17,7 @@ from collections import defaultdict
 
 from .normalize import normalize
 from .contributor import detect_contributor
+from .kg_extract import persist_kg_proposals_for_wing
 from ..project_config import resolve_project_config
 from ..settings import CastleSettings
 from ..storage import StorageFactory, factory_from_settings
@@ -286,6 +287,25 @@ def _extract_chunks(content: str, extract_mode: str):
     return chunk_exchanges(content)
 
 
+def _extract_kg_proposals_if_enabled(
+    *,
+    extract_kg_proposals: bool,
+    dry_run: bool,
+    storage_factory: StorageFactory | None,
+    collection,
+    palace_path: str,
+    wing: str,
+) -> int:
+    if not extract_kg_proposals or dry_run or storage_factory is None or collection is None:
+        return 0
+    return persist_kg_proposals_for_wing(
+        palace_path=palace_path,
+        storage_factory=storage_factory,
+        collection=collection,
+        wing=wing,
+    )
+
+
 def mine_convos(
     convo_dir: str,
     palace_path: str,
@@ -295,6 +315,7 @@ def mine_convos(
     dry_run: bool = False,
     extract_mode: str = "exchange",
     storage_factory: StorageFactory | None = None,
+    extract_kg_proposals: bool = False,
 ):
     """Mine a directory of conversation files into the palace.
 
@@ -419,11 +440,25 @@ def mine_convos(
         total_drawers += drawers_added
         print(f"  ✓ [{i:4}/{len(files)}] {filepath.name[:50]:50} +{drawers_added}")
 
+    extracted_candidates = _extract_kg_proposals_if_enabled(
+        extract_kg_proposals=extract_kg_proposals,
+        dry_run=dry_run,
+        storage_factory=storage_factory,
+        collection=collection,
+        palace_path=palace_path,
+        wing=wing,
+    )
+
     print(f"\n{'=' * 55}")
     print("  Done.")
     print(f"  Files processed: {len(files) - files_skipped}")
     print(f"  Files skipped (already filed): {files_skipped}")
     print(f"  Drawers filed: {total_drawers}")
+    if extract_kg_proposals:
+        if dry_run:
+            print("  KG proposal extraction: skipped (dry run)")
+        else:
+            print(f"  KG candidate triples: {extracted_candidates}")
     if room_counts:
         print("\n  By room:")
         for room, count in sorted(room_counts.items(), key=lambda x: x[1], reverse=True):

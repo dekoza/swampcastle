@@ -85,6 +85,48 @@ def test_project_mining_accepts_storage_factory():
         shutil.rmtree(tmpdir, ignore_errors=True)
 
 
+def test_project_mining_can_extract_kg_proposals():
+    tmpdir = tempfile.mkdtemp()
+    try:
+        project_root = Path(tmpdir).resolve()
+        os.makedirs(project_root / "backend")
+
+        write_file(
+            project_root / "backend" / "auth.md",
+            "We switched from Auth0 to Clerk because local testing got simpler.\n",
+        )
+        with open(project_root / ".swampcastle.yaml", "w") as f:
+            yaml.dump(
+                {
+                    "wing": "test_project",
+                    "rooms": [
+                        {"name": "backend", "description": "Backend code"},
+                        {"name": "general", "description": "General"},
+                    ],
+                },
+                f,
+            )
+
+        factory = InMemoryStorageFactory()
+        mine(
+            str(project_root),
+            str(project_root / "palace"),
+            storage_factory=factory,
+            extract_kg_proposals=True,
+        )
+
+        graph = factory.open_graph()
+        proposals = graph.list_candidate_triples(status="proposed")
+        assert len(proposals) >= 2
+        predicates = {(row["predicate"], row["object_text"]) for row in proposals}
+        assert ("migrated_from", "Auth0") in predicates
+        assert ("migrated_to", "Clerk") in predicates
+        # Proposal extraction must not auto-write accepted facts into the KG
+        assert graph.query_entity(name="test_project", direction="outgoing") == []
+    finally:
+        shutil.rmtree(tmpdir, ignore_errors=True)
+
+
 def test_scan_project_respects_gitignore():
     tmpdir = tempfile.mkdtemp()
     try:

@@ -151,6 +151,7 @@ def test_cmd_gather_projects_uses_miner(tmp_path, capsys):
         no_gitignore=False,
         include_ignored=["*.log"],
         limit=7,
+        extract_kg_proposals=True,
         palace=None,
         backend=None,
     )
@@ -163,6 +164,7 @@ def test_cmd_gather_projects_uses_miner(tmp_path, capsys):
     assert "SwampCastle Gather" in out
     assert mock_mine.call_args.kwargs["storage_factory"] == "factory"
     assert mock_mine.call_args.kwargs["include_ignored"] == ["*.log"]
+    assert mock_mine.call_args.kwargs["extract_kg_proposals"] is True
 
 
 def test_cmd_gather_convos_uses_convo_miner_in_dry_run(tmp_path):
@@ -176,6 +178,7 @@ def test_cmd_gather_convos_uses_convo_miner_in_dry_run(tmp_path):
         dry_run=True,
         extract="exchange",
         limit=3,
+        extract_kg_proposals=True,
         palace=None,
         backend=None,
     )
@@ -185,6 +188,7 @@ def test_cmd_gather_convos_uses_convo_miner_in_dry_run(tmp_path):
 
     assert mock_mine.call_args.kwargs["storage_factory"] is None
     assert mock_mine.call_args.kwargs["extract_mode"] == "exchange"
+    assert mock_mine.call_args.kwargs["extract_kg_proposals"] is True
 
 
 def test_cmd_herald_prints_protocol_only(capsys):

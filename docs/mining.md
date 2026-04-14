@@ -38,7 +38,8 @@ swampcastle gather <dir> \
   [--include-ignored PATH] \
   [--agent NAME] \
   [--limit N] \
-  [--dry-run]
+  [--dry-run] \
+  [--extract-kg-proposals]
 ```
 
 Contributor tagging does not come from a `gather` flag. It comes from `.swampcastle.yaml`:
@@ -59,6 +60,29 @@ Examples:
 swampcastle gather ~/projects/myapp --wing myapp
 swampcastle gather ~/projects/myapp --include-ignored docs/generated
 swampcastle gather ~/projects/myapp --dry-run --limit 25
+swampcastle gather ~/projects/myapp --extract-kg-proposals
+```
+
+## Optional KG proposal extraction during ingest
+
+If you pass `--extract-kg-proposals`, SwampCastle will run the rule-based KG
+extractor after ingest finishes and store the output in the **proposal store**.
+
+Important constraints:
+
+- this is **proposal-only** extraction
+- it does **not** write accepted KG facts
+- it is opt-in
+- it is skipped during `--dry-run`
+- repeated runs are idempotent because proposal IDs are deterministic
+
+This is a convenience integration for teams that want proposal extraction to
+follow ingest automatically. Review and acceptance still happen separately via:
+
+```bash
+swampcastle kg review
+swampcastle kg accept <candidate-id>
+swampcastle kg reject <candidate-id>
 ```
 
 ## Conversation exports

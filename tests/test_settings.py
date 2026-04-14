@@ -6,6 +6,7 @@ from pathlib import Path
 import pytest
 
 from swampcastle.settings import CastleSettings
+from swampcastle.wal import WalWriter
 
 
 @pytest.fixture(autouse=True)
@@ -21,9 +22,11 @@ def clear_swampcastle_env(monkeypatch):
 
 
 class TestDefaults:
-    def test_default_castle_path(self):
+    def test_default_castle_path(self, tmp_path, monkeypatch):
+        monkeypatch.setenv("HOME", str(tmp_path))
         s = CastleSettings(_env_file=None)
-        assert str(s.castle_path).endswith(".swampcastle/castle")
+        assert s.castle_path == tmp_path / ".swampcastle" / "castle"
+        assert s.castle_path.is_absolute()
 
     def test_default_collection_name(self):
         s = CastleSettings(_env_file=None)
@@ -58,6 +61,12 @@ class TestEnvOverride:
         s = CastleSettings(_env_file=None)
         assert str(s.castle_path) == "/env/path"
 
+    def test_env_castle_path_expands_user_home(self, tmp_path, monkeypatch):
+        monkeypatch.setenv("HOME", str(tmp_path))
+        monkeypatch.setenv("SWAMPCASTLE_CASTLE_PATH", "~/.swampcastle/castle")
+        s = CastleSettings(_env_file=None)
+        assert s.castle_path == tmp_path / ".swampcastle" / "castle"
+
     def test_env_backend(self, monkeypatch):
         monkeypatch.setenv("SWAMPCASTLE_BACKEND", "postgres")
         s = CastleSettings(_env_file=None)
@@ -77,6 +86,13 @@ class TestJsonFile:
         s = CastleSettings(_env_file=None, _json_file=str(json_path))
         assert str(s.castle_path) == "/from/json"
         assert s.backend == "chroma"
+
+    def test_json_castle_path_expands_user_home(self, tmp_path, monkeypatch):
+        monkeypatch.setenv("HOME", str(tmp_path))
+        json_path = tmp_path / "config.json"
+        json_path.write_text(json.dumps({"castle_path": "~/.swampcastle/castle"}))
+        s = CastleSettings(_env_file=None, _json_file=str(json_path))
+        assert s.castle_path == tmp_path / ".swampcastle" / "castle"
 
     def test_env_overrides_json(self, tmp_path, monkeypatch):
         json_path = tmp_path / "config.json"
@@ -111,3 +127,23 @@ class TestValidation:
     def test_castle_path_accepts_string(self):
         s = CastleSettings(castle_path="/tmp/x", _env_file=None)
         assert isinstance(s.castle_path, Path)
+
+    def test_castle_path_expands_user_home(self, tmp_path, monkeypatch):
+        monkeypatch.setenv("HOME", str(tmp_path))
+        s = CastleSettings(castle_path="~/.swampcastle/castle", _env_file=None)
+        assert s.castle_path == tmp_path / ".swampcastle" / "castle"
+
+
+class TestPathSideEffects:
+    def test_default_wal_path_does_not_create_literal_tilde_dir(self, tmp_path, monkeypatch):
+        monkeypatch.setenv("HOME", str(tmp_path))
+        config_dir = tmp_path / ".swampcastle"
+        config_dir.mkdir()
+        monkeypatch.chdir(config_dir)
+
+        settings = CastleSettings(_env_file=None)
+        WalWriter(settings.wal_path)
+
+        assert not (config_dir / "~").exists()
+        assert settings.wal_path == tmp_path / ".swampcastle" / "wal"
+        assert settings.wal_path.exists()

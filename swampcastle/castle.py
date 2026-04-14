@@ -14,6 +14,7 @@ from swampcastle.models.catalog import StatusResponse
 from swampcastle.models.drawer import SearchQuery, SearchResponse
 from swampcastle.services.catalog import CatalogService
 from swampcastle.services.graph import GraphService
+from swampcastle.services.kg_proposals import KGProposalService
 from swampcastle.services.search import SearchService
 from swampcastle.services.vault import VaultService
 from swampcastle.settings import CastleSettings
@@ -40,6 +41,7 @@ class Castle:
             wal,
             graph_cache_invalidator=self.graph.invalidate_cache,
         )
+        self.kg_proposals = KGProposalService(self._graph_store, self._collection, wal)
 
     @property
     def settings(self) -> CastleSettings:

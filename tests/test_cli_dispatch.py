@@ -201,6 +201,26 @@ class TestParley:
                 main()
 
 
+class TestKg:
+    def test_review_dispatches(self):
+        with patch("sys.argv", ["swampcastle", "kg", "review"]):
+            with patch("swampcastle.cli.commands.cmd_kg_review") as mock:
+                main()
+                mock.assert_called_once()
+
+    def test_accept_dispatches(self):
+        with patch("sys.argv", ["swampcastle", "kg", "accept", "cand_1"]):
+            with patch("swampcastle.cli.commands.cmd_kg_accept") as mock:
+                main()
+                mock.assert_called_once()
+
+    def test_reject_dispatches(self):
+        with patch("sys.argv", ["swampcastle", "kg", "reject", "cand_1"]):
+            with patch("swampcastle.cli.commands.cmd_kg_reject") as mock:
+                main()
+                mock.assert_called_once()
+
+
 class TestNi:
     def test_easter_egg(self, capsys):
         with patch("sys.argv", ["swampcastle", "ni"]):

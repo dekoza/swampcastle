@@ -30,6 +30,13 @@ from .kg import (
     TimelineResult,
     TripleResult,
 )
+from .kg_candidates import (
+    ALLOWED_KG_PREDICATES,
+    CandidateReviewCommand,
+    CandidateReviewResult,
+    CandidateTriple,
+    CandidateTripleFilter,
+)
 from .sync import ChangeSet, MergeResult, SyncRecord, SyncStatus, VersionVector
 
 __all__ = [
@@ -50,6 +57,11 @@ __all__ = [
     "KGQueryParams",
     "KGQueryResult",
     "KGStatsResult",
+    "ALLOWED_KG_PREDICATES",
+    "CandidateReviewCommand",
+    "CandidateReviewResult",
+    "CandidateTriple",
+    "CandidateTripleFilter",
     "MergeResult",
     "RoomsResponse",
     "SearchHit",

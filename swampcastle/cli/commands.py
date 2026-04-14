@@ -275,6 +275,76 @@ def cmd_distill(args):
             print(f"  Distilled {count} drawers with AAAK dialect.")
 
 
+def cmd_kg_review(args):
+    from swampcastle.castle import Castle
+    from swampcastle.models import CandidateTripleFilter
+
+    settings = _settings(args)
+    with Castle(settings, factory_from_settings(settings)) as castle:
+        proposals = castle.kg_proposals.list_proposals(
+            CandidateTripleFilter(
+                status=args.status,
+                predicate=args.predicate,
+                min_confidence=args.min_confidence,
+                wing=args.wing,
+                room=args.room,
+                limit=args.limit,
+                offset=args.offset,
+            )
+        )
+
+    if not proposals:
+        print("  No candidate triples.")
+        return
+
+    _print_section("KG Review")
+    _print_kv("Candidates", len(proposals))
+    for candidate in proposals:
+        print(
+            f"\n  {candidate.candidate_id}  [{candidate.status}]  {candidate.subject_text}"
+            f" --{candidate.predicate}--> {candidate.object_text}  conf={candidate.confidence:.2f}"
+        )
+
+
+def cmd_kg_accept(args):
+    from swampcastle.castle import Castle
+    from swampcastle.models import CandidateReviewCommand
+
+    settings = _settings(args)
+    with Castle(settings, factory_from_settings(settings)) as castle:
+        result = castle.kg_proposals.accept(
+            CandidateReviewCommand(
+                candidate_id=args.candidate_id,
+                action="accept",
+                subject_text=args.subject,
+                predicate=args.predicate,
+                object_text=args.object,
+                valid_from=args.valid_from,
+                valid_to=args.valid_to,
+            )
+        )
+
+    if not result.success:
+        print(f"  Error: {result.error}")
+        sys.exit(1)
+
+    print(f"  Accepted {result.candidate_id} into KG as triple {result.triple_id}.")
+
+
+def cmd_kg_reject(args):
+    from swampcastle.castle import Castle
+
+    settings = _settings(args)
+    with Castle(settings, factory_from_settings(settings)) as castle:
+        result = castle.kg_proposals.reject(args.candidate_id)
+
+    if not result.success:
+        print(f"  Error: {result.error}")
+        sys.exit(1)
+
+    print(f"  Rejected {result.candidate_id}.")
+
+
 def cmd_wizard(args):
     from swampcastle.wizard import run_wizard
 

@@ -31,12 +31,14 @@ class TestCastleLifecycle:
             assert c.search is not None
             assert c.vault is not None
             assert c.graph is not None
+            assert c.kg_proposals is not None
 
     def test_services_accessible(self, castle):
         assert castle.catalog is not None
         assert castle.search is not None
         assert castle.vault is not None
         assert castle.graph is not None
+        assert castle.kg_proposals is not None
 
     def test_close_callable(self, settings, factory):
         c = Castle(settings, factory)

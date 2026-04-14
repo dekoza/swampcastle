@@ -343,6 +343,100 @@ def test_cmd_distill_apply_enables_real_write(capsys):
     assert "Distilled 2 drawers with AAAK dialect." in capsys.readouterr().out
 
 
+def test_cmd_kg_review_lists_candidates(capsys):
+    class ProposalCastle(DummyCastle):
+        def __init__(self, settings, factory):
+            self.catalog = SimpleNamespace(status=lambda: None)
+            self.search = SimpleNamespace(search=lambda q: None)
+            self.vault = SimpleNamespace(distill=lambda **kwargs: 0, reforge=lambda **kwargs: 0)
+            self.kg_proposals = SimpleNamespace(
+                list_proposals=lambda filter_params=None: [
+                    SimpleNamespace(
+                        candidate_id="cand_1",
+                        subject_text="SwampCastle",
+                        predicate="uses",
+                        object_text="LanceDB",
+                        confidence=0.9,
+                        status="proposed",
+                    )
+                ]
+            )
+            self._collection = object()
+
+    args = SimpleNamespace(
+        status="proposed",
+        predicate=None,
+        min_confidence=None,
+        wing=None,
+        room=None,
+        limit=50,
+        offset=0,
+        palace=None,
+        backend=None,
+    )
+
+    with patch("swampcastle.castle.Castle", lambda s, f: ProposalCastle(s, f)):
+        with patch("swampcastle.cli.commands.factory_from_settings", return_value=object()):
+            commands.cmd_kg_review(args)
+
+    out = capsys.readouterr().out
+    assert "cand_1" in out
+    assert "SwampCastle" in out
+    assert "uses" in out
+
+
+def test_cmd_kg_accept_and_reject(capsys):
+    calls = []
+
+    class ProposalCastle(DummyCastle):
+        def __init__(self, settings, factory):
+            self.catalog = SimpleNamespace(status=lambda: None)
+            self.search = SimpleNamespace(search=lambda q: None)
+            self.vault = SimpleNamespace(distill=lambda **kwargs: 0, reforge=lambda **kwargs: 0)
+            self.kg_proposals = SimpleNamespace(
+                accept=lambda cmd: calls.append(("accept", cmd))
+                or SimpleNamespace(
+                    success=True,
+                    candidate_id=cmd.candidate_id,
+                    status="accepted",
+                    triple_id="t1",
+                    error=None,
+                ),
+                reject=lambda candidate_id: calls.append(("reject", candidate_id))
+                or SimpleNamespace(
+                    success=True,
+                    candidate_id=candidate_id,
+                    status="rejected",
+                    triple_id=None,
+                    error=None,
+                ),
+            )
+            self._collection = object()
+
+    accept_args = SimpleNamespace(
+        candidate_id="cand_1",
+        subject=None,
+        predicate=None,
+        object=None,
+        valid_from=None,
+        valid_to=None,
+        palace=None,
+        backend=None,
+    )
+    reject_args = SimpleNamespace(candidate_id="cand_2", palace=None, backend=None)
+
+    with patch("swampcastle.castle.Castle", lambda s, f: ProposalCastle(s, f)):
+        with patch("swampcastle.cli.commands.factory_from_settings", return_value=object()):
+            commands.cmd_kg_accept(accept_args)
+            commands.cmd_kg_reject(reject_args)
+
+    assert calls[0][0] == "accept"
+    assert calls[1] == ("reject", "cand_2")
+    out = capsys.readouterr().out
+    assert "accepted" in out.lower()
+    assert "rejected" in out.lower()
+
+
 def test_cmd_wizard_runs_runtime_wizard():
     with patch("swampcastle.wizard.run_wizard") as mock:
         commands.cmd_wizard(SimpleNamespace())

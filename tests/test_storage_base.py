@@ -91,6 +91,45 @@ class TestGraphStoreABC:
             def stats(self):
                 pass
 
+            def propose_triple(
+                self,
+                *,
+                subject_text,
+                predicate,
+                object_text,
+                confidence,
+                modality,
+                polarity,
+                evidence_drawer_id,
+                evidence_text,
+                extractor_version,
+                valid_from=None,
+                valid_to=None,
+                source_file=None,
+                wing=None,
+                room=None,
+            ):
+                pass
+
+            def get_candidate_triple(self, *, candidate_id):
+                pass
+
+            def list_candidate_triples(
+                self,
+                *,
+                status=None,
+                predicate=None,
+                min_confidence=None,
+                wing=None,
+                room=None,
+                limit=50,
+                offset=0,
+            ):
+                pass
+
+            def set_candidate_status(self, *, candidate_id, status, reviewed_at=None):
+                pass
+
             def close(self):
                 pass
 

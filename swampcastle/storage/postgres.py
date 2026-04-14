@@ -859,6 +859,60 @@ class PostgresGraphStore(GraphStore):
             "relationship_types": sorted(_row_value(row, "predicate", 0) for row in predicate_rows),
         }
 
+    def propose_triple(
+        self,
+        *,
+        subject_text,
+        predicate,
+        object_text,
+        confidence,
+        modality,
+        polarity,
+        evidence_drawer_id,
+        evidence_text,
+        extractor_version,
+        valid_from=None,
+        valid_to=None,
+        source_file=None,
+        wing=None,
+        room=None,
+    ) -> str:
+        raise NotImplementedError(
+            "Candidate-triple proposal storage is not implemented for Postgres yet. "
+            "Use the local SQLite backend for the MVP."
+        )
+
+    def get_candidate_triple(self, *, candidate_id: str) -> dict[str, Any] | None:
+        raise NotImplementedError(
+            "Candidate-triple proposal storage is not implemented for Postgres yet."
+        )
+
+    def list_candidate_triples(
+        self,
+        *,
+        status: str | None = None,
+        predicate: str | None = None,
+        min_confidence: float | None = None,
+        wing: str | None = None,
+        room: str | None = None,
+        limit: int = 50,
+        offset: int = 0,
+    ) -> list[dict[str, Any]]:
+        raise NotImplementedError(
+            "Candidate-triple proposal storage is not implemented for Postgres yet."
+        )
+
+    def set_candidate_status(
+        self,
+        *,
+        candidate_id: str,
+        status: str,
+        reviewed_at: str | None = None,
+    ) -> bool:
+        raise NotImplementedError(
+            "Candidate-triple proposal storage is not implemented for Postgres yet."
+        )
+
     def close(self) -> None:
         return None
 

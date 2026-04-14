@@ -4,6 +4,7 @@ import hashlib
 import json
 import sqlite3
 import threading
+import uuid
 from datetime import date, datetime
 from typing import Any
 
@@ -78,6 +79,32 @@ class SQLiteGraph(GraphStore):
             CREATE INDEX IF NOT EXISTS idx_triples_object ON triples(object);
             CREATE INDEX IF NOT EXISTS idx_triples_predicate ON triples(predicate);
             CREATE INDEX IF NOT EXISTS idx_triples_valid ON triples(valid_from, valid_to);
+
+            CREATE TABLE IF NOT EXISTS candidate_triples (
+                id TEXT PRIMARY KEY,
+                subject_text TEXT NOT NULL,
+                predicate TEXT NOT NULL,
+                object_text TEXT NOT NULL,
+                confidence REAL NOT NULL,
+                modality TEXT NOT NULL,
+                polarity TEXT NOT NULL,
+                valid_from TEXT,
+                valid_to TEXT,
+                evidence_drawer_id TEXT NOT NULL,
+                evidence_text TEXT NOT NULL,
+                source_file TEXT,
+                wing TEXT,
+                room TEXT,
+                status TEXT NOT NULL DEFAULT 'proposed',
+                extractor_version TEXT NOT NULL,
+                created_at TEXT DEFAULT CURRENT_TIMESTAMP,
+                reviewed_at TEXT
+            );
+
+            CREATE INDEX IF NOT EXISTS idx_candidate_status ON candidate_triples(status);
+            CREATE INDEX IF NOT EXISTS idx_candidate_predicate ON candidate_triples(predicate);
+            CREATE INDEX IF NOT EXISTS idx_candidate_confidence ON candidate_triples(confidence);
+            CREATE INDEX IF NOT EXISTS idx_candidate_location ON candidate_triples(wing, room);
         """)
         conn.commit()
 
@@ -296,6 +323,127 @@ class SQLiteGraph(GraphStore):
             "expired_facts": expired,
             "relationship_types": sorted(preds),
         }
+
+    def propose_triple(
+        self,
+        *,
+        subject_text,
+        predicate,
+        object_text,
+        confidence,
+        modality,
+        polarity,
+        evidence_drawer_id,
+        evidence_text,
+        extractor_version,
+        valid_from=None,
+        valid_to=None,
+        source_file=None,
+        wing=None,
+        room=None,
+    ):
+        candidate_id = f"cand_{uuid.uuid4().hex[:16]}"
+        conn = self._get_conn()
+        with self._write_lock:
+            with conn:
+                conn.execute(
+                    """
+                    INSERT INTO candidate_triples (
+                        id, subject_text, predicate, object_text, confidence,
+                        modality, polarity, valid_from, valid_to,
+                        evidence_drawer_id, evidence_text, source_file,
+                        wing, room, status, extractor_version
+                    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'proposed', ?)
+                    ON CONFLICT(id) DO UPDATE SET
+                        subject_text = excluded.subject_text,
+                        predicate = excluded.predicate,
+                        object_text = excluded.object_text,
+                        confidence = excluded.confidence,
+                        modality = excluded.modality,
+                        polarity = excluded.polarity,
+                        valid_from = excluded.valid_from,
+                        valid_to = excluded.valid_to,
+                        evidence_drawer_id = excluded.evidence_drawer_id,
+                        evidence_text = excluded.evidence_text,
+                        source_file = excluded.source_file,
+                        wing = excluded.wing,
+                        room = excluded.room,
+                        extractor_version = excluded.extractor_version
+                    """,
+                    (
+                        candidate_id,
+                        subject_text,
+                        predicate,
+                        object_text,
+                        confidence,
+                        modality,
+                        polarity,
+                        valid_from,
+                        valid_to,
+                        evidence_drawer_id,
+                        evidence_text,
+                        source_file,
+                        wing,
+                        room,
+                        extractor_version,
+                    ),
+                )
+        return candidate_id
+
+    def get_candidate_triple(self, *, candidate_id):
+        conn = self._get_conn()
+        row = conn.execute(
+            "SELECT * FROM candidate_triples WHERE id = ?",
+            (candidate_id,),
+        ).fetchone()
+        return dict(row) if row is not None else None
+
+    def list_candidate_triples(
+        self,
+        *,
+        status=None,
+        predicate=None,
+        min_confidence=None,
+        wing=None,
+        room=None,
+        limit=50,
+        offset=0,
+    ):
+        conn = self._get_conn()
+        clauses = []
+        params: list[Any] = []
+        if status is not None:
+            clauses.append("status = ?")
+            params.append(status)
+        if predicate is not None:
+            clauses.append("predicate = ?")
+            params.append(predicate)
+        if min_confidence is not None:
+            clauses.append("confidence >= ?")
+            params.append(min_confidence)
+        if wing is not None:
+            clauses.append("wing = ?")
+            params.append(wing)
+        if room is not None:
+            clauses.append("room = ?")
+            params.append(room)
+
+        where_sql = f"WHERE {' AND '.join(clauses)}" if clauses else ""
+        rows = conn.execute(
+            f"SELECT * FROM candidate_triples {where_sql} ORDER BY created_at ASC, id ASC LIMIT ? OFFSET ?",
+            [*params, limit, offset],
+        ).fetchall()
+        return [dict(row) for row in rows]
+
+    def set_candidate_status(self, *, candidate_id, status, reviewed_at=None):
+        conn = self._get_conn()
+        with self._write_lock:
+            with conn:
+                cur = conn.execute(
+                    "UPDATE candidate_triples SET status = ?, reviewed_at = ? WHERE id = ?",
+                    (status, reviewed_at, candidate_id),
+                )
+                return cur.rowcount > 0
 
     def close(self):
         with self._connections_lock:

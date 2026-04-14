@@ -125,6 +125,8 @@ class InMemoryGraphStore(GraphStore):
     def __init__(self):
         self._entities: dict[str, dict[str, Any]] = {}
         self._triples: list[dict[str, Any]] = []
+        self._candidate_triples: dict[str, dict[str, Any]] = {}
+        self._candidate_counter = 0
 
     def _entity_id(self, name: str) -> str:
         return name.lower().replace(" ", "_")
@@ -249,6 +251,85 @@ class InMemoryGraphStore(GraphStore):
             "expired_facts": expired,
             "relationship_types": sorted(preds),
         }
+
+    def propose_triple(
+        self,
+        *,
+        subject_text,
+        predicate,
+        object_text,
+        confidence,
+        modality,
+        polarity,
+        evidence_drawer_id,
+        evidence_text,
+        extractor_version,
+        valid_from=None,
+        valid_to=None,
+        source_file=None,
+        wing=None,
+        room=None,
+    ):
+        self._candidate_counter += 1
+        candidate_id = f"cand_{self._candidate_counter}"
+        self._candidate_triples[candidate_id] = {
+            "id": candidate_id,
+            "subject_text": subject_text,
+            "predicate": predicate,
+            "object_text": object_text,
+            "confidence": confidence,
+            "modality": modality,
+            "polarity": polarity,
+            "valid_from": valid_from,
+            "valid_to": valid_to,
+            "evidence_drawer_id": evidence_drawer_id,
+            "evidence_text": evidence_text,
+            "source_file": source_file,
+            "wing": wing,
+            "room": room,
+            "status": "proposed",
+            "extractor_version": extractor_version,
+            "created_at": None,
+            "reviewed_at": None,
+        }
+        return candidate_id
+
+    def get_candidate_triple(self, *, candidate_id):
+        row = self._candidate_triples.get(candidate_id)
+        return dict(row) if row is not None else None
+
+    def list_candidate_triples(
+        self,
+        *,
+        status=None,
+        predicate=None,
+        min_confidence=None,
+        wing=None,
+        room=None,
+        limit=50,
+        offset=0,
+    ):
+        rows = list(self._candidate_triples.values())
+        if status is not None:
+            rows = [row for row in rows if row["status"] == status]
+        if predicate is not None:
+            rows = [row for row in rows if row["predicate"] == predicate]
+        if min_confidence is not None:
+            rows = [row for row in rows if row["confidence"] >= min_confidence]
+        if wing is not None:
+            rows = [row for row in rows if row.get("wing") == wing]
+        if room is not None:
+            rows = [row for row in rows if row.get("room") == room]
+        rows = rows[offset : offset + limit]
+        return [dict(row) for row in rows]
+
+    def set_candidate_status(self, *, candidate_id, status, reviewed_at=None):
+        row = self._candidate_triples.get(candidate_id)
+        if row is None:
+            return False
+        row["status"] = status
+        row["reviewed_at"] = reviewed_at
+        return True
 
     def close(self):
         pass

@@ -75,7 +75,12 @@ class CollectionStore(ABC):
 
 
 class GraphStore(ABC):
-    """Contract for knowledge graph backends (SQLite, Postgres, in-memory)."""
+    """Contract for knowledge graph backends (SQLite, Postgres, in-memory).
+
+    Accepted facts live in the main entity/triple tables.
+    Proposed extracted facts live in a separate candidate-triple store so KG
+    queries remain trustworthy until proposals are explicitly reviewed.
+    """
 
     @abstractmethod
     def add_entity(
@@ -142,6 +147,55 @@ class GraphStore(ABC):
 
     @abstractmethod
     def stats(self) -> dict[str, Any]:
+        raise NotImplementedError
+
+    @abstractmethod
+    def propose_triple(
+        self,
+        *,
+        subject_text: str,
+        predicate: str,
+        object_text: str,
+        confidence: float,
+        modality: str,
+        polarity: str,
+        evidence_drawer_id: str,
+        evidence_text: str,
+        extractor_version: str,
+        valid_from: str | None = None,
+        valid_to: str | None = None,
+        source_file: str | None = None,
+        wing: str | None = None,
+        room: str | None = None,
+    ) -> str:
+        raise NotImplementedError
+
+    @abstractmethod
+    def get_candidate_triple(self, *, candidate_id: str) -> dict[str, Any] | None:
+        raise NotImplementedError
+
+    @abstractmethod
+    def list_candidate_triples(
+        self,
+        *,
+        status: str | None = None,
+        predicate: str | None = None,
+        min_confidence: float | None = None,
+        wing: str | None = None,
+        room: str | None = None,
+        limit: int = 50,
+        offset: int = 0,
+    ) -> list[dict[str, Any]]:
+        raise NotImplementedError
+
+    @abstractmethod
+    def set_candidate_status(
+        self,
+        *,
+        candidate_id: str,
+        status: str,
+        reviewed_at: str | None = None,
+    ) -> bool:
         raise NotImplementedError
 
     @abstractmethod

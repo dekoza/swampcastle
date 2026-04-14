@@ -164,6 +164,30 @@ def main():
     # armory (embedders)
     sub.add_parser("armory", aliases=["embedders"], help="List available embedding models")
 
+    # kg proposal review
+    p_kg = sub.add_parser("kg", help="Review and manage KG candidate triples")
+    kg_sub = p_kg.add_subparsers(dest="kg_action")
+
+    p = kg_sub.add_parser("review", help="List candidate triples")
+    p.add_argument("--status", choices=["proposed", "accepted", "rejected"], default=None)
+    p.add_argument("--predicate", default=None)
+    p.add_argument("--min-confidence", dest="min_confidence", type=float, default=None)
+    p.add_argument("--wing", default=None)
+    p.add_argument("--room", default=None)
+    p.add_argument("--limit", type=int, default=50)
+    p.add_argument("--offset", type=int, default=0)
+
+    p = kg_sub.add_parser("accept", help="Accept a candidate triple into the KG")
+    p.add_argument("candidate_id")
+    p.add_argument("--subject", default=None)
+    p.add_argument("--predicate", default=None)
+    p.add_argument("--object", default=None)
+    p.add_argument("--valid-from", dest="valid_from", default=None)
+    p.add_argument("--valid-to", dest="valid_to", default=None)
+
+    p = kg_sub.add_parser("reject", help="Reject a candidate triple")
+    p.add_argument("candidate_id")
+
     # garrison (serve)
     p = sub.add_parser("garrison", aliases=["serve"], help="Man the garrison (sync server)")
     p.add_argument("--host", default="0.0.0.0")
@@ -196,6 +220,19 @@ def main():
             cmd.cmd_drawbridge_run(args)
         else:
             cmd.cmd_drawbridge_setup(args)
+        return
+
+    if args.command == "kg":
+        action = getattr(args, "kg_action", None)
+        if not action:
+            p_kg.print_help()
+            return
+        if action == "review":
+            cmd.cmd_kg_review(args)
+        elif action == "accept":
+            cmd.cmd_kg_accept(args)
+        elif action == "reject":
+            cmd.cmd_kg_reject(args)
         return
 
     if args.command == "hook":

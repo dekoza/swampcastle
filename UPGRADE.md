@@ -9,6 +9,35 @@
 ## Breaking Changes
 
 | What | Before (v3.x) | After (v4.0) |
+|------|---------------|--------------||
+| `AddDrawerCommand` drawer ID scheme | `sha256(wing+room+content[:100])` — first-100-char prefix only | `sha256(wing+room+content)` — full content (correctness fix, see below) |
+
+### Drawer ID scheme change (correctness fix)
+
+The `drawer_id()` method in `AddDrawerCommand` previously hashed only the
+first 100 characters of `content`. Two documents sharing the same wing, room,
+and first 100 characters (e.g., files with a long identical copyright header)
+would produce the same ID: the second document would be silently dropped with
+`reason="already_exists"` — **data loss without any error**.
+
+The fix hashes the full content. This changes all drawer IDs, so:
+
+- **New castles** work correctly out of the box — no action needed.
+- **Existing castles** created before this fix may contain drawers
+  with IDs computed from the old scheme. Running `swampcastle gather`
+  again on an existing project will re-mine files under new IDs, leaving
+  orphaned drawers with old IDs in the collection.
+
+**Migration steps for existing castles:**
+```bash
+# Remove old castle and re-mine from scratch (safest)
+rm -rf ~/.swampcastle/castle
+swampcastle gather <project-dir>
+```
+Or wait for `swampcastle migrate-ids` (planned) which will reassign IDs
+in-place without re-mining.
+
+| What | Before (v3.x) | After (v4.0) |
 |------|---------------|--------------|
 | Default database | ChromaDB (embedded SQLite + HNSW) | LanceDB (Lance columnar format) |
 | Default dependency | `chromadb>=0.5` | `lancedb>=0.14`, `onnxruntime`, `tokenizers` |

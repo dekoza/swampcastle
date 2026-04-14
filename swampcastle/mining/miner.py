@@ -495,13 +495,52 @@ def detect_room(filepath: Path, content: str, rooms: list, project_path: Path) -
 # =============================================================================
 
 
+def _find_chunk_break(content: str, start: int, end: int) -> int:
+    """Find the best chunk break <= end.
+
+    Preference order (only if the boundary is in the back half of the window):
+    1. paragraph boundary (\n\n)
+    2. line boundary (\n)
+    3. sentence boundary (. ! ? followed by whitespace/end)
+    4. word boundary (space/tab)
+    5. hard cut at end
+    """
+    min_break = start + CHUNK_SIZE // 2
+
+    paragraph_pos = content.rfind("\n\n", start, end)
+    if paragraph_pos >= min_break:
+        return paragraph_pos
+
+    newline_pos = content.rfind("\n", start, end)
+    if newline_pos >= min_break:
+        return newline_pos
+
+    sentence_matches = list(re.finditer(r"[.!?](?=\s|$)", content[start:end]))
+    if sentence_matches:
+        sentence_pos = start + sentence_matches[-1].end()
+        if sentence_pos >= min_break:
+            return sentence_pos
+
+    word_pos = max(content.rfind(" ", start, end), content.rfind("\t", start, end))
+    if word_pos >= min_break:
+        return word_pos
+
+    return end
+
+
 def chunk_text(content: str, source_file: str) -> list:
     """
     Split content into drawer-sized chunks.
-    Tries to split on paragraph/line boundaries.
+
+    Preference order:
+    - paragraph boundary
+    - line boundary
+    - sentence boundary
+    - word boundary
+    - hard cut at CHUNK_SIZE
+
     Returns list of {"content": str, "chunk_index": int}
     """
-    # Clean up
     content = content.strip()
     if not content:
         return []
@@ -512,28 +551,25 @@ def chunk_text(content: str, source_file: str) -> list:
 
     while start < len(content):
         end = min(start + CHUNK_SIZE, len(content))
-
-        # Try to break at paragraph boundary
         if end < len(content):
-            newline_pos = content.rfind("\n\n", start, end)
-            if newline_pos > start + CHUNK_SIZE // 2:
-                end = newline_pos
-            else:
-                newline_pos = content.rfind("\n", start, end)
-                if newline_pos > start + CHUNK_SIZE // 2:
-                    end = newline_pos
+            end = _find_chunk_break(content, start, end)
 
         chunk = content[start:end].strip()
         if len(chunk) >= MIN_CHUNK_SIZE:
-            chunks.append(
-                {
-                    "content": chunk,
-                    "chunk_index": chunk_index,
-                }
-            )
+            chunks.append({"content": chunk, "chunk_index": chunk_index})
             chunk_index += 1
 
-        start = end - CHUNK_OVERLAP if end < len(content) else end
+        if end < len(content):
+            next_start = max(0, end - CHUNK_OVERLAP)
+            # Avoid starting the overlap in the middle of a word.
+            if next_start > 0 and not content[next_start - 1].isspace():
+                while next_start < len(content) and not content[next_start].isspace():
+                    next_start += 1
+                while next_start < len(content) and content[next_start].isspace():
+                    next_start += 1
+            start = next_start
+        else:
+            start = end
 
     return chunks
 

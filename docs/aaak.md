@@ -41,11 +41,21 @@ dialect = Dialect.from_config("entities.json")
 ## CLI
 
 ```bash
+# Preview only (default)
+swampcastle distill
+swampcastle compress
+
+# Persist AAAK metadata explicitly
+swampcastle distill --apply
+swampcastle compress --apply
+
+# Force preview mode explicitly
 swampcastle distill --dry-run
-swampcastle compress --dry-run
 ```
 
-Honest status: the current CLI command is preview-oriented. It does not yet implement a full persistent compressed-store workflow.
+Honest status: the current CLI command is preview-oriented by default. It does
+not yet implement a full persistent compressed-store workflow, and `--apply`
+only stores AAAK in metadata — it does not replace verbatim drawer content.
 
 ## MCP
 

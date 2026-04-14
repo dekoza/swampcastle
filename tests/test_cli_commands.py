@@ -251,7 +251,13 @@ def test_cmd_cleave_passes_argv_without_mutating_sys_argv(tmp_path):
 
 def test_cmd_distill_prints_no_drawers(capsys):
     args = SimpleNamespace(
-        wing=None, room=None, dry_run=False, config=None, palace=None, backend=None
+        wing=None,
+        room=None,
+        dry_run=False,
+        apply=False,
+        config=None,
+        palace=None,
+        backend=None,
     )
 
     with patch("swampcastle.castle.Castle", lambda s, f: DummyCastle(s, f, distill_count=0)):
@@ -259,6 +265,30 @@ def test_cmd_distill_prints_no_drawers(capsys):
             commands.cmd_distill(args)
 
     assert "No drawers to distill" in capsys.readouterr().out
+
+
+def test_cmd_distill_defaults_to_preview_mode(capsys):
+    class DistillCastle(DummyCastle):
+        def __init__(self, settings, factory):
+            self.calls = []
+            self.catalog = SimpleNamespace(status=lambda: None)
+            self.search = SimpleNamespace(search=lambda q: None)
+            self.vault = SimpleNamespace(distill=lambda **kwargs: self.calls.append(kwargs) or 2)
+            self._collection = object()
+
+    castle = DistillCastle(None, None)
+    args = SimpleNamespace(
+        wing="w", room="r", dry_run=False, apply=False, config=None, palace=None, backend=None
+    )
+
+    with patch("swampcastle.castle.Castle", lambda s, f: castle):
+        with patch("swampcastle.cli.commands.factory_from_settings", return_value=object()):
+            commands.cmd_distill(args)
+
+    assert castle.calls == [{"wing": "w", "room": "r", "dry_run": True, "config_path": None}]
+    out = capsys.readouterr().out
+    assert "DRY RUN" in out
+    assert "--apply" in out
 
 
 def test_cmd_distill_passes_config_and_dry_run(capsys):
@@ -272,7 +302,13 @@ def test_cmd_distill_passes_config_and_dry_run(capsys):
 
     castle = DistillCastle(None, None)
     args = SimpleNamespace(
-        wing="w", room="r", dry_run=True, config="entities.json", palace=None, backend=None
+        wing="w",
+        room="r",
+        dry_run=True,
+        apply=False,
+        config="entities.json",
+        palace=None,
+        backend=None,
     )
 
     with patch("swampcastle.castle.Castle", lambda s, f: castle):
@@ -283,6 +319,28 @@ def test_cmd_distill_passes_config_and_dry_run(capsys):
         {"wing": "w", "room": "r", "dry_run": True, "config_path": "entities.json"}
     ]
     assert "DRY RUN" in capsys.readouterr().out
+
+
+def test_cmd_distill_apply_enables_real_write(capsys):
+    class DistillCastle(DummyCastle):
+        def __init__(self, settings, factory):
+            self.calls = []
+            self.catalog = SimpleNamespace(status=lambda: None)
+            self.search = SimpleNamespace(search=lambda q: None)
+            self.vault = SimpleNamespace(distill=lambda **kwargs: self.calls.append(kwargs) or 2)
+            self._collection = object()
+
+    castle = DistillCastle(None, None)
+    args = SimpleNamespace(
+        wing="w", room="r", dry_run=False, apply=True, config=None, palace=None, backend=None
+    )
+
+    with patch("swampcastle.castle.Castle", lambda s, f: castle):
+        with patch("swampcastle.cli.commands.factory_from_settings", return_value=object()):
+            commands.cmd_distill(args)
+
+    assert castle.calls == [{"wing": "w", "room": "r", "dry_run": False, "config_path": None}]
+    assert "Distilled 2 drawers with AAAK dialect." in capsys.readouterr().out
 
 
 def test_cmd_wizard_runs_runtime_wizard():

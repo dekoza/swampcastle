@@ -77,7 +77,9 @@ def main():
     p.add_argument("--limit", type=int, default=0)
     p.add_argument("--dry-run", action="store_true")
     p.add_argument("--extract", choices=["exchange", "general"], default="exchange")
-    p.add_argument("--explain", action="store_true", help="Print skip reasons for files during mining")
+    p.add_argument(
+        "--explain", action="store_true", help="Print skip reasons for files during mining"
+    )
 
     # seek (search)
     p = sub.add_parser("seek", aliases=["search"], help="Seek anything in the castle")
@@ -123,6 +125,11 @@ def main():
     p.add_argument("--wing", help="Filter by wing")
     p.add_argument("--room", help="Filter by room")
     p.add_argument("--dry-run", action="store_true")
+    p.add_argument(
+        "--apply",
+        action="store_true",
+        help="Persist AAAK metadata updates. Without this flag distill runs in preview mode.",
+    )
     p.add_argument("--config", default=None)
 
     # hook (internal)

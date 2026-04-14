@@ -251,20 +251,26 @@ def cmd_distill(args):
     settings = _settings(args)
 
     config_path = getattr(args, "config", None)
+    apply = getattr(args, "apply", False)
+    effective_dry_run = args.dry_run or not apply
 
     with Castle(settings, factory_from_settings(settings)) as castle:
         count = castle.vault.distill(
             wing=args.wing,
             room=args.room,
-            dry_run=args.dry_run,
+            dry_run=effective_dry_run,
             config_path=config_path,
         )
         if count == 0:
             print("  No drawers to distill.")
             return
 
-        if args.dry_run:
+        if effective_dry_run:
             print(f"  DRY RUN — would distill {count} drawers.")
+            if not args.dry_run and not apply:
+                print(
+                    "  Preview mode is the default. Re-run with --apply to persist AAAK metadata."
+                )
         else:
             print(f"  Distilled {count} drawers with AAAK dialect.")
 

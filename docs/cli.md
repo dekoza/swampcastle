@@ -139,11 +139,23 @@ swampcastle split <dir> [--output-dir DIR] [--dry-run] [--min-sessions N]
 AAAK-related command.
 
 ```bash
-swampcastle distill [--wing NAME] [--dry-run] [--config PATH]
-swampcastle compress [--wing NAME] [--dry-run] [--config PATH]
+swampcastle distill [--wing NAME] [--room NAME] [--config PATH]
+swampcastle compress [--wing NAME] [--room NAME] [--config PATH]
+
+# Preview is the default:
+swampcastle distill
+
+# Persist AAAK metadata updates explicitly:
+swampcastle distill --apply
+
+# Force preview even if you typed --apply in a script/template:
+swampcastle distill --apply --dry-run
 ```
 
-Honest status: this command is still thin in v4. It reports what would be processed, but it is not yet a finished end-to-end compression pipeline.
+Honest status: this command is still thin in v4. It now defaults to preview mode.
+You must pass `--apply` to persist AAAK metadata. That reflects the current
+project policy: AAAK is optional and experimental, and raw verbatim drawers
+remain the primary retrieval path.
 
 ## raise / migrate
 

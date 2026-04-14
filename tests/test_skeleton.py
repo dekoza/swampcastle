@@ -9,7 +9,7 @@ from swampcastle.mining.skeleton import PythonSkeletonExtractor, get_skeleton_ex
 
 def make_project(tmp_path: Path):
     cfg = {"wing": "test", "rooms": [{"name": "general", "description": "All files"}]}
-    (tmp_path / '.swampcastle.yaml').write_text(yaml.dump(cfg))
+    (tmp_path / ".swampcastle.yaml").write_text(yaml.dump(cfg))
 
 
 def test_python_skeleton_extractor_logic():
@@ -175,8 +175,7 @@ def test_miner_uses_skeleton(tmp_path):
     mine(str(project), str(tmp_path / "palace"), dry_run=False, storage_factory=fake_factory)
 
     skeleton_upserts = [
-        up for up in fake_coll.upserts
-        if any(m.get("is_skeleton") for m in up["metadatas"])
+        up for up in fake_coll.upserts if any(m.get("is_skeleton") for m in up["metadatas"])
     ]
     assert len(skeleton_upserts) >= 1
 
@@ -195,9 +194,20 @@ def test_miner_uses_skeleton(tmp_path):
 class FakeCollection:
     def __init__(self):
         self.upserts = []
+
     def upsert(self, **kwargs):
         self.upserts.append(kwargs)
 
+    def get(self, *, ids=None, where=None, limit=None, offset=None, include=None):
+        return {"ids": [], "documents": [], "metadatas": []}
+
+    def delete(self, *, ids=None, where=None):
+        return None
+
+
 class FakeFactory:
-    def __init__(self, coll): self.coll = coll
-    def open_collection(self, name): return self.coll
+    def __init__(self, coll):
+        self.coll = coll
+
+    def open_collection(self, name):
+        return self.coll

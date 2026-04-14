@@ -192,9 +192,7 @@ def _mining_rejection_reason(filepath: Path, content: str) -> str | None:
 
     symbol_ratio = _symbol_to_alnum_ratio(content)
     if symbol_ratio > SYMBOL_TO_ALNUM_RATIO_THRESHOLD:
-        return (
-            f"symbol/alnum ratio {symbol_ratio:.2f} > {SYMBOL_TO_ALNUM_RATIO_THRESHOLD}"
-        )
+        return f"symbol/alnum ratio {symbol_ratio:.2f} > {SYMBOL_TO_ALNUM_RATIO_THRESHOLD}"
 
     return None
 
@@ -572,7 +570,11 @@ class EmbeddingBuffer:
 
         cpu = os.cpu_count() or 1
         default_bs = max(32, min(512, cpu * 16))
-        self.batch_size = batch_size if batch_size is not None else (env_bs_v if env_bs_v is not None else default_bs)
+        self.batch_size = (
+            batch_size
+            if batch_size is not None
+            else (env_bs_v if env_bs_v is not None else default_bs)
+        )
 
         # determine max_chars: explicit arg > env var > default
         env_mc = os.environ.get("SWAMPCASTLE_EMBED_MAX_CHARS")
@@ -582,7 +584,11 @@ class EmbeddingBuffer:
                 env_mc_v = int(env_mc)
             except (ValueError, TypeError):
                 pass
-        self.max_chars = max_chars if max_chars is not None else (env_mc_v if env_mc_v is not None else 2_000_000)
+        self.max_chars = (
+            max_chars
+            if max_chars is not None
+            else (env_mc_v if env_mc_v is not None else 2_000_000)
+        )
 
     def add(self, document: str, id_: str, metadata: dict):
         self._docs.append(document)
@@ -682,6 +688,17 @@ def add_drawer(
         raise
 
 
+def _delete_existing_file_drawers(collection, *, source_file: str, wing: str) -> None:
+    """Delete existing drawers for one source file within one wing."""
+    existing = collection.get(
+        where={"$and": [{"source_file": source_file}, {"wing": wing}]},
+        include=["metadatas"],
+    )
+    ids = existing.get("ids", [])
+    if ids:
+        collection.delete(ids=ids)
+
+
 # =============================================================================
 # PROCESS ONE FILE
 # =============================================================================
@@ -706,7 +723,11 @@ def process_file(
 
     # Skip if already filed
     source_file = str(filepath)
-    if not dry_run and not _force_remine and _file_already_mined(collection, source_file, check_mtime=True):
+    if (
+        not dry_run
+        and not _force_remine
+        and _file_already_mined(collection, source_file, check_mtime=True)
+    ):
         return 0, None
 
     try:
@@ -755,14 +776,9 @@ def process_file(
         return len(chunks), room
 
     # Purge stale drawers for this file before re-inserting the fresh chunks.
-    # Converts modified-file re-mines from upsert-over-existing-IDs (which hits
-    # hnswlib's thread-unsafe updatePoint path and can segfault on macOS ARM
-    # with chromadb 0.6.3) into a clean delete+insert, bypassing the update
-    # path entirely.
-    try:
-        collection.delete(where={"source_file": source_file})
-    except Exception:
-        pass
+    # Scope cleanup to the current wing so the same source file can be mined
+    # into multiple wings without cross-wing deletion.
+    _delete_existing_file_drawers(collection, source_file=source_file, wing=wing)
 
     drawers_added = 0
     for chunk in chunks:

@@ -332,3 +332,99 @@ def test_project_mining_tags_contributor_metadata():
         assert all(meta.get("contributor") == "dekoza" for meta in rows["metadatas"])
     finally:
         shutil.rmtree(tmpdir, ignore_errors=True)
+
+
+def _file_drawers(collection, *, source_file: str, wing: str):
+    return collection.get(
+        where={"$and": [{"source_file": source_file}, {"wing": wing}]},
+        include=["documents", "metadatas"],
+    )
+
+
+def test_remine_shrunk_file_replaces_old_chunks_in_memory(tmp_path):
+    project_root = tmp_path / "project"
+    project_root.mkdir()
+    write_file(
+        project_root / ".swampcastle.yaml",
+        yaml.dump(
+            {"wing": "test_project", "rooms": [{"name": "general", "description": "General"}]}
+        ),
+    )
+    source = project_root / "notes.txt"
+    write_file(source, "alpha line\n" * 1000)
+
+    factory = InMemoryStorageFactory()
+
+    mine(str(project_root), str(project_root / "palace"), storage_factory=factory)
+
+    collection = factory.open_collection("swampcastle_chests")
+    first = _file_drawers(collection, source_file=str(source), wing="test_project")
+    assert len(first["ids"]) > 1
+
+    write_file(source, "beta line\n" * 40)
+    mine(str(project_root), str(project_root / "palace"), storage_factory=factory)
+
+    second = _file_drawers(collection, source_file=str(source), wing="test_project")
+    assert len(second["ids"]) == 1
+    assert second["documents"] == [("beta line\n" * 40).strip()]
+
+
+def test_remine_shrunk_file_replaces_old_chunks_in_lance(tmp_path):
+    project_root = tmp_path / "project"
+    project_root.mkdir()
+    write_file(
+        project_root / ".swampcastle.yaml",
+        yaml.dump(
+            {"wing": "test_project", "rooms": [{"name": "general", "description": "General"}]}
+        ),
+    )
+    source = project_root / "notes.txt"
+    write_file(source, "alpha line\n" * 1000)
+
+    palace_path = project_root / "palace"
+    mine(str(project_root), str(palace_path))
+
+    collection = _get_test_collection(str(palace_path))
+    first = _file_drawers(collection, source_file=str(source), wing="test_project")
+    assert len(first["ids"]) > 1
+
+    write_file(source, "beta line\n" * 40)
+    mine(str(project_root), str(palace_path))
+
+    collection = _get_test_collection(str(palace_path))
+    second = _file_drawers(collection, source_file=str(source), wing="test_project")
+    assert len(second["ids"]) == 1
+    assert second["documents"] == [("beta line\n" * 40).strip()]
+
+
+def test_remine_room_change_removes_old_room_chunks(tmp_path):
+    project_root = tmp_path / "project"
+    project_root.mkdir()
+    write_file(
+        project_root / ".swampcastle.yaml",
+        yaml.dump(
+            {
+                "wing": "test_project",
+                "rooms": [
+                    {"name": "billing", "description": "Billing", "keywords": ["invoice"]},
+                    {"name": "auth", "description": "Authentication", "keywords": ["token"]},
+                    {"name": "general", "description": "General"},
+                ],
+            }
+        ),
+    )
+    source = project_root / "shared.txt"
+    write_file(source, ("invoice\n" * 500) + ("common\n" * 500))
+
+    factory = InMemoryStorageFactory()
+    mine(str(project_root), str(project_root / "palace"), storage_factory=factory)
+
+    collection = factory.open_collection("swampcastle_chests")
+    first = _file_drawers(collection, source_file=str(source), wing="test_project")
+    assert {meta["room"] for meta in first["metadatas"]} == {"billing"}
+
+    write_file(source, ("token\n" * 500) + ("common\n" * 500))
+    mine(str(project_root), str(project_root / "palace"), storage_factory=factory)
+
+    second = _file_drawers(collection, source_file=str(source), wing="test_project")
+    assert {meta["room"] for meta in second["metadatas"]} == {"auth"}

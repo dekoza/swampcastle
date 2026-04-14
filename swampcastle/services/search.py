@@ -8,6 +8,7 @@ from swampcastle.models.drawer import (
     SearchResponse,
 )
 from swampcastle.query_sanitizer import sanitize_query
+from swampcastle.retrieval.hybrid import rerank_dense_candidates
 from swampcastle.storage.base import CollectionStore
 
 
@@ -33,28 +34,52 @@ class SearchService:
         elif filters:
             where = {"$and": filters}
 
+        dense_limit = query.limit
+        if query.lexical_rerank:
+            dense_limit = min(max(query.limit * 5, 20), 100)
+
         raw = self._col.query(
             query_texts=[sanitized["clean_query"]],
-            n_results=query.limit,
+            n_results=dense_limit,
             where=where,
             include=["documents", "metadatas", "distances"],
         )
 
-        hits = []
+        candidates = []
         if raw["ids"] and raw["ids"][0]:
             for i, doc in enumerate(raw["documents"][0]):
                 meta = raw["metadatas"][0][i]
                 dist = raw["distances"][0][i]
-                hits.append(
-                    SearchHit(
-                        text=doc,
-                        wing=meta.get("wing", ""),
-                        room=meta.get("room", ""),
-                        similarity=round(1 - dist, 3),
-                        source_file=meta.get("source_file"),
-                        contributor=meta.get("contributor"),
-                    )
+                dense_similarity = round(1 - dist, 3)
+                candidates.append(
+                    {
+                        "document": doc,
+                        "metadata": meta,
+                        "dense_similarity": dense_similarity,
+                    }
                 )
+
+        if query.lexical_rerank and candidates:
+            candidates = rerank_dense_candidates(
+                sanitized["clean_query"],
+                candidates,
+                context=query.context,
+            )
+
+        hits = []
+        for candidate in candidates[: query.limit]:
+            doc = candidate["document"]
+            meta = candidate["metadata"]
+            hits.append(
+                SearchHit(
+                    text=doc,
+                    wing=meta.get("wing", ""),
+                    room=meta.get("room", ""),
+                    similarity=candidate["dense_similarity"],
+                    source_file=meta.get("source_file"),
+                    contributor=meta.get("contributor"),
+                )
+            )
 
         resp = SearchResponse(
             query=sanitized["clean_query"],

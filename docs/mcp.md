@@ -94,6 +94,7 @@ At startup the server:
 | `room` | string | no |
 | `contributor` | string | no |
 | `context` | string | no |
+| `lexical_rerank` | boolean | no |
 
 ### add drawer
 

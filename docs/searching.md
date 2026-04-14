@@ -79,8 +79,15 @@ MCP exposes the same flow through `swampcastle_check_duplicate`.
 | `room` | `str \| None` | `None` |
 | `contributor` | `str \| None` | `None` |
 | `context` | `str \| None` | `None` |
+| `lexical_rerank` | `bool` | `False` |
 
-`context` is background context for callers. The search embedding is built from `query`, not from the extra context.
+`context` is background context for callers. The search embedding is built from
+`query`, not from the extra context. When `lexical_rerank=true`, `context` is
+used only in the reranking pass over dense candidates; it is **not** embedded.
+
+`lexical_rerank=true` widens dense candidate retrieval and then reranks those
+candidates by lexical overlap with `query` (+ optional `context`). This is a
+lightweight first step toward hybrid retrieval; it is not a full sparse index.
 
 ## Sanitization
 

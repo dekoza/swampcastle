@@ -51,6 +51,13 @@ class CastleSettings(BaseSettings):
     embedder: str = "onnx"
     embedder_model: Optional[str] = None
     embedder_device: Optional[str] = None
+    sync_api_key: Optional[str] = Field(
+        default=None,
+        description=(
+            "When set, all sync endpoints require 'Authorization: Bearer <key>'. "
+            "Set via SWAMPCASTLE_SYNC_API_KEY env var."
+        ),
+    )
 
     _json_file: Optional[str] = None
 

@@ -33,8 +33,9 @@ class FakeFastAPI:
 
 
 class FakeRequest:
-    def __init__(self, payload):
+    def __init__(self, payload, headers=None):
         self._payload = payload
+        self.headers = headers or {}
 
     async def json(self):
         return self._payload
@@ -109,11 +110,13 @@ def test_create_app_routes_use_engine(monkeypatch):
         get_changes_since=lambda vv: remote_changes,
     )
     monkeypatch.setattr(server, "_get_engine", lambda: engine)
+    monkeypatch.setattr(server, "_get_sync_api_key", lambda: None)
 
     app = server.create_app()
 
     assert app.routes["GET"]["/health"]() == {"status": "ok", "service": "swampcastle-sync"}
-    assert app.routes["GET"]["/sync/status"]() == {
+    fake_req = FakeRequest({})
+    assert app.routes["GET"]["/sync/status"](fake_req) == {
         "node_id": "node-1",
         "version_vector": {"node-1": 2},
         "total_drawers": 4,

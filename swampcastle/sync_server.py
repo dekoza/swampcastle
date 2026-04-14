@@ -3,6 +3,18 @@ sync_server.py — HTTP sync server for multi-device SwampCastle replication.
 
 Run with:  swampcastle garrison --host 0.0.0.0 --port 7433
 
+Authentication (optional)
+--------------------------
+Set SWAMPCASTLE_SYNC_API_KEY to a random secret string.  When set, every
+sync endpoint (/sync/status, /sync/push, /sync/pull) requires an HTTP header::
+
+    Authorization: Bearer <your-key>
+
+/health remains unauthenticated to support load-balancer probes.
+
+Leaving SWAMPCASTLE_SYNC_API_KEY unset keeps the server open — fine for a
+trusted private LAN; required for internet-facing deployments.
+
 Endpoints:
     GET  /health       — server health check
     GET  /sync/status  — version vector + record count
@@ -11,6 +23,7 @@ Endpoints:
 """
 
 import atexit
+import hmac
 import logging
 import os
 from contextlib import asynccontextmanager
@@ -22,6 +35,29 @@ from .sync_meta import get_identity
 from .version import __version__
 
 logger = logging.getLogger("swampcastle.sync_server")
+
+
+# ── Auth helpers ──────────────────────────────────────────────────────────────
+
+
+def _get_sync_api_key() -> str | None:
+    """Return the configured sync API key, or None if auth is disabled."""
+    config = CastleConfig(_env_file=None)
+    return config.sync_api_key
+
+
+def _check_bearer(authorization: str | None, expected: str) -> bool:
+    """Validate an Authorization: Bearer <token> header using constant-time comparison."""
+    if not authorization:
+        return False
+    parts = authorization.split(" ", 1)
+    if len(parts) != 2 or parts[0].lower() != "bearer":
+        return False
+    token = parts[1].strip()
+    if not token:
+        return False
+    return hmac.compare_digest(token, expected)
+
 
 # ── Lazy globals (initialised on first request) ───────────────────────────────
 
@@ -118,12 +154,24 @@ def create_app():
 
     # ── Endpoints ─────────────────────────────────────────────────────
 
+    def _require_auth(request: Request):
+        """FastAPI dependency: enforce Bearer token when sync_api_key is set."""
+        api_key = _get_sync_api_key()
+        if api_key is None:
+            return
+        auth_header = request.headers.get("Authorization")
+        if not _check_bearer(auth_header, api_key):
+            from fastapi import HTTPException
+
+            raise HTTPException(status_code=401, detail="Invalid or missing authorization token")
+
     @app.get("/health")
     def health():
         return {"status": "ok", "service": "swampcastle-sync"}
 
     @app.get("/sync/status")
-    def sync_status():
+    def sync_status(request: Request):
+        _require_auth(request)
         engine = _get_engine()
         col = engine._col
         return {
@@ -134,6 +182,7 @@ def create_app():
 
     @app.post("/sync/push")
     async def sync_push(request: Request):  # noqa: F811
+        _require_auth(request)
         body = await request.json()
         engine = _get_engine()
         cs = ChangeSet(
@@ -149,6 +198,7 @@ def create_app():
 
     @app.post("/sync/pull")
     async def sync_pull(request: Request):  # noqa: F811
+        _require_auth(request)
         body = await request.json()
         engine = _get_engine()
         cs = engine.get_changes_since(body.get("version_vector", {}))

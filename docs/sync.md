@@ -104,12 +104,47 @@ with Castle(settings, factory) as castle:
 
 ## Security
 
-The built-in sync server is plain HTTP with no authentication.
+### Optional token authentication
 
-That means:
-- put it behind TLS / a reverse proxy on untrusted networks
-- or use an SSH tunnel
-- or keep it on a trusted LAN only
+The sync server supports optional Bearer-token authentication.
+Set `SWAMPCASTLE_SYNC_API_KEY` to a random secret before starting the server:
+
+```bash
+export SWAMPCASTLE_SYNC_API_KEY=$(openssl rand -hex 32)
+swampcastle serve --host 0.0.0.0 --port 7433
+```
+
+When the key is set every sync endpoint (`/sync/status`, `/sync/push`,
+`/sync/pull`) requires the header:
+
+```
+Authorization: Bearer <your-key>
+```
+
+The `/health` endpoint remains unauthenticated (for load-balancer probes).
+Requests without the header, or with the wrong token, receive `401`.
+
+The sync client reads the same env var automatically:
+
+```bash
+export SWAMPCASTLE_SYNC_API_KEY=<same-key>
+swampcastle sync --server http://homeserver:7433
+```
+
+Token comparison uses `hmac.compare_digest()` (constant-time) to prevent
+timing attacks.
+
+**Without `SWAMPCASTLE_SYNC_API_KEY` set**, the server is open — fine for a
+trusted private LAN, insecure for internet-facing deployments.
+
+### Network-level protection
+
+- Put the server behind TLS / a reverse proxy on untrusted networks.
+- Or use an SSH tunnel.
+- Or keep it on a trusted LAN only.
+
+**Note:** the KG (knowledge graph, SQLite) is not replicated by sync — only
+the drawer collection is transferred between nodes.
 
 ## Notes on backend routing
 

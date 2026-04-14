@@ -1,0 +1,45 @@
+wing: swampcastle
+rooms:
+- name: benchmarks
+  description: Files from benchmarks/
+  keywords:
+  - benchmarks
+- name: design
+  description: Files from assets/
+  keywords:
+  - assets
+  - design
+- name: examples
+  description: Files from examples/
+  keywords:
+  - examples
+- name: swampcastle
+  description: Files from swampcastle/
+  keywords:
+  - swampcastle
+- name: documentation
+  description: Files from docs/
+  keywords:
+  - docs
+  - documentation
+- name: hooks
+  description: Files from hooks/
+  keywords:
+  - hooks
+- name: testing
+  description: Files from tests/
+  keywords:
+  - testing
+  - tests
+- name: integrations
+  description: Files from integrations/
+  keywords:
+  - integrations
+- name: backend
+  description: Files from models/
+  keywords:
+  - backend
+  - models
+- name: general
+  description: Files that don't fit other rooms
+  keywords: []

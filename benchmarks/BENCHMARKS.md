@@ -59,6 +59,41 @@ python benchmarks/longmemeval_v4.py DATA --mode embedders
 
 Raw results: `benchmarks/results_v4_comparison.json`
 
+### Threats to validity / what this does **not** prove
+
+These numbers are real, but they are narrower than the marketing story they
+can tempt us to tell.
+
+1. **LongMemEval is a retrieval benchmark, not an end-to-end agent benchmark.**
+   It measures whether the system can retrieve the correct source passage or
+   session, not whether an agent will synthesize the right answer, avoid
+   hallucination, or act correctly after retrieval.
+
+2. **The benchmark strongly favors verbatim storage.**
+   The target evidence is present in the stored text and can often be matched
+   semantically with little transformation. That is exactly the case where
+   "store the raw words and search them" performs well.
+
+3. **Comparisons across systems are not always apples-to-apples.**
+   Systems such as Mem0 optimize for extraction, compression, and fact
+   management, not just recall against a verbatim evidence benchmark. A higher
+   LongMemEval score does not automatically mean a better production memory
+   system across all workloads.
+
+4. **A perfect retrieval score with reranking does not mean "no LLM needed".**
+   The 100% headline requires an LLM reranker. The no-LLM story is the raw
+   96.6% result, not the 100% result.
+
+5. **Hardware, implementation details, and branch state matter.**
+   The reported latency numbers are same-machine, same-branch comparisons.
+   They are useful for relative evaluation inside this project, not as a
+   universal performance guarantee.
+
+6. **This benchmark does not stress contradictory memory, decay, or conflict resolution.**
+   Real long-term memory systems must handle facts that change over time,
+   duplicated evidence, contradictory statements, and retention/forgetting
+   policies. LongMemEval mostly asks whether the correct evidence can be found.
+
 ---
 
 ## The Core Finding

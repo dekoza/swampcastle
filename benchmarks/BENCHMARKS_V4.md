@@ -40,6 +40,23 @@ BGE-small notably improves `single-session-user` (+4.3 points) but
 regresses on `single-session-preference` (−10 points).  The MiniLM
 default remains the safer all-around choice for this benchmark.
 
+## Threats to validity / what this benchmark does **not** prove
+
+- **This is retrieval quality, not full agent performance.** R@5/R@10/NDCG
+  measure whether relevant evidence is retrieved, not whether an agent will
+  answer correctly or act correctly after reading it.
+- **LongMemEval favors verbatim retrieval.** The correct evidence is present in
+  the stored text. That is exactly the scenario where raw-storage + dense
+  retrieval is strongest.
+- **The 100% story lives elsewhere.** This file reports the raw backend +
+  embedder comparison only. The perfect-score claims in the broader benchmark
+  narrative depend on optional LLM reranking, not the no-LLM path documented
+  here.
+- **Latency numbers are relative, not universal.** They are same-machine,
+  same-branch comparisons intended to compare backends inside this project.
+- **No contradiction / retention stress.** This benchmark does not measure how
+  the system handles conflicting memories, fact evolution, or forgetting.
+
 ## Reproduce
 
 ```bash

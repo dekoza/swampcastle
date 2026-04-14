@@ -208,20 +208,20 @@ def is_probably_minified(filepath: Path, content: str) -> bool:
 
 
 class GitignoreMatcher:
-    """Lightweight matcher for one directory's .gitignore patterns."""
+    """Lightweight matcher for one directory's .gitignore-like patterns."""
 
     def __init__(self, base_dir: Path, rules: list):
         self.base_dir = base_dir
         self.rules = rules
 
     @classmethod
-    def from_dir(cls, dir_path: Path):
-        gitignore_path = dir_path / ".gitignore"
-        if not gitignore_path.is_file():
+    def _from_file(cls, dir_path: Path, filename: str):
+        path = dir_path / filename
+        if not path.is_file():
             return None
 
         try:
-            lines = gitignore_path.read_text(encoding="utf-8", errors="replace").splitlines()
+            lines = path.read_text(encoding="utf-8", errors="replace").splitlines()
         except Exception:
             return None
 
@@ -264,6 +264,15 @@ class GitignoreMatcher:
             return None
 
         return cls(dir_path, rules)
+
+    @classmethod
+    def from_dir(cls, dir_path: Path):
+        return cls._from_file(dir_path, ".gitignore")
+
+    @classmethod
+    def from_swampignore(cls, dir_path: Path):
+        """Load .swampcastleignore (project-specific mining ignore)."""
+        return cls._from_file(dir_path, ".swampcastleignore")
 
     def matches(self, path: Path, is_dir: bool = None):
         try:
@@ -330,8 +339,27 @@ def load_gitignore_matcher(dir_path: Path, cache: dict):
     return cache[dir_path]
 
 
+def load_swampignore_matcher(dir_path: Path, cache: dict):
+    """Load and cache one directory's .swampcastleignore matcher."""
+    if dir_path not in cache:
+        cache[dir_path] = GitignoreMatcher.from_swampignore(dir_path)
+    return cache[dir_path]
+
+
 def is_gitignored(path: Path, matchers: list, is_dir: bool = False) -> bool:
     """Apply active .gitignore matchers in ancestor order; last match wins."""
+    ignored = False
+    for matcher in matchers:
+        decision = matcher.matches(path, is_dir=is_dir)
+        if decision is not None:
+            ignored = decision
+    return ignored
+
+
+def is_swampignored(path: Path, matchers: list, is_dir: bool = False) -> bool:
+    """Apply active .swampcastleignore matchers in ancestor order; last match wins."""
+    if not matchers:
+        return False
     ignored = False
     for matcher in matchers:
         decision = matcher.matches(path, is_dir=is_dir)
@@ -636,7 +664,9 @@ def scan_project(
     project_path = Path(project_dir).expanduser().resolve()
     files = []
     active_matchers = []
+    active_swamp_matchers = []
     matcher_cache = {}
+    swamp_cache = {}
     include_paths = normalize_include_paths(include_ignored)
 
     for root, dirs, filenames in os.walk(project_path):
@@ -651,6 +681,9 @@ def scan_project(
             current_matcher = load_gitignore_matcher(root_path, matcher_cache)
             if current_matcher is not None:
                 active_matchers.append(current_matcher)
+            current_swamp = load_swampignore_matcher(root_path, swamp_cache)
+            if current_swamp is not None:
+                active_swamp_matchers.append(current_swamp)
 
         dirs[:] = [
             d
@@ -675,6 +708,10 @@ def scan_project(
                 continue
             if filepath.suffix.lower() not in READABLE_EXTENSIONS and not exact_force_include:
                 continue
+            # swampcastleignore takes precedence over gitignore; still allow force_include
+            if active_swamp_matchers and not force_include:
+                if is_swampignored(filepath, active_swamp_matchers, is_dir=False):
+                    continue
             if respect_gitignore and active_matchers and not force_include:
                 if is_gitignored(filepath, active_matchers, is_dir=False):
                     continue

@@ -3,6 +3,7 @@
 import hashlib
 import json
 import sqlite3
+import threading
 from datetime import date, datetime
 from typing import Any
 
@@ -10,19 +11,42 @@ from .base import GraphStore
 
 
 class SQLiteGraph(GraphStore):
-    """SQLite knowledge graph with temporal entity-relationship triples."""
+    """SQLite knowledge graph with temporal entity-relationship triples.
+
+    Concurrency model:
+    - one SQLite connection per thread (thread-local)
+    - writes serialized by a process-local lock
+
+    The old implementation shared one sqlite3 connection across all threads
+    with check_same_thread=False, which produced InterfaceError, DatabaseError,
+    and even sqlite3 SystemError under concurrent use. Per-thread connections
+    avoid sqlite's connection object reentrancy hazards; the write lock keeps
+    transactional writes deterministic and prevents `database is locked` races.
+    """
 
     def __init__(self, db_path: str):
         self._db_path = db_path
-        self._conn: sqlite3.Connection | None = None
+        self._local = threading.local()
+        self._connections: list[sqlite3.Connection] = []
+        self._connections_lock = threading.Lock()
+        self._write_lock = threading.Lock()
         self._init_schema()
 
+    def _new_conn(self) -> sqlite3.Connection:
+        conn = sqlite3.connect(self._db_path, timeout=10)
+        conn.execute("PRAGMA journal_mode=WAL")
+        conn.execute("PRAGMA busy_timeout=10000")
+        conn.row_factory = sqlite3.Row
+        with self._connections_lock:
+            self._connections.append(conn)
+        return conn
+
     def _get_conn(self) -> sqlite3.Connection:
-        if self._conn is None:
-            self._conn = sqlite3.connect(self._db_path, timeout=10, check_same_thread=False)
-            self._conn.execute("PRAGMA journal_mode=WAL")
-            self._conn.row_factory = sqlite3.Row
-        return self._conn
+        conn = getattr(self._local, "conn", None)
+        if conn is None:
+            conn = self._new_conn()
+            self._local.conn = conn
+        return conn
 
     def _init_schema(self):
         conn = self._get_conn()
@@ -64,11 +88,12 @@ class SQLiteGraph(GraphStore):
         eid = self._entity_id(name)
         props = json.dumps(properties or {})
         conn = self._get_conn()
-        with conn:
-            conn.execute(
-                "INSERT OR REPLACE INTO entities (id, name, type, properties) VALUES (?, ?, ?, ?)",
-                (eid, name, entity_type, props),
-            )
+        with self._write_lock:
+            with conn:
+                conn.execute(
+                    "INSERT OR REPLACE INTO entities (id, name, type, properties) VALUES (?, ?, ?, ?)",
+                    (eid, name, entity_type, props),
+                )
         return eid
 
     def add_triple(
@@ -88,38 +113,41 @@ class SQLiteGraph(GraphStore):
         pred = predicate.lower().replace(" ", "_")
 
         conn = self._get_conn()
-        with conn:
-            conn.execute(
-                "INSERT OR IGNORE INTO entities (id, name) VALUES (?, ?)", (sub_id, subject)
-            )
-            conn.execute("INSERT OR IGNORE INTO entities (id, name) VALUES (?, ?)", (obj_id, obj))
+        with self._write_lock:
+            with conn:
+                conn.execute(
+                    "INSERT OR IGNORE INTO entities (id, name) VALUES (?, ?)", (sub_id, subject)
+                )
+                conn.execute(
+                    "INSERT OR IGNORE INTO entities (id, name) VALUES (?, ?)", (obj_id, obj)
+                )
 
-            existing = conn.execute(
-                "SELECT id FROM triples WHERE subject=? AND predicate=? AND object=? AND valid_to IS NULL",
-                (sub_id, pred, obj_id),
-            ).fetchone()
-            if existing:
-                return existing["id"]
+                existing = conn.execute(
+                    "SELECT id FROM triples WHERE subject=? AND predicate=? AND object=? AND valid_to IS NULL",
+                    (sub_id, pred, obj_id),
+                ).fetchone()
+                if existing:
+                    return existing["id"]
 
-            triple_id = (
-                f"t_{sub_id}_{pred}_{obj_id}_"
-                f"{hashlib.sha256(f'{valid_from}{datetime.now().isoformat()}'.encode()).hexdigest()[:12]}"
-            )
-            conn.execute(
-                """INSERT INTO triples (id, subject, predicate, object, valid_from, valid_to,
-                   confidence, source_closet, source_file) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)""",
-                (
-                    triple_id,
-                    sub_id,
-                    pred,
-                    obj_id,
-                    valid_from,
-                    valid_to,
-                    confidence,
-                    source_closet,
-                    source_file,
-                ),
-            )
+                triple_id = (
+                    f"t_{sub_id}_{pred}_{obj_id}_"
+                    f"{hashlib.sha256(f'{valid_from}{datetime.now().isoformat()}'.encode()).hexdigest()[:12]}"
+                )
+                conn.execute(
+                    """INSERT INTO triples (id, subject, predicate, object, valid_from, valid_to,
+                       confidence, source_closet, source_file) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+                    (
+                        triple_id,
+                        sub_id,
+                        pred,
+                        obj_id,
+                        valid_from,
+                        valid_to,
+                        confidence,
+                        source_closet,
+                        source_file,
+                    ),
+                )
         return triple_id
 
     def invalidate(self, *, subject, predicate, obj, ended=None):
@@ -128,11 +156,12 @@ class SQLiteGraph(GraphStore):
         pred = predicate.lower().replace(" ", "_")
         ended = ended or date.today().isoformat()
         conn = self._get_conn()
-        with conn:
-            conn.execute(
-                "UPDATE triples SET valid_to=? WHERE subject=? AND predicate=? AND object=? AND valid_to IS NULL",
-                (ended, sub_id, pred, obj_id),
-            )
+        with self._write_lock:
+            with conn:
+                conn.execute(
+                    "UPDATE triples SET valid_to=? WHERE subject=? AND predicate=? AND object=? AND valid_to IS NULL",
+                    (ended, sub_id, pred, obj_id),
+                )
 
     def query_entity(self, *, name, as_of=None, direction="outgoing"):
         eid = self._entity_id(name)
@@ -269,6 +298,11 @@ class SQLiteGraph(GraphStore):
         }
 
     def close(self):
-        if self._conn is not None:
-            self._conn.close()
-            self._conn = None
+        with self._connections_lock:
+            for conn in self._connections:
+                try:
+                    conn.close()
+                except Exception:
+                    pass
+            self._connections.clear()
+        self._local = threading.local()

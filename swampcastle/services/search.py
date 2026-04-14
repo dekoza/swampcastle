@@ -8,7 +8,11 @@ from swampcastle.models.drawer import (
     SearchResponse,
 )
 from swampcastle.query_sanitizer import sanitize_query
-from swampcastle.retrieval.hybrid import rerank_dense_candidates
+from swampcastle.retrieval.hybrid import (
+    merge_candidates,
+    rerank_dense_candidates,
+    sparse_candidates,
+)
 from swampcastle.storage.base import CollectionStore
 
 
@@ -34,8 +38,9 @@ class SearchService:
         elif filters:
             where = {"$and": filters}
 
+        do_rerank = query.lexical_rerank or query.hybrid
         dense_limit = query.limit
-        if query.lexical_rerank:
+        if do_rerank:
             dense_limit = min(max(query.limit * 5, 20), 100)
 
         raw = self._col.query(
@@ -53,13 +58,24 @@ class SearchService:
                 dense_similarity = round(1 - dist, 3)
                 candidates.append(
                     {
+                        "id": raw["ids"][0][i],
                         "document": doc,
                         "metadata": meta,
                         "dense_similarity": dense_similarity,
                     }
                 )
 
-        if query.lexical_rerank and candidates:
+        if query.hybrid:
+            sparse = sparse_candidates(
+                self._col,
+                query=sanitized["clean_query"],
+                where=where,
+                context=query.context,
+                limit=dense_limit,
+            )
+            candidates = merge_candidates(candidates, sparse)
+
+        if do_rerank and candidates:
             candidates = rerank_dense_candidates(
                 sanitized["clean_query"],
                 candidates,

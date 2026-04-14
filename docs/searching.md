@@ -80,14 +80,19 @@ MCP exposes the same flow through `swampcastle_check_duplicate`.
 | `contributor` | `str \| None` | `None` |
 | `context` | `str \| None` | `None` |
 | `lexical_rerank` | `bool` | `False` |
+| `hybrid` | `bool` | `False` |
 
 `context` is background context for callers. The search embedding is built from
-`query`, not from the extra context. When `lexical_rerank=true`, `context` is
-used only in the reranking pass over dense candidates; it is **not** embedded.
+`query`, not from the extra context. When `lexical_rerank=true` or `hybrid=true`,
+`context` is used only in the reranking pass; it is **not** embedded.
 
-`lexical_rerank=true` widens dense candidate retrieval and then reranks those
-candidates by lexical overlap with `query` (+ optional `context`). This is a
-lightweight first step toward hybrid retrieval; it is not a full sparse index.
+`lexical_rerank=true` widens dense candidate retrieval and reranks those dense
+candidates by lexical overlap.
+
+`hybrid=true` goes one step further: it combines dense candidates with a
+backend-agnostic lexical scan over documents, then reranks the merged set.
+This is a lightweight hybrid mode — not a dedicated sparse index — but it can
+surface strong lexical matches that dense retrieval failed to return.
 
 ## Sanitization
 

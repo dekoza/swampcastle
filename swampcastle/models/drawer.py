@@ -38,6 +38,10 @@ class SearchQuery(BaseModel):
         default=False,
         description="Widen dense candidate retrieval and rerank candidates by lexical overlap",
     )
+    hybrid: bool = Field(
+        default=False,
+        description="Combine dense candidates with lexical candidates before reranking",
+    )
 
 
 class SearchHit(BaseModel):

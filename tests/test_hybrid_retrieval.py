@@ -98,3 +98,51 @@ def test_context_is_used_for_lexical_rerank_but_not_required():
     )
 
     assert result.results[0].text.endswith("postgres sharding")
+
+
+class _HybridCollection(_FakeCollection):
+    def __init__(self, raw, sparse_docs):
+        super().__init__(raw)
+        self._sparse_docs = sparse_docs
+        self.get_calls = []
+
+    def get(self, *, ids=None, where=None, limit=None, offset=None, include=None):
+        self.get_calls.append(
+            {"limit": limit, "offset": offset, "include": include, "where": where}
+        )
+        start = offset or 0
+        end = start + (limit or len(self._sparse_docs))
+        batch = self._sparse_docs[start:end]
+        return {
+            "ids": [row["id"] for row in batch],
+            "documents": [row["document"] for row in batch],
+            "metadatas": [row["metadata"] for row in batch],
+        }
+
+
+def test_search_with_hybrid_adds_sparse_candidates_missing_from_dense_results():
+    col = _HybridCollection(
+        raw=_raw_results(
+            documents=[
+                "general migration discussion",
+                "billing migration plan",
+            ],
+            metadatas=[_meta(), _meta()],
+            distances=[0.10, 0.11],
+        ),
+        sparse_docs=[
+            {"id": "dense_0", "document": "general migration discussion", "metadata": _meta()},
+            {"id": "dense_1", "document": "billing migration plan", "metadata": _meta()},
+            {
+                "id": "sparse_only",
+                "document": "auth migration from Auth0 to Clerk with rollback notes",
+                "metadata": _meta(),
+            },
+        ],
+    )
+    svc = SearchService(col)
+
+    result = svc.search(SearchQuery(query="auth migration clerk", limit=2, hybrid=True))
+
+    assert result.results[0].text.startswith("auth migration from Auth0 to Clerk")
+    assert col.get_calls, "Hybrid retrieval should scan lexical candidates via collection.get()"

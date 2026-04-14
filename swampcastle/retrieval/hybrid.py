@@ -1,13 +1,14 @@
-"""Lightweight lexical reranking for dense search candidates.
+"""Lightweight lexical reranking and sparse candidate generation.
 
-This is an incremental step toward hybrid retrieval. It does **not** replace
-vector retrieval for candidate generation. Instead it reranks the dense
-candidates using lexical overlap with the query, plus optional non-embedded
-background context.
+This is an incremental step toward hybrid retrieval. It does not replace the
+vector store for primary candidate generation, but it can:
+- rerank dense candidates lexically
+- add sparse lexical candidates collected via CollectionStore.get()
 """
 
 from __future__ import annotations
 
+import heapq
 import re
 from collections import Counter
 
@@ -97,3 +98,82 @@ def rerank_dense_candidates(
 
     scored.sort(reverse=True)
     return [candidate for _, _, _, candidate in scored]
+
+
+_DEF_SPARSE_SCAN_LIMIT = 5000
+_DEF_SPARSE_BATCH_SIZE = 500
+
+
+def sparse_candidates(
+    collection,
+    *,
+    query: str,
+    where: dict | None,
+    context: str | None = None,
+    limit: int = 20,
+    scan_limit: int = _DEF_SPARSE_SCAN_LIMIT,
+    batch_size: int = _DEF_SPARSE_BATCH_SIZE,
+) -> list[dict]:
+    """Return top lexical candidates by scanning documents from CollectionStore.
+
+    This is intentionally simple and backend-agnostic. It is slower than a real
+    sparse index but works immediately on every existing backend.
+    """
+    heap: list[tuple[float, int, dict]] = []
+    seen = 0
+    counter = 0
+    offset = 0
+
+    while seen < scan_limit:
+        batch = collection.get(
+            where=where,
+            limit=min(batch_size, scan_limit - seen),
+            offset=offset,
+            include=["documents", "metadatas"],
+        )
+        ids = batch.get("ids", [])
+        if not ids:
+            break
+
+        for doc_id, doc, meta in zip(ids, batch.get("documents", []), batch.get("metadatas", [])):
+            score = lexical_score(query, doc, context=context)
+            if score <= 0:
+                counter += 1
+                continue
+            candidate = {
+                "id": doc_id,
+                "document": doc,
+                "metadata": meta,
+                "dense_similarity": 0.0,
+            }
+            heapq.heappush(heap, (score, counter, candidate))
+            counter += 1
+            if len(heap) > limit:
+                heapq.heappop(heap)
+
+        seen += len(ids)
+        offset += len(ids)
+
+    items = sorted(heap, key=lambda x: (x[0], -x[1]), reverse=True)
+    return [candidate for _, _, candidate in items]
+
+
+def merge_candidates(*candidate_lists: list[dict]) -> list[dict]:
+    """Merge candidate lists by id or fallback document text."""
+    merged: dict[str, dict] = {}
+    for candidates in candidate_lists:
+        for candidate in candidates:
+            key = candidate.get("id") or candidate.get("document", "")
+            existing = merged.get(key)
+            if existing is None:
+                merged[key] = dict(candidate)
+                continue
+            existing["dense_similarity"] = max(
+                existing.get("dense_similarity", 0.0),
+                candidate.get("dense_similarity", 0.0),
+            )
+            if not existing.get("metadata") and candidate.get("metadata"):
+                existing["metadata"] = candidate["metadata"]
+            if not existing.get("document") and candidate.get("document"):
+                existing["document"] = candidate["document"]
+    return list(merged.values())

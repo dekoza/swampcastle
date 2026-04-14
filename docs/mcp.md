@@ -95,6 +95,7 @@ At startup the server:
 | `contributor` | string | no |
 | `context` | string | no |
 | `lexical_rerank` | boolean | no |
+| `hybrid` | boolean | no |
 
 ### add drawer
 

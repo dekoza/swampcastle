@@ -329,9 +329,23 @@ def test_cmd_reforge_updates_embedder_settings_and_prints(capsys):
 
 
 def test_cmd_armory_lists_models(capsys):
-    with patch("swampcastle.embeddings.list_embedders", return_value={"onnx": {"dim": 384}}):
+    with patch(
+        "swampcastle.embeddings.list_embedders",
+        return_value=[
+            {
+                "name": "all-MiniLM-L6-v2",
+                "alias": "minilm",
+                "dim": 384,
+                "backend": "onnx",
+                "notes": "Default.",
+            }
+        ],
+    ):
         commands.cmd_armory(SimpleNamespace())
+
     out = capsys.readouterr().out
+    assert "all-MiniLM-L6-v2" in out
+    assert "minilm" in out
     assert "onnx" in out
 
 

@@ -312,8 +312,13 @@ def cmd_armory(args):
 
     models = list_embedders()
     print("  Available embedding models:")
-    for name, info in models.items():
-        print(f"    {name}: {info}")
+    for model in models:
+        print(
+            "    "
+            f"{model['name']} "
+            f"(alias: {model['alias']}, dim: {model['dim']}, backend: {model['backend']})"
+        )
+        print(f"      {model['notes']}")
 
 
 def cmd_garrison(args):

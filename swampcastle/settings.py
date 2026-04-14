@@ -4,10 +4,11 @@ Priority: env vars (SWAMPCASTLE_*) > JSON config file > defaults.
 """
 
 import json
+import os
 from pathlib import Path
 from typing import Any, Literal, Optional, Tuple, Type
 
-from pydantic import computed_field
+from pydantic import Field, computed_field, field_validator
 from pydantic_settings import (
     BaseSettings,
     PydanticBaseSettingsSource,
@@ -43,7 +44,7 @@ class CastleSettings(BaseSettings):
         env_file=None,
     )
 
-    castle_path: Path = Path("~/.swampcastle/castle")
+    castle_path: Path = Field(default_factory=lambda: Path.home() / ".swampcastle" / "castle")
     collection_name: str = "swampcastle_chests"
     backend: Literal["lance", "postgres", "chroma"] = "lance"
     database_url: Optional[str] = None
@@ -74,8 +75,6 @@ class CastleSettings(BaseSettings):
                 except (json.JSONDecodeError, OSError):
                     pass
         # Only use JSON values for fields not set via env or explicit kwargs
-        import os
-
         env_prefix = "SWAMPCASTLE_"
         for k, v in json_data.items():
             if k not in type(self).model_fields:
@@ -87,6 +86,11 @@ class CastleSettings(BaseSettings):
                 continue
             kwargs[k] = v
         super().__init__(**kwargs)
+
+    @field_validator("castle_path", mode="before")
+    @classmethod
+    def _expand_castle_path(cls, value: str | Path) -> Path:
+        return Path(value).expanduser()
 
     @computed_field
     @property

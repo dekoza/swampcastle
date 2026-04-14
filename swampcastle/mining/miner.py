@@ -21,6 +21,7 @@ from ..project_config import PROJECT_CONFIG_NAME, resolve_project_config
 from ..settings import CastleSettings
 from ..storage import StorageFactory, factory_from_settings
 from .contributor import detect_contributor
+from .skeleton import get_skeleton_extractor
 
 logger = logging.getLogger("swampcastle.mining.miner")
 
@@ -707,6 +708,21 @@ def process_file(
         return 0, None
 
     room = detect_room(filepath, content, rooms, project_path)
+
+    # Skeleton extraction for large files
+    is_skeleton = False
+    extractor = None
+    # Trigger: lines > 2000 or size > 200KB
+    if content.count("\n") > 2000 or len(content) > 200_000:
+        extractor = get_skeleton_extractor(source_file)
+
+    if extractor:
+        skeleton_content = extractor.extract(content)
+        # Check if skeleton extraction actually reduced the size significantly
+        if skeleton_content and len(skeleton_content) < len(content) * 0.9:
+            content = skeleton_content
+            is_skeleton = True
+
     chunks = chunk_text(content, source_file)
 
     contributor = detect_contributor(filepath, project_path, team=team, registry=registry)
@@ -736,6 +752,8 @@ def process_file(
             "added_by": agent,
             "filed_at": datetime.now().isoformat(),
         }
+        if is_skeleton:
+            metadata["is_skeleton"] = True
         if contributor:
             metadata["contributor"] = contributor
         try:

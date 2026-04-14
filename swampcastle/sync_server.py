@@ -41,9 +41,13 @@ logger = logging.getLogger("swampcastle.sync_server")
 
 
 def _get_sync_api_key() -> str | None:
-    """Return the configured sync API key, or None if auth is disabled."""
-    config = CastleConfig(_env_file=None)
-    return config.sync_api_key
+    """Return the configured sync API key, or None if auth is disabled.
+
+    Reads SWAMPCASTLE_SYNC_API_KEY directly from the environment on every
+    call so the key can be rotated at runtime without restarting the server.
+    This avoids constructing a CastleSettings object on every request.
+    """
+    return os.environ.get("SWAMPCASTLE_SYNC_API_KEY") or None
 
 
 def _check_bearer(authorization: str | None, expected: str) -> bool:
@@ -140,7 +144,7 @@ async def _lifespan(app):
 def create_app():
     """Create the FastAPI application."""
     try:
-        from fastapi import FastAPI, Request
+        from fastapi import FastAPI, HTTPException, Request
     except ImportError:
         raise ImportError(
             "fastapi is required for the sync server. Install with: pip install 'swampcastle[server]'"
@@ -155,14 +159,17 @@ def create_app():
     # ── Endpoints ─────────────────────────────────────────────────────
 
     def _require_auth(request: Request):
-        """FastAPI dependency: enforce Bearer token when sync_api_key is set."""
+        """Enforce Bearer token when sync_api_key is set.
+
+        Defined inside create_app() so it closes over HTTPException from the
+        optional fastapi dependency (avoiding a module-level import of an
+        optional package).
+        """
         api_key = _get_sync_api_key()
         if api_key is None:
             return
         auth_header = request.headers.get("Authorization")
         if not _check_bearer(auth_header, api_key):
-            from fastapi import HTTPException
-
             raise HTTPException(status_code=401, detail="Invalid or missing authorization token")
 
     @app.get("/health")

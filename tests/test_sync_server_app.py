@@ -45,6 +45,7 @@ def _install_fake_fastapi(monkeypatch):
     module = types.ModuleType("fastapi")
     module.FastAPI = FakeFastAPI
     module.Request = FakeRequest
+    module.HTTPException = Exception  # minimal stub; auth tests use the real FastAPI
     monkeypatch.setitem(sys.modules, "fastapi", module)
 
 

@@ -154,37 +154,60 @@ class VaultService:
         )
 
     def diary_read(self, query: DiaryReadQuery) -> DiaryResponse:
+        """Return the most recent `last_n` diary entries for the agent.
+
+        Implementation notes:
+        - Backends may not support server-side sort; we therefore scan in
+          bounded batches and maintain a bounded heap of size `last_n` so
+          memory usage is O(last_n) rather than O(total_entries).
+        - We expect `filed_at` to be an ISO8601 string so lexicographic
+          ordering corresponds to chronological ordering.
+        """
+        import heapq
+
         wing = f"wing_{query.agent_name.lower().replace(' ', '_')}"
+        batch_size = 1000
+        offset = 0
 
-        results = self._col.get(
-            where={"$and": [{"wing": wing}, {"room": "diary"}]},
-            include=["documents", "metadatas"],
-            limit=10000,
-        )
+        # Min-heap of (timestamp_str, counter, document, metadata)
+        heap: list[tuple[str, int, str, dict]] = []
+        counter = 0
 
-        if not results["ids"]:
+        while True:
+            results = self._col.get(
+                where={"$and": [{"wing": wing}, {"room": "diary"}]},
+                include=["documents", "metadatas"],
+                limit=batch_size,
+                offset=offset,
+            )
+
+            ids = results.get("ids", [])
+            if not ids:
+                break
+
+            for doc, meta in zip(results.get("documents", []), results.get("metadatas", [])):
+                ts = meta.get("filed_at", "") or ""
+                # Use counter to make tuples unique and stable
+                heapq.heappush(heap, (ts, counter, doc, meta))
+                counter += 1
+                if len(heap) > query.last_n:
+                    heapq.heappop(heap)
+
+            offset += len(ids)
+
+        if not heap:
             return DiaryResponse(
-                agent=query.agent_name,
-                entries=[],
-                message="No diary entries yet.",
+                agent=query.agent_name, entries=[], message="No diary entries yet."
             )
 
-        entries = []
-        for doc, meta in zip(results["documents"], results["metadatas"]):
-            entries.append(
-                DiaryEntry(
-                    date=meta.get("date", ""),
-                    timestamp=meta.get("filed_at", ""),
-                    topic=meta.get("topic", ""),
-                    content=doc,
-                )
-            )
+        # Extract in descending timestamp order
+        items = sorted(heap, key=lambda x: (x[0], x[1]), reverse=True)
+        entries = [
+            DiaryEntry(date=m.get("date", ""), timestamp=ts, topic=m.get("topic", ""), content=doc)
+            for ts, _, doc, m in items
+        ]
 
-        entries.sort(key=lambda x: x.timestamp, reverse=True)
-        return DiaryResponse(
-            agent=query.agent_name,
-            entries=entries[: query.last_n],
-        )
+        return DiaryResponse(agent=query.agent_name, entries=entries)
 
     def distill(
         self,

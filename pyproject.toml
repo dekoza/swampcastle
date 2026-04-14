@@ -52,6 +52,8 @@ dev = [
     "ruff>=0.4.0",
     "psutil>=5.9",
     "pre-commit>=4.5.1",
+    "fastapi[standard]>=0.135.3",
+    "httpx>=0.28.1",
 ]
 
 [build-system]

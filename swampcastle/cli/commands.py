@@ -329,6 +329,9 @@ def cmd_kg_review(args):
             )
         )
 
+    if getattr(args, "conflicts_only", False):
+        proposals = [proposal for proposal in proposals if getattr(proposal, "conflicts_with", [])]
+
     if not proposals:
         print("  No candidate triples.")
         return
@@ -373,6 +376,8 @@ def cmd_kg_accept(args):
         sys.exit(1)
 
     print(f"  Accepted {result.candidate_id} into KG as triple {result.triple_id}.")
+    if result.subject_text and result.predicate and result.object_text:
+        print(f"  {result.subject_text} --{result.predicate}--> {result.object_text}")
     if result.invalidated_count:
         print(f"  Invalidated {result.invalidated_count} conflicting fact(s).")
 

@@ -106,12 +106,21 @@ small exclusive predicate set (`uses`, `migrated_to`, `deployed_to`, etc.) via
 `CandidateReviewCommand(action="accept_and_invalidate_conflict")` or the CLI
 flag `--invalidate-conflicts`.
 
+Acceptance can also override the extracted subject / predicate / object before
+writing into the canonical KG. This is the v1 "edit-before-accept" workflow.
+
 ### Conflict markers
 
 `list_proposals()` annotates proposals with `conflicts_with` when the proposed
 fact disagrees with a currently-active fact for an exclusive predicate.
 This is advisory review metadata — the proposal is still just a proposal until
 accepted.
+
+The CLI can surface only those proposals via:
+
+```bash
+swampcastle kg review --conflicts-only
+```
 
 ### Why proposals are separate
 

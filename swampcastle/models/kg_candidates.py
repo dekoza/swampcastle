@@ -111,5 +111,8 @@ class CandidateReviewResult(BaseModel):
     candidate_id: str
     status: Literal["accepted", "rejected"] | None = None
     triple_id: str | None = None
+    subject_text: str | None = None
+    predicate: str | None = None
+    object_text: str | None = None
     invalidated_count: int = 0
     error: str | None = None

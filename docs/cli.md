@@ -173,12 +173,22 @@ swampcastle kg extract --apply
 # Review proposals
 swampcastle kg review
 
+# Review only proposals that conflict with currently-active exclusive facts
+swampcastle kg review --conflicts-only
+
 # Accept or reject a proposal
 swampcastle kg accept <candidate-id>
 swampcastle kg reject <candidate-id>
 
 # Accept and expire conflicting current facts for exclusive predicates
 swampcastle kg accept <candidate-id> --invalidate-conflicts
+
+# Edit the fact before accepting it
+swampcastle kg accept <candidate-id> \
+  --subject "Auth subsystem" \
+  --predicate migrated_to \
+  --object Clerk \
+  --valid-from 2026-02-01
 ```
 
 Honest status: this is the proposal-first skeleton only. `kg extract` creates

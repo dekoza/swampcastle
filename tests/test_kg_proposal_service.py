@@ -136,3 +136,47 @@ def test_accept_and_invalidate_conflict_expires_old_fact(tmp_path):
     assert current[0]["object"] == "Clerk"
     assert len(expired) == 1
     assert expired[0]["object"] == "Auth0"
+
+
+def test_accept_with_edits_writes_edited_fact_and_reports_it(tmp_path):
+    graph = InMemoryGraphStore()
+    collection = InMemoryCollectionStore()
+    wal = WalWriter(tmp_path / "wal")
+    svc = KGProposalService(graph, collection, wal)
+
+    candidate_id = svc.propose(
+        CandidateTriple(
+            candidate_id="cand_edit",
+            subject_text="SwampCastle",
+            predicate="uses",
+            object_text="Clerk",
+            confidence=0.95,
+            modality="asserted",
+            polarity="positive",
+            evidence_drawer_id="drawer_1",
+            evidence_text="We switched from Auth0 to Clerk.",
+            status="proposed",
+            extractor_version="rules-v1",
+        )
+    )
+
+    result = svc.accept(
+        CandidateReviewCommand(
+            candidate_id=candidate_id,
+            action="accept",
+            subject_text="Auth subsystem",
+            predicate="migrated_to",
+            object_text="Clerk",
+            valid_from="2026-02-01",
+        )
+    )
+
+    assert result.success is True
+    assert result.subject_text == "Auth subsystem"
+    assert result.predicate == "migrated_to"
+    assert result.object_text == "Clerk"
+
+    rows = graph.query_entity(name="Auth subsystem", direction="outgoing")
+    assert len(rows) == 1
+    assert rows[0]["predicate"] == "migrated_to"
+    assert rows[0]["object"] == "Clerk"

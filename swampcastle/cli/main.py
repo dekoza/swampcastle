@@ -192,6 +192,11 @@ def main():
     p.add_argument("--room", default=None)
     p.add_argument("--limit", type=int, default=50)
     p.add_argument("--offset", type=int, default=0)
+    p.add_argument(
+        "--conflicts-only",
+        action="store_true",
+        help="Show only proposals that conflict with currently-active exclusive facts",
+    )
 
     p = kg_sub.add_parser("accept", help="Accept a candidate triple into the KG")
     p.add_argument("candidate_id")

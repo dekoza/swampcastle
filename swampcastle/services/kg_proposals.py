@@ -293,6 +293,9 @@ class KGProposalService:
             candidate_id=cmd.candidate_id,
             status="accepted",
             triple_id=triple_id,
+            subject_text=subject,
+            predicate=predicate,
+            object_text=obj,
             invalidated_count=invalidated_count,
         )
 
@@ -321,4 +324,7 @@ class KGProposalService:
             success=True,
             candidate_id=candidate_id,
             status="rejected",
+            subject_text=proposal.subject_text,
+            predicate=proposal.predicate,
+            object_text=proposal.object_text,
         )

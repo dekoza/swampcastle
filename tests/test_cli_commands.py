@@ -450,6 +450,7 @@ def test_cmd_kg_review_lists_candidates(capsys):
         room=None,
         limit=50,
         offset=0,
+        conflicts_only=False,
         palace=None,
         backend=None,
     )
@@ -493,6 +494,7 @@ def test_cmd_kg_review_prints_conflict_marker(capsys):
         room=None,
         limit=50,
         offset=0,
+        conflicts_only=False,
         palace=None,
         backend=None,
     )
@@ -504,6 +506,58 @@ def test_cmd_kg_review_prints_conflict_marker(capsys):
     out = capsys.readouterr().out
     assert "CONFLICT" in out
     assert "Auth0" in out
+
+
+def test_cmd_kg_review_conflicts_only_filters_out_clean_candidates(capsys):
+    class ProposalCastle(DummyCastle):
+        def __init__(self, settings, factory):
+            self.catalog = SimpleNamespace(status=lambda: None)
+            self.search = SimpleNamespace(search=lambda q: None)
+            self.vault = SimpleNamespace(distill=lambda **kwargs: 0, reforge=lambda **kwargs: 0)
+            self.kg_proposals = SimpleNamespace(
+                list_proposals=lambda filter_params=None: [
+                    SimpleNamespace(
+                        candidate_id="cand_conflict",
+                        subject_text="SwampCastle",
+                        predicate="uses",
+                        object_text="Clerk",
+                        confidence=0.9,
+                        status="proposed",
+                        conflicts_with=["Auth0"],
+                    ),
+                    SimpleNamespace(
+                        candidate_id="cand_clean",
+                        subject_text="SwampCastle",
+                        predicate="uses",
+                        object_text="LanceDB",
+                        confidence=0.9,
+                        status="proposed",
+                        conflicts_with=[],
+                    ),
+                ]
+            )
+            self._collection = object()
+
+    args = SimpleNamespace(
+        status="proposed",
+        predicate=None,
+        min_confidence=None,
+        wing=None,
+        room=None,
+        limit=50,
+        offset=0,
+        conflicts_only=True,
+        palace=None,
+        backend=None,
+    )
+
+    with patch("swampcastle.castle.Castle", lambda s, f: ProposalCastle(s, f)):
+        with patch("swampcastle.cli.commands.factory_from_settings", return_value=object()):
+            commands.cmd_kg_review(args)
+
+    out = capsys.readouterr().out
+    assert "cand_conflict" in out
+    assert "cand_clean" not in out
 
 
 def test_cmd_kg_accept_and_reject(capsys):
@@ -521,6 +575,9 @@ def test_cmd_kg_accept_and_reject(capsys):
                     candidate_id=cmd.candidate_id,
                     status="accepted",
                     triple_id="t1",
+                    subject_text=cmd.subject_text or "SwampCastle",
+                    predicate=cmd.predicate or "uses",
+                    object_text=cmd.object_text or "Clerk",
                     invalidated_count=(1 if cmd.action == "accept_and_invalidate_conflict" else 0),
                     error=None,
                 ),
@@ -530,6 +587,9 @@ def test_cmd_kg_accept_and_reject(capsys):
                     candidate_id=candidate_id,
                     status="rejected",
                     triple_id=None,
+                    subject_text=None,
+                    predicate=None,
+                    object_text=None,
                     invalidated_count=0,
                     error=None,
                 ),
@@ -538,9 +598,9 @@ def test_cmd_kg_accept_and_reject(capsys):
 
     accept_args = SimpleNamespace(
         candidate_id="cand_1",
-        subject=None,
-        predicate=None,
-        object=None,
+        subject="Auth subsystem",
+        predicate="migrated_to",
+        object="Clerk",
         valid_from=None,
         valid_to=None,
         invalidate_conflicts=True,
@@ -561,6 +621,7 @@ def test_cmd_kg_accept_and_reject(capsys):
     assert "accepted" in out.lower()
     assert "rejected" in out.lower()
     assert "invalidated 1 conflicting fact" in out.lower()
+    assert "Auth subsystem --migrated_to--> Clerk" in out
 
 
 def test_cmd_wizard_runs_runtime_wizard():

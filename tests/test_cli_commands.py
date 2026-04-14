@@ -2,8 +2,6 @@
 
 from __future__ import annotations
 
-import io
-import json
 import os
 from types import SimpleNamespace
 from unittest.mock import patch
@@ -556,7 +554,22 @@ def test_cmd_deskeleton_pages_drawers_in_batches(capsys):
     assert "/tmp/two.py" in out
 
 
-def test_scan_deskeleton_targets_spools_unique_targets_per_page():
+def test_deskeleton_target_store_dedupes_on_disk(tmp_path):
+    store = commands.DeskeletonTargetStore(tmp_path / "targets.sqlite3")
+    try:
+        assert store.add("alpha", "/tmp/one.py") is True
+        assert store.add("alpha", "/tmp/one.py") is False
+        assert store.add("beta", "/tmp/two.py") is True
+        assert store.count() == 2
+        assert list(store.iter_targets()) == [
+            ("alpha", "/tmp/one.py"),
+            ("beta", "/tmp/two.py"),
+        ]
+    finally:
+        store.close()
+
+
+def test_scan_deskeleton_targets_stores_unique_targets_per_page(tmp_path):
     class PaginatedVault:
         def __init__(self):
             self.calls = []
@@ -596,24 +609,23 @@ def test_scan_deskeleton_targets_spools_unique_targets_per_page():
             return {"ids": [], "metadatas": []}
 
     vault = PaginatedVault()
-    sink = io.StringIO()
+    store = commands.DeskeletonTargetStore(tmp_path / "targets.sqlite3")
+    try:
+        skeleton_count, unique_count = commands._scan_deskeleton_targets(
+            vault,
+            None,
+            store,
+            batch_size=1000,
+        )
 
-    skeleton_count, unique_count = commands._scan_deskeleton_targets(
-        vault,
-        None,
-        sink,
-        batch_size=1000,
-    )
-
-    assert skeleton_count == 1002
-    assert unique_count == 2
-    assert len(vault.calls) == 2
-    assert vault.calls[0]["offset"] == 0
-    assert vault.calls[1]["offset"] == 1000
-
-    sink.seek(0)
-    rows = [json.loads(line) for line in sink.readlines()]
-    assert rows == [
-        {"wing": "alpha", "source_file": "/tmp/one.py"},
-        {"wing": "beta", "source_file": "/tmp/two.py"},
-    ]
+        assert skeleton_count == 1002
+        assert unique_count == 2
+        assert len(vault.calls) == 2
+        assert vault.calls[0]["offset"] == 0
+        assert vault.calls[1]["offset"] == 1000
+        assert list(store.iter_targets()) == [
+            ("alpha", "/tmp/one.py"),
+            ("beta", "/tmp/two.py"),
+        ]
+    finally:
+        store.close()

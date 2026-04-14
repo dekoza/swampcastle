@@ -1,8 +1,8 @@
 """CLI command handlers — each creates a Castle and calls services."""
 
-import json
 import os
 import shlex
+import sqlite3
 import sys
 import tempfile
 from pathlib import Path
@@ -14,6 +14,45 @@ from swampcastle.storage import factory_from_settings
 
 
 DESKELETON_BATCH_SIZE = 1000
+
+
+class DeskeletonTargetStore:
+    """SQLite-backed temporary store for unique deskeleton targets."""
+
+    def __init__(self, path: str | Path):
+        self._path = str(path)
+        self._conn = sqlite3.connect(self._path)
+        self._conn.execute(
+            """
+            CREATE TABLE IF NOT EXISTS deskeleton_targets (
+                wing TEXT NOT NULL,
+                source_file TEXT NOT NULL,
+                PRIMARY KEY (wing, source_file)
+            )
+            """
+        )
+
+    def add(self, wing: str, source_file: str) -> bool:
+        cursor = self._conn.execute(
+            "INSERT OR IGNORE INTO deskeleton_targets (wing, source_file) VALUES (?, ?)",
+            (wing, source_file),
+        )
+        return cursor.rowcount == 1
+
+    def count(self) -> int:
+        self._conn.commit()
+        row = self._conn.execute("SELECT COUNT(*) FROM deskeleton_targets").fetchone()
+        return int(row[0] if row is not None else 0)
+
+    def iter_targets(self):
+        self._conn.commit()
+        cursor = self._conn.execute(
+            "SELECT wing, source_file FROM deskeleton_targets ORDER BY wing, source_file"
+        )
+        yield from cursor
+
+    def close(self) -> None:
+        self._conn.close()
 
 
 def _print_section(title: str) -> None:
@@ -371,9 +410,14 @@ def cmd_ni(args):
     print("  Bring us a shrubbery! (Or run: swampcastle build <dir>)\n")
 
 
-def _scan_deskeleton_targets(vault, where, sink, *, batch_size: int = DESKELETON_BATCH_SIZE):
-    """Scan drawers page-by-page and spool unique deskeleton targets to a sink."""
-    seen_targets = set()
+def _scan_deskeleton_targets(
+    vault,
+    where,
+    target_store: DeskeletonTargetStore,
+    *,
+    batch_size: int = DESKELETON_BATCH_SIZE,
+):
+    """Scan drawers page-by-page and persist unique deskeleton targets on disk."""
     skeleton_count = 0
     unique_count = 0
     offset = 0
@@ -398,13 +442,8 @@ def _scan_deskeleton_targets(vault, where, sink, *, batch_size: int = DESKELETON
                 continue
 
             skeleton_count += 1
-            target = (source_wing, source_file)
-            if target in seen_targets:
-                continue
-
-            seen_targets.add(target)
-            unique_count += 1
-            sink.write(json.dumps({"wing": source_wing, "source_file": source_file}) + "\n")
+            if target_store.add(source_wing, source_file):
+                unique_count += 1
 
         if len(metadatas) < batch_size:
             break
@@ -427,68 +466,67 @@ def cmd_deskeleton(args):
         if args.room:
             where["room"] = args.room
 
-        with tempfile.TemporaryFile(mode="w+t", encoding="utf-8") as target_spool:
-            skeleton_count, unique_count = _scan_deskeleton_targets(
-                castle.vault,
-                where or None,
-                target_spool,
-            )
-
-            if skeleton_count == 0:
-                print("  No skeleton drawers found.")
-                return
-
-            _print_section("Deskeleton")
-            _print_kv("Skeletons found", skeleton_count)
-            _print_kv("Source files", unique_count)
-
-            target_spool.seek(0)
-            for line in target_spool:
-                payload = json.loads(line)
-                source_wing = payload["wing"]
-                source_file = payload["source_file"]
-
-                if args.dry_run:
-                    print(f"  [DRY RUN] Would re-mine ({source_wing}): {source_file}")
-                    continue
-
-                sf_path = Path(source_file)
-                if not sf_path.exists():
-                    print(f"  Warning: source file missing, skipping: {source_file}")
-                    continue
-
-                config_path = resolve_project_config(str(sf_path.parent))
-                if not config_path:
-                    curr = sf_path.parent
-                    while curr != curr.parent:
-                        config_path = resolve_project_config(str(curr))
-                        if config_path:
-                            break
-                        curr = curr.parent
-
-                if not config_path:
-                    print(f"  Warning: No .swampcastle.yaml found for {source_file}, skipping.")
-                    continue
-
-                project_dir = str(config_path.parent)
-                try:
-                    rel = str(sf_path.relative_to(project_dir))
-                except ValueError:
-                    print(
-                        f"  Warning: {source_file} is not under project dir {project_dir}, skipping."
-                    )
-                    continue
-
-                print(f"  Deskeletonizing ({source_wing}): {source_file}")
-                mine(
-                    project_dir=project_dir,
-                    palace_path=str(settings.castle_path),
-                    wing=source_wing,
-                    agent="swampcastle-deskeleton",
-                    storage_factory=factory,
-                    force_no_skeleton=True,
-                    _force_remine=True,
-                    only_force_included=True,
-                    include_ignored=[rel],
-                    respect_gitignore=False,
+        with tempfile.TemporaryDirectory(prefix="swampcastle-deskeleton-") as temp_dir:
+            target_store = DeskeletonTargetStore(Path(temp_dir) / "targets.sqlite3")
+            try:
+                skeleton_count, unique_count = _scan_deskeleton_targets(
+                    castle.vault,
+                    where or None,
+                    target_store,
                 )
+
+                if skeleton_count == 0:
+                    print("  No skeleton drawers found.")
+                    return
+
+                _print_section("Deskeleton")
+                _print_kv("Skeletons found", skeleton_count)
+                _print_kv("Source files", unique_count)
+
+                for source_wing, source_file in target_store.iter_targets():
+                    if args.dry_run:
+                        print(f"  [DRY RUN] Would re-mine ({source_wing}): {source_file}")
+                        continue
+
+                    sf_path = Path(source_file)
+                    if not sf_path.exists():
+                        print(f"  Warning: source file missing, skipping: {source_file}")
+                        continue
+
+                    config_path = resolve_project_config(str(sf_path.parent))
+                    if not config_path:
+                        curr = sf_path.parent
+                        while curr != curr.parent:
+                            config_path = resolve_project_config(str(curr))
+                            if config_path:
+                                break
+                            curr = curr.parent
+
+                    if not config_path:
+                        print(f"  Warning: No .swampcastle.yaml found for {source_file}, skipping.")
+                        continue
+
+                    project_dir = str(config_path.parent)
+                    try:
+                        rel = str(sf_path.relative_to(project_dir))
+                    except ValueError:
+                        print(
+                            f"  Warning: {source_file} is not under project dir {project_dir}, skipping."
+                        )
+                        continue
+
+                    print(f"  Deskeletonizing ({source_wing}): {source_file}")
+                    mine(
+                        project_dir=project_dir,
+                        palace_path=str(settings.castle_path),
+                        wing=source_wing,
+                        agent="swampcastle-deskeleton",
+                        storage_factory=factory,
+                        force_no_skeleton=True,
+                        _force_remine=True,
+                        only_force_included=True,
+                        include_ignored=[rel],
+                        respect_gitignore=False,
+                    )
+            finally:
+                target_store.close()

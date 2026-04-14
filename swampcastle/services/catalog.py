@@ -9,14 +9,16 @@ from swampcastle.models.catalog import (
 )
 from swampcastle.storage.base import CollectionStore
 
-CASTLE_PROTOCOL = """IMPORTANT — SwampCastle Memory Protocol:
-1. ON WAKE-UP: Call swampcastle_status to load castle overview + AAAK spec.
-2. BEFORE RESPONDING about any person, project, or past event: call swampcastle_kg_query or swampcastle_search FIRST. Never guess — verify.
-3. IF UNSURE about a fact (name, gender, age, relationship): say "let me check" and query the castle. Wrong is worse than slow.
-4. AFTER EACH SESSION: call swampcastle_diary_write to record what happened, what you learned, what matters.
-5. WHEN FACTS CHANGE: call swampcastle_kg_invalidate on the old fact, swampcastle_kg_add for the new one.
+CASTLE_PROTOCOL = """SwampCastle protocol
 
-This protocol ensures the AI KNOWS before it speaks. Storage is not memory — but storage + this protocol = memory."""
+1. Do not state project history, past decisions, people, facts, or prior work from memory alone.
+2. Before making such claims, query SwampCastle first:
+   - use swampcastle_search for prior discussions, decisions, and text evidence
+   - use swampcastle_kg_query for entity and relationship facts
+3. If results are missing or ambiguous, say so explicitly. Do not guess.
+4. Use wing and room filters when the project context is known.
+5. Write durable notes only when the workflow calls for memory updates.
+6. When a stored fact is outdated, invalidate the old fact before adding the replacement."""
 
 AAAK_SPEC = """AAAK is a compressed memory dialect that SwampCastle uses for efficient storage.
 It is designed to be readable by both humans and LLMs without decoding.

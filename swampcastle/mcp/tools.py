@@ -39,7 +39,7 @@ class ToolDef:
 def register_tools(castle: Castle) -> dict[str, ToolDef]:
     return {
         "swampcastle_status": ToolDef(
-            description="Castle overview: drawers, wings, rooms, protocol, AAAK spec.",
+            description="Castle overview: drawers, wings, rooms, strict memory-use protocol, AAAK spec.",
             input_model=None,
             handler=lambda: castle.catalog.status(),
         ),

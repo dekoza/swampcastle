@@ -115,7 +115,7 @@ swampcastle survey
 swampcastle brief --wing myapp
 ```
 
-Use `brief` (alias: `minstrel`) when you want a wing-scoped summary for prompt/context injection. Use `herald` when you want the stable SwampCastle memory protocol.
+Use `brief` (alias: `minstrel`) when you want a human-readable wing summary. Use `herald` when you want the strict SwampCastle memory-use protocol for agent instructions.
 
 ## MCP setup
 

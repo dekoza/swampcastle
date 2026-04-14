@@ -100,14 +100,14 @@ swampcastle-mcp
 
 ## herald / wake-up
 
-Print the stable SwampCastle protocol for agent wake-up.
+Print the strict SwampCastle memory-use protocol.
 
 ```bash
 swampcastle herald
 swampcastle wake-up
 ```
 
-This command is for behavior/policy, not for project state.
+This command is for behavior/policy, not for project state. It is intended for agent instructions or startup hooks, not for human project summaries.
 
 ## brief / minstrel
 

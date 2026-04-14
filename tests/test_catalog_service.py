@@ -38,7 +38,18 @@ class TestStatus:
         assert s.wings == {"proj": 2, "personal": 1}
         assert s.rooms == {"auth": 1, "billing": 1, "journal": 1}
         assert s.castle_path == "/tmp/test"
-        assert "SwampCastle" in s.protocol
+        assert "SwampCastle protocol" in s.protocol
+
+    def test_protocol_is_compact_and_operational(self, svc):
+        protocol = svc.status().protocol
+        assert (
+            "Do not state project history, past decisions, people, facts, or prior work" in protocol
+        )
+        assert "use swampcastle_search" in protocol
+        assert "use swampcastle_kg_query" in protocol
+        assert "Do not guess." in protocol
+        assert "ON WAKE-UP" not in protocol
+        assert "This protocol ensures" not in protocol
 
 
 class TestListWings:

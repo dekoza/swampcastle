@@ -119,12 +119,13 @@ At startup the server:
 
 ## Protocol expectations
 
-`swampcastle_status` returns a memory protocol and AAAK spec. The intended usage is:
+`swampcastle_status` returns a strict memory-use protocol and AAAK spec. The intended usage is:
 
-1. call `swampcastle_status` on wake-up
-2. query search / KG before stating facts
-3. write diary entries after meaningful sessions
-4. invalidate and replace KG facts when reality changes
+1. do not state project history, past decisions, people, facts, or prior work from memory alone
+2. use `swampcastle_search` for prior discussions, decisions, and text evidence
+3. use `swampcastle_kg_query` for entity and relationship facts
+4. if results are missing or ambiguous, say so explicitly instead of guessing
+5. invalidate and replace KG facts when reality changes
 
 ## Errors
 

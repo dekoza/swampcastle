@@ -70,7 +70,7 @@ swampcastle survey
 swampcastle brief --wing myapp
 ```
 
-Use `brief` when you want a wing summary to paste into temporary prompt context. Use `herald` when you want the stable memory-use protocol itself.
+Use `brief` when you want a human-readable wing summary. Use `herald` when you want the strict memory-use protocol itself.
 
 ## Conversation ingest
 

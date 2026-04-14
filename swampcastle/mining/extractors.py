@@ -14,6 +14,7 @@ from swampcastle.models.kg_candidates import CandidateTriple
 
 _SENTENCE_SPLIT_RE = re.compile(r"(?<=[.!?])\s+|\n+")
 _ENTITY_TOKEN = r"[A-Za-z][A-Za-z0-9_.-]*"
+_SUBJECT_TOKEN = r"[A-Z][A-Za-z0-9_.-]*"
 
 _HYPOTHETICAL_MARKERS = (
     "maybe",
@@ -47,8 +48,23 @@ _BUILT_WITH_PATTERN = re.compile(
 _DEPLOYED_TO_PATTERN = re.compile(
     rf"\b(?:we|it|system|project)\s+deployed to\s+({_ENTITY_TOKEN})\b", re.I
 )
-_WORKS_ON_PATTERN = re.compile(rf"\b({_ENTITY_TOKEN})\s+works on\s+({_ENTITY_TOKEN})\b")
-_MAINTAINS_PATTERN = re.compile(rf"\b({_ENTITY_TOKEN})\s+maintains\s+({_ENTITY_TOKEN})\b")
+_EXPLICIT_SUBJECT_PATTERNS = (
+    ("uses", re.compile(rf"\b({_SUBJECT_TOKEN})\s+uses\s+({_ENTITY_TOKEN})\b")),
+    (
+        "depends_on",
+        re.compile(rf"\b({_SUBJECT_TOKEN})\s+depends on\s+({_ENTITY_TOKEN})\b", re.I),
+    ),
+    (
+        "uses",
+        re.compile(rf"\b({_SUBJECT_TOKEN})\s+built with\s+({_ENTITY_TOKEN})\b", re.I),
+    ),
+    (
+        "deployed_to",
+        re.compile(rf"\b({_SUBJECT_TOKEN})\s+deployed to\s+({_ENTITY_TOKEN})\b", re.I),
+    ),
+)
+_WORKS_ON_PATTERN = re.compile(rf"\b({_SUBJECT_TOKEN})\s+works on\s+({_SUBJECT_TOKEN})\b")
+_MAINTAINS_PATTERN = re.compile(rf"\b({_SUBJECT_TOKEN})\s+maintains\s+({_SUBJECT_TOKEN})\b")
 _TRY_PATTERN = re.compile(rf"\b(?:try|use)\s+({_ENTITY_TOKEN})\b", re.I)
 
 
@@ -184,6 +200,24 @@ def extract_candidate_triples_from_text(
                     extractor_version=extractor_version,
                 )
             )
+
+        for predicate, pattern in _EXPLICIT_SUBJECT_PATTERNS:
+            match = pattern.search(sentence)
+            if match:
+                subject_text, object_text = match.group(1), match.group(2)
+                if subject_text.lower() not in {"we", "it", "system", "project"}:
+                    candidates.append(
+                        _make_candidate(
+                            predicate=predicate,
+                            subject_text=subject_text,
+                            object_text=object_text,
+                            confidence=0.84 if modality == "asserted" else 0.58,
+                            modality=modality,
+                            source_meta=source_meta,
+                            evidence_text=sentence,
+                            extractor_version=extractor_version,
+                        )
+                    )
 
         for predicate, pattern, confidence in (
             ("uses", _USES_PATTERN, 0.8),

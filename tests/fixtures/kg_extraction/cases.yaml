@@ -1,0 +1,101 @@
+cases:
+  - name: migration_switch_from_to
+    text: "We switched from Auth0 to Clerk because local testing got simpler."
+    source_meta:
+      drawer_id: drawer_1
+      wing: swampcastle
+      room: auth
+      source_file: README.md
+    expected:
+      - subject_text: swampcastle
+        predicate: migrated_from
+        object_text: Auth0
+        modality: asserted
+      - subject_text: swampcastle
+        predicate: migrated_to
+        object_text: Clerk
+        modality: asserted
+    forbidden: []
+
+  - name: implicit_use_pattern
+    text: "We use LanceDB for vector storage."
+    source_meta:
+      drawer_id: drawer_2
+      wing: swampcastle
+      room: storage
+      source_file: README.md
+    expected:
+      - subject_text: swampcastle
+        predicate: uses
+        object_text: LanceDB
+        modality: asserted
+    forbidden: []
+
+  - name: explicit_project_subject_use_pattern
+    text: "SwampCastle uses LanceDB for vector storage."
+    source_meta:
+      drawer_id: drawer_3
+      wing: swampcastle
+      room: storage
+      source_file: README.md
+    expected:
+      - subject_text: SwampCastle
+        predicate: uses
+        object_text: LanceDB
+        modality: asserted
+    forbidden: []
+
+  - name: explicit_project_subject_depends_on_pattern
+    text: "SwampCastle depends on SQLite."
+    source_meta:
+      drawer_id: drawer_4
+      wing: swampcastle
+      room: storage
+      source_file: README.md
+    expected:
+      - subject_text: SwampCastle
+        predicate: depends_on
+        object_text: SQLite
+        modality: asserted
+    forbidden: []
+
+  - name: person_works_on
+    text: "Kai works on Orion and maintains the deployment pipeline."
+    source_meta:
+      drawer_id: drawer_5
+      wing: swampcastle
+      room: architecture
+      source_file: NOTES.md
+    expected:
+      - subject_text: Kai
+        predicate: works_on
+        object_text: Orion
+        modality: asserted
+    forbidden: []
+
+  - name: hypothetical_try_pattern
+    text: "Maybe we should try Clerk someday."
+    source_meta:
+      drawer_id: drawer_6
+      wing: swampcastle
+      room: auth
+      source_file: NOTES.md
+    expected:
+      - subject_text: swampcastle
+        predicate: uses
+        object_text: Clerk
+        modality: hypothetical
+    forbidden: []
+
+  - name: question_should_not_extract
+    text: "Should we switch from Auth0 to Clerk?"
+    source_meta:
+      drawer_id: drawer_7
+      wing: swampcastle
+      room: auth
+      source_file: NOTES.md
+    expected: []
+    forbidden:
+      - subject_text: swampcastle
+        predicate: migrated_to
+        object_text: Clerk

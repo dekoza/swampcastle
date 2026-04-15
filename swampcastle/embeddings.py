@@ -8,17 +8,21 @@ Supported backends:
 
 Config in ~/.swampcastle/config.json:
     {}                                     — uses ONNX default
-    {"embedder": "all-MiniLM-L6-v2"}       — same as default
-    {"embedder": "bge-small"}              — requires [gpu]
-    {"embedder": "all-MiniLM-L6-v2", "embedder_options": {"device": "cuda"}} — requires [gpu]
+    {"embedder": "onnx"}                  — canonical ONNX backend
+    {"embedder": "all-MiniLM-L6-v2"}      — same as default
+    {"embedder": "bge-small"}             — requires [gpu]
     {"embedder": "ollama", "embedder_options": {"model": "nomic-embed-text"}}
 """
 
 from __future__ import annotations
 
+import hashlib
+import json
 import logging
+import struct
 import threading
-from typing import Protocol, runtime_checkable
+from importlib.metadata import PackageNotFoundError, version
+from typing import Any, Protocol, runtime_checkable
 
 logger = logging.getLogger("swampcastle")
 
@@ -39,6 +43,72 @@ class Embedder(Protocol):
     def embed(self, texts: list[str]) -> list[list[float]]: ...
 
 
+# ── Shared helpers ────────────────────────────────────────────────────────────
+
+
+_VERIFICATION_PROBE_TEXTS = (
+    "SwampCastle keeps drawers verbatim for retrieval.",
+    "Paths matter: /var/lib/swampcastle/castle and ~/.swampcastle/config.json",
+    "SQL-ish filters include wing=project, room=auth, seq>=10.",
+    "Punctuation check: commas, semicolons; quotes 'single' and \"double\".",
+    "Unicode check: café naïve résumé λ-calculus 你好.",
+    "Short line\nSecond line\nThird line",
+    "Code-ish text: def embed(texts): return model.encode(texts)",
+    "Numbers and dates: 2026-04-14, 384d, 24GB VRAM, 0.95 precision.",
+)
+
+
+def _package_version(name: str) -> str | None:
+    try:
+        return version(name)
+    except PackageNotFoundError:
+        return None
+
+
+def _compact_dict(data: dict[str, Any]) -> dict[str, Any]:
+    return {k: v for k, v in data.items() if v is not None}
+
+
+def fingerprint_sha256(fingerprint: dict[str, Any]) -> str:
+    payload = json.dumps(fingerprint, sort_keys=True, separators=(",", ":")).encode("utf-8")
+    return hashlib.sha256(payload).hexdigest()
+
+
+def get_embedder_fingerprint(embedder: Embedder) -> dict[str, Any]:
+    raw = getattr(embedder, "fingerprint", None)
+    if callable(raw):
+        raw = raw()
+    if raw is None:
+        raw = {
+            "backend": type(embedder).__name__.lower(),
+            "model_name": getattr(embedder, "model_name", None),
+            "dimension": getattr(embedder, "dimension", None),
+        }
+    fingerprint = dict(raw)
+    fingerprint.setdefault("model_name", getattr(embedder, "model_name", None))
+    fingerprint.setdefault("dimension", getattr(embedder, "dimension", None))
+    return _compact_dict(fingerprint)
+
+
+def build_embedding_verification_report(
+    embedder: Embedder,
+    texts: list[str] | tuple[str, ...] | None = None,
+) -> dict[str, Any]:
+    probe_texts = tuple(texts or _VERIFICATION_PROBE_TEXTS)
+    vectors = embedder.embed(list(probe_texts))
+    vector_hasher = hashlib.sha256()
+    for vector in vectors:
+        vector_hasher.update(struct.pack(f"<{len(vector)}f", *vector))
+
+    fingerprint = get_embedder_fingerprint(embedder)
+    return {
+        "embedder": fingerprint,
+        "fingerprint_hash": fingerprint_sha256(fingerprint),
+        "probe_hash": vector_hasher.hexdigest(),
+        "probe_count": len(probe_texts),
+    }
+
+
 # ── ONNX (default, lightweight) ───────────────────────────────────────────────
 
 _ONNX_MODEL_NAME = "all-MiniLM-L6-v2"
@@ -54,6 +124,7 @@ _ONNX_REQUIRED_FILES = (
     "tokenizer.json",
     "vocab.txt",
 )
+_ONNX_PROVIDERS = ("CPUExecutionProvider",)
 
 
 def _onnx_model_dir() -> str:
@@ -77,7 +148,7 @@ def _ensure_onnx_model() -> str:
     import os
     import tarfile
     from pathlib import Path
-    from urllib.request import urlopen, Request
+    from urllib.request import Request, urlopen
 
     model_dir = _onnx_model_dir()
     if all(os.path.exists(os.path.join(model_dir, f)) for f in _ONNX_REQUIRED_FILES):
@@ -115,8 +186,6 @@ def _ensure_onnx_model() -> str:
 
 
 def _verify_sha256(path: str, expected: str) -> bool:
-    import hashlib
-
     h = hashlib.sha256()
     with open(path, "rb") as f:
         for block in iter(lambda: f.read(8192), b""):
@@ -130,13 +199,17 @@ class OnnxEmbedder:
     Uses the all-MiniLM-L6-v2 model converted to ONNX format.
     No torch or sentence-transformers required. The ONNX model (~87MB)
     is downloaded once on first use and cached in ~/.cache/swampcastle/.
+
+    This path is the canonical CPU-only embedder for deterministic multi-device
+    sync. It is intentionally pinned to CPUExecutionProvider.
     """
 
     DIMENSION = 384
     MAX_SEQ_LENGTH = 256
     BATCH_SIZE = 32
 
-    def __init__(self):
+    def __init__(self, providers: tuple[str, ...] | None = None):
+        self._providers = tuple(providers or _ONNX_PROVIDERS)
         self._session = None
         self._tokenizer = None
 
@@ -147,6 +220,20 @@ class OnnxEmbedder:
     @property
     def dimension(self) -> int:
         return self.DIMENSION
+
+    @property
+    def fingerprint(self) -> dict[str, Any]:
+        return _compact_dict(
+            {
+                "backend": "onnx",
+                "model_name": self.model_name,
+                "dimension": self.dimension,
+                "providers": list(self._providers),
+                "asset_sha256": _ONNX_SHA256,
+                "onnxruntime_version": _package_version("onnxruntime"),
+                "tokenizers_version": _package_version("tokenizers"),
+            }
+        )
 
     def _load(self):
         if self._session is not None:
@@ -169,13 +256,21 @@ class OnnxEmbedder:
 
         import os
 
+        available = set(ort.get_available_providers())
+        missing = [provider for provider in self._providers if provider not in available]
+        if missing:
+            raise RuntimeError(
+                "Required ONNX provider(s) unavailable: "
+                f"{', '.join(missing)}. Available: {sorted(available)}"
+            )
+
         model_dir = _ensure_onnx_model()
 
         so = ort.SessionOptions()
         so.log_severity_level = 3
         self._session = ort.InferenceSession(
             os.path.join(model_dir, "model.onnx"),
-            providers=ort.get_available_providers(),
+            providers=list(self._providers),
             sess_options=so,
         )
 
@@ -257,6 +352,20 @@ class SentenceTransformerEmbedder:
             self._load()
         return self._dim
 
+    @property
+    def fingerprint(self) -> dict[str, Any]:
+        return _compact_dict(
+            {
+                "backend": "sentence-transformers",
+                "model_name": self.model_name,
+                "dimension": self.dimension,
+                "device": self._device,
+                "sentence_transformers_version": _package_version("sentence-transformers"),
+                "transformers_version": _package_version("transformers"),
+                "torch_version": _package_version("torch"),
+            }
+        )
+
     def _load(self):
         if self._model is not None:
             return
@@ -310,10 +419,20 @@ class OllamaEmbedder:
     @property
     def dimension(self) -> int:
         if self._dim is None:
-            # Embed a probe string to discover dimension
             probe = self._embed_batch(["dimension probe"])
             self._dim = len(probe[0])
         return self._dim
+
+    @property
+    def fingerprint(self) -> dict[str, Any]:
+        return _compact_dict(
+            {
+                "backend": "ollama",
+                "model_name": self.model_name,
+                "dimension": self._dim,
+                "base_url": self._base_url,
+            }
+        )
 
     def embed(self, texts: list[str]) -> list[list[float]]:
         return self._embed_batch(texts)
@@ -321,8 +440,8 @@ class OllamaEmbedder:
     def _embed_batch(self, texts: list[str]) -> list[list[float]]:
         """Call Ollama /api/embed endpoint."""
         import json
-        from urllib.request import Request, urlopen
         from urllib.error import URLError
+        from urllib.request import Request, urlopen
 
         url = f"{self._base_url}/api/embed"
         payload = json.dumps({"model": self._model, "input": texts}).encode("utf-8")
@@ -357,8 +476,8 @@ _embedder_cache: dict[str, Embedder] = {}
 _embedder_lock = threading.Lock()
 
 
-# Well-known model aliases that map to full HuggingFace names.
 MODEL_ALIASES = {
+    "onnx": "onnx",
     "minilm": "all-MiniLM-L6-v2",
     "bge-small": "BAAI/bge-small-en-v1.5",
     "bge-base": "BAAI/bge-base-en-v1.5",
@@ -372,73 +491,81 @@ def resolve_model_name(name: str) -> str:
     return MODEL_ALIASES.get(name, name)
 
 
-def get_embedder(config: dict = None) -> Embedder:
+def _get_or_create(cache_key: str, factory) -> Embedder:
+    if cache_key not in _embedder_cache:  # unlocked read: safe on CPython (GIL)
+        with _embedder_lock:
+            if cache_key not in _embedder_cache:
+                _embedder_cache[cache_key] = factory()
+    return _embedder_cache[cache_key]
+
+
+def get_embedder(config: dict | None = None) -> Embedder:
     """Factory: get or create a cached embedder from config.
 
     Config keys:
-        embedder: model name or "ollama" (default: "all-MiniLM-L6-v2")
+        embedder: backend or model name (default: "all-MiniLM-L6-v2")
         embedder_options:
-            device: "cpu" | "cuda" | "mps"  (sentence-transformers, requires [gpu])
+            device: "cpu" | "cuda" | "mps"  (sentence-transformers)
             model: Ollama model name        (ollama backend)
             base_url: Ollama server URL     (ollama backend)
             timeout: request timeout secs   (ollama backend)
 
     Routing:
-        - "ollama" → OllamaEmbedder (no extra deps)
-        - "all-MiniLM-L6-v2" + device=cpu → OnnxEmbedder (default, lightweight)
-        - "all-MiniLM-L6-v2" + device=cuda/mps → SentenceTransformerEmbedder (requires [gpu])
-        - any other model → SentenceTransformerEmbedder (requires [gpu])
+        - "onnx" → OnnxEmbedder (canonical CPU-only backend)
+        - "ollama" → OllamaEmbedder
+        - "all-MiniLM-L6-v2" + device=cpu → OnnxEmbedder
+        - any non-default model or non-cpu MiniLM → SentenceTransformerEmbedder
     """
     config = config or {}
     name = config.get("embedder", "all-MiniLM-L6-v2")
-    options = config.get("embedder_options", {})
+    options = dict(config.get("embedder_options", {}))
 
     if name == "ollama":
         model = options.get("model", "nomic-embed-text")
         base_url = options.get("base_url", "http://localhost:11434")
         timeout = float(options.get("timeout", 60.0))
         cache_key = f"ollama:{model}@{base_url}"
+        return _get_or_create(
+            cache_key,
+            lambda: OllamaEmbedder(model=model, base_url=base_url, timeout=timeout),
+        )
 
-        if cache_key not in _embedder_cache:  # unlocked read: safe on CPython (GIL)
-            with _embedder_lock:
-                if cache_key not in _embedder_cache:
-                    _embedder_cache[cache_key] = OllamaEmbedder(
-                        model=model, base_url=base_url, timeout=timeout
-                    )
-        return _embedder_cache[cache_key]
+    device = options.get("device", "cpu")
+    if name == "onnx":
+        if device != "cpu":
+            raise ValueError(
+                "The ONNX embedder is CPU-only. Use all-MiniLM-L6-v2 with ST for cuda/mps."
+            )
+        return _get_or_create("onnx:all-MiniLM-L6-v2:cpu", OnnxEmbedder)
 
     resolved = resolve_model_name(name)
-    device = options.get("device", "cpu")
 
-    # Default model on CPU → lightweight ONNX backend
     if resolved == "all-MiniLM-L6-v2" and device == "cpu":
-        cache_key = "onnx:all-MiniLM-L6-v2"
-        if cache_key not in _embedder_cache:  # unlocked read: safe on CPython (GIL)
-            with _embedder_lock:
-                if cache_key not in _embedder_cache:
-                    _embedder_cache[cache_key] = OnnxEmbedder()
-        return _embedder_cache[cache_key]
+        return _get_or_create("onnx:all-MiniLM-L6-v2:cpu", OnnxEmbedder)
 
-    # GPU device or non-default model → sentence-transformers
     cache_key = f"st:{resolved}:{device}"
-    if cache_key not in _embedder_cache:  # unlocked read: safe on CPython (GIL)
-        with _embedder_lock:
-            if cache_key not in _embedder_cache:
-                _embedder_cache[cache_key] = SentenceTransformerEmbedder(
-                    model_name=resolved, device=device
-                )
-    return _embedder_cache[cache_key]
+    return _get_or_create(
+        cache_key,
+        lambda: SentenceTransformerEmbedder(model_name=resolved, device=device),
+    )
 
 
 def list_embedders() -> list[dict]:
     """List available embedder configurations for CLI help."""
     return [
         {
+            "name": "onnx",
+            "alias": "onnx",
+            "dim": 384,
+            "backend": "onnx",
+            "notes": "Canonical CPU-only backend. Pins all-MiniLM-L6-v2 to CPUExecutionProvider.",
+        },
+        {
             "name": "all-MiniLM-L6-v2",
             "alias": "minilm",
             "dim": 384,
             "backend": "onnx",
-            "notes": "Default. Fast, lightweight (no torch).",
+            "notes": "Same canonical model as 'onnx'. CPU uses ONNX; non-CPU uses sentence-transformers.",
         },
         {
             "name": "BAAI/bge-small-en-v1.5",

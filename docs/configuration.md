@@ -18,14 +18,16 @@ Fields:
 | `collection_name` | `str` | `swampcastle_chests` | collection / table name |
 | `backend` | `lance \| postgres \| chroma` | `lance` | `chroma` is migration-only in v4 |
 | `database_url` | `str \| None` | `None` | required for `backend=postgres` |
-| `embedder` | `str` | `onnx` | settings field exists; most CLI flows still use the default embedder path |
-| `embedder_model` | `str \| None` | `None` | low-level / future wiring |
-| `embedder_device` | `str \| None` | `None` | low-level / future wiring |
+| `embedder` | `str` | `onnx` | active embedder backend / model selector; `onnx` is the canonical CPU-only path |
+| `embedder_model` | `str \| None` | `None` | optional model override; mainly useful for Ollama or explicit HF model names |
+| `embedder_device` | `str \| None` | `None` | optional device override passed into embedder config (e.g. `cpu`, `cuda`) |
+| `embedder_options` | `dict[str, Any]` | `{}` | raw embedder option bag merged into `embedder_config`; supports fields like `base_url`, `timeout`, `device` |
 
 Computed fields:
 
 | Field | Derived from |
 |---|---|
+| `embedder_config` | normalized config dict consumed by `get_embedder()` |
 | `kg_path` | `castle_path.parent / "knowledge_graph.sqlite3"` |
 | `wal_path` | `castle_path.parent / "wal"` |
 | `config_dir` | `castle_path.parent` |
@@ -46,6 +48,7 @@ Common variables:
 | `SWAMPCASTLE_EMBEDDER_MODEL` | embedder model override |
 | `SWAMPCASTLE_EMBEDDER_DEVICE` | device override |
 | `SWAMPCASTLE_ONNX_CACHE` | cache directory for the default ONNX model |
+| `SWAMPCASTLE_EMBEDDER_OPTIONS` | JSON-encoded raw option bag for advanced cases |
 | `SWAMPCASTLE_SOURCE_DIR` | default source directory for `cleave` |
 
 ## Local mode
@@ -88,7 +91,7 @@ That merge order is:
 3. JSON file values
 4. defaults
 
-The CLI now auto-creates and auto-loads `~/.swampcastle/config.json` on first use. The default runtime backend is Lance. To edit that runtime configuration explicitly, run:
+The CLI now auto-creates and auto-loads `~/.swampcastle/config.json` on first use. The default runtime backend is Lance and the default embedder is canonical CPU-only ONNX MiniLM. To edit that runtime configuration explicitly, run:
 
 ```bash
 swampcastle wizard

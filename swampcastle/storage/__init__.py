@@ -7,6 +7,7 @@ import os
 from abc import ABC, abstractmethod
 from importlib import import_module
 
+from swampcastle.embeddings import get_embedder
 from swampcastle.settings import CastleSettings
 
 from .base import CollectionStore, GraphStore
@@ -53,12 +54,28 @@ def detect_backend(castle_path: str) -> str:
     return "lance"
 
 
+def _embedder_config_from_settings(settings) -> dict:
+    config = getattr(settings, "embedder_config", None)
+    if config is not None:
+        return config
+
+    embedder = getattr(settings, "embedder", "onnx")
+    options = {}
+    device = getattr(settings, "embedder_device", None)
+    if device:
+        options["device"] = device
+    return (
+        {"embedder": embedder, "embedder_options": options} if options else {"embedder": embedder}
+    )
+
+
 def factory_from_settings(settings: CastleSettings) -> StorageFactory:
     """Create the configured storage factory for a Castle instance."""
     if settings.backend == "lance":
         from .lance import LocalStorageFactory
 
-        return LocalStorageFactory(settings.castle_path)
+        embedder = get_embedder(_embedder_config_from_settings(settings))
+        return LocalStorageFactory(settings.castle_path, embedder=embedder)
 
     if settings.backend == "postgres":
         if not settings.database_url:
@@ -70,7 +87,8 @@ def factory_from_settings(settings: CastleSettings) -> StorageFactory:
                 "PostgreSQL backend requires optional dependencies. "
                 "Install with: pip install 'swampcastle[postgres]'"
             ) from exc
-        return module.PostgresStorageFactory(settings.database_url)
+        embedder = get_embedder(_embedder_config_from_settings(settings))
+        return module.PostgresStorageFactory(settings.database_url, embedder=embedder)
 
     if settings.backend == "chroma":
         raise NotImplementedError(

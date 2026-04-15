@@ -231,12 +231,20 @@ Honest status: this command is currently a scaffold. The full re-embed pipeline 
 
 ## armory / embedders
 
-List known embedder configurations.
+List known embedder configurations, or print a deterministic verification report for the active embedder.
 
 ```bash
 swampcastle armory
 swampcastle embedders
+
+# print the active embedder fingerprint + probe hash
+swampcastle embedders --verify
+
+# machine-readable form for comparing two machines
+swampcastle embedders --verify --json
 ```
+
+`--verify` is the cross-machine sanity check for multi-device sync. Two machines that are supposed to share precomputed vectors should report the same fingerprint and probe hash.
 
 ## garrison / serve
 

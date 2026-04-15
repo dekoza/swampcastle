@@ -40,6 +40,10 @@ class TestDefaults:
         s = CastleSettings(_env_file=None)
         assert s.embedder == "onnx"
 
+    def test_default_embedder_config(self):
+        s = CastleSettings(_env_file=None)
+        assert s.embedder_config == {"embedder": "onnx"}
+
 
 class TestComputedPaths:
     def test_kg_path_derived_from_castle_path(self):
@@ -76,6 +80,30 @@ class TestEnvOverride:
         monkeypatch.setenv("SWAMPCASTLE_DATABASE_URL", "postgresql://localhost/test")
         s = CastleSettings(_env_file=None)
         assert s.database_url == "postgresql://localhost/test"
+
+
+class TestEmbedderConfig:
+    def test_embedder_config_uses_explicit_device(self):
+        s = CastleSettings(embedder="bge-small", embedder_device="cpu", _env_file=None)
+        assert s.embedder_config == {
+            "embedder": "bge-small",
+            "embedder_options": {"device": "cpu"},
+        }
+
+    def test_embedder_config_merges_ollama_model_and_options(self):
+        s = CastleSettings(
+            embedder="ollama",
+            embedder_model="nomic-embed-text",
+            embedder_options={"base_url": "http://server:11434"},
+            _env_file=None,
+        )
+        assert s.embedder_config == {
+            "embedder": "ollama",
+            "embedder_options": {
+                "model": "nomic-embed-text",
+                "base_url": "http://server:11434",
+            },
+        }
 
 
 class TestJsonFile:

@@ -51,6 +51,7 @@ class CastleSettings(BaseSettings):
     embedder: str = "onnx"
     embedder_model: Optional[str] = None
     embedder_device: Optional[str] = None
+    embedder_options: dict[str, Any] = Field(default_factory=dict)
     sync_api_key: Optional[str] = Field(
         default=None,
         description=(
@@ -98,6 +99,25 @@ class CastleSettings(BaseSettings):
     @classmethod
     def _expand_castle_path(cls, value: str | Path) -> Path:
         return Path(value).expanduser()
+
+    @computed_field
+    @property
+    def embedder_config(self) -> dict[str, Any]:
+        config: dict[str, Any] = {"embedder": self.embedder}
+        options = dict(self.embedder_options)
+
+        if self.embedder_device and "device" not in options:
+            options["device"] = self.embedder_device
+
+        if self.embedder == "ollama":
+            if self.embedder_model and "model" not in options:
+                options["model"] = self.embedder_model
+        elif self.embedder != "onnx" and self.embedder_model:
+            config["embedder"] = self.embedder_model
+
+        if options:
+            config["embedder_options"] = options
+        return config
 
     @computed_field
     @property

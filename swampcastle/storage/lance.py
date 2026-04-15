@@ -3,10 +3,12 @@
 import json
 import logging
 import os
-from typing import Dict, List, Optional
+from typing import Any, Dict, List, Optional
 
-from .base import CollectionStore
+from swampcastle.embeddings import fingerprint_sha256, get_embedder_fingerprint
+
 from . import StorageFactory
+from .base import CollectionStore
 
 logger = logging.getLogger("swampcastle")
 
@@ -100,15 +102,119 @@ class LanceCollection(CollectionStore):
     }
     INTERNAL_FIELDS = {"_distance", "_relevance_score"}
 
-    def __init__(self, db, table_name: str, embedder, sync_identity=None):
+    def __init__(self, db, table_name: str, embedder, sync_identity=None, palace_path=None):
         self._db = db
         self._table_name = table_name
         self._embedder = embedder
         self._sync_identity = sync_identity
+        self._palace_path = str(palace_path) if palace_path is not None else None
+        self._embedder_contract = None
         self._table = None
         if table_name in self._list_table_names():
             self._table = db.open_table(table_name)
             self._check_dimension()
+            self._check_embedder_contract()
+
+    def _embedder_meta_path(self) -> str | None:
+        if self._palace_path is None:
+            return None
+        return os.path.join(self._palace_path, ".swampcastle", f"{self._table_name}.embedder.json")
+
+    def _active_embedder_contract(self) -> dict[str, Any]:
+        if self._embedder_contract is None:
+            self._embedder_contract = {
+                "embedding_model": self._embedder.model_name,
+                "embedding_fingerprint": get_embedder_fingerprint(self._embedder),
+            }
+        return self._embedder_contract
+
+    def _load_embedder_meta(self) -> dict[str, Any] | None:
+        path = self._embedder_meta_path()
+        if path is None or not os.path.exists(path):
+            return None
+        try:
+            with open(path, encoding="utf-8") as handle:
+                data = json.load(handle)
+        except (OSError, json.JSONDecodeError):
+            return None
+        return self._contract_from_metadata(data)
+
+    def _write_embedder_meta(self) -> None:
+        path = self._embedder_meta_path()
+        if path is None:
+            return
+        os.makedirs(os.path.dirname(path), exist_ok=True)
+        payload = self._active_embedder_contract()
+        tmp_path = f"{path}.tmp"
+        with open(tmp_path, "w", encoding="utf-8") as handle:
+            json.dump(payload, handle, indent=2, sort_keys=True)
+            handle.write("\n")
+        os.replace(tmp_path, path)
+
+    @staticmethod
+    def _contract_from_metadata(metadata: dict[str, Any] | None) -> dict[str, Any] | None:
+        if not isinstance(metadata, dict):
+            return None
+        contract: dict[str, Any] = {}
+        model = metadata.get("embedding_model")
+        if model:
+            contract["embedding_model"] = model
+        fingerprint = metadata.get("embedding_fingerprint")
+        if isinstance(fingerprint, str):
+            try:
+                fingerprint = json.loads(fingerprint)
+            except json.JSONDecodeError:
+                fingerprint = None
+        if isinstance(fingerprint, dict):
+            contract["embedding_fingerprint"] = fingerprint
+        return contract or None
+
+    def _validate_embedder_contract(self, stored: dict[str, Any], source: str) -> None:
+        active = self._active_embedder_contract()
+        stored_model = stored.get("embedding_model")
+        active_model = active["embedding_model"]
+        if stored_model and stored_model != active_model:
+            raise RuntimeError(
+                f"Embedder model mismatch: {source} for table '{self._table_name}' stores "
+                f"'{stored_model}' but the active embedder is '{active_model}'. "
+                "Run 'swampcastle reforge' to re-embed with the configured model."
+            )
+
+        stored_fingerprint = stored.get("embedding_fingerprint")
+        active_fingerprint = active["embedding_fingerprint"]
+        if stored_fingerprint and stored_fingerprint != active_fingerprint:
+            raise RuntimeError(
+                f"Embedder fingerprint mismatch: {source} for table '{self._table_name}' stores "
+                f"{fingerprint_sha256(stored_fingerprint)[:12]} but the active embedder is "
+                f"{fingerprint_sha256(active_fingerprint)[:12]}. "
+                "Run 'swampcastle reforge' to re-embed with the configured model."
+            )
+
+    def _check_embedder_contract(self) -> None:
+        stored = self._load_embedder_meta()
+        if stored is not None:
+            self._validate_embedder_contract(stored, source="collection metadata")
+            return
+
+        try:
+            rows = self._table.search().limit(1).to_list()
+        except Exception:
+            rows = []
+        if not rows:
+            return
+
+        stored = self._contract_from_metadata(self._extract_metadata(rows[0]))
+        if stored is None:
+            return
+        self._validate_embedder_contract(stored, source="stored record metadata")
+        if "embedding_fingerprint" in stored:
+            self._write_embedder_meta()
+
+    def _validate_incoming_embeddings(self, metadatas: list[dict]) -> None:
+        for metadata in metadatas:
+            stored = self._contract_from_metadata(metadata)
+            if stored is not None:
+                self._validate_embedder_contract(stored, source="incoming embedded record")
 
     def _list_table_names(self) -> list:
         result = self._db.list_tables()
@@ -134,13 +240,25 @@ class LanceCollection(CollectionStore):
             )
 
     def _to_records(self, documents, ids, metadatas, embeddings=None):
+        provided_embeddings = embeddings is not None
         if embeddings is None:
             embeddings = self._embedder.embed(documents)
 
+        active_contract = self._active_embedder_contract()
         records = []
         for doc, id_, meta, vec in zip(documents, ids, metadatas, embeddings):
             meta_with_model = dict(meta)
-            meta_with_model.setdefault("embedding_model", self._embedder.model_name)
+            if provided_embeddings:
+                meta_with_model.setdefault("embedding_model", active_contract["embedding_model"])
+                meta_with_model.setdefault(
+                    "embedding_fingerprint",
+                    dict(active_contract["embedding_fingerprint"]),
+                )
+            else:
+                meta_with_model["embedding_model"] = active_contract["embedding_model"]
+                meta_with_model["embedding_fingerprint"] = dict(
+                    active_contract["embedding_fingerprint"]
+                )
             record = {
                 "id": id_,
                 "document": doc,
@@ -182,10 +300,13 @@ class LanceCollection(CollectionStore):
         metadatas = metadatas or [{} for _ in ids]
         if not _raw:
             metadatas = self._inject_sync(metadatas)
+        if embeddings is not None:
+            self._validate_incoming_embeddings(metadatas)
         records = self._to_records(documents, ids, metadatas, embeddings)
 
         if self._table is None:
             self._create_table(records)
+            self._write_embedder_meta()
             return
 
         try:
@@ -204,6 +325,7 @@ class LanceCollection(CollectionStore):
                 except Exception:
                     pass
             self._table.add(records)
+        self._write_embedder_meta()
 
     def _refresh(self):
         if self._table is not None:
@@ -361,7 +483,13 @@ class LanceBackend:
             embedder = get_embedder()
 
         db = lancedb.connect(palace_path)
-        return LanceCollection(db, collection_name, embedder, sync_identity=sync_identity)
+        return LanceCollection(
+            db,
+            collection_name,
+            embedder,
+            sync_identity=sync_identity,
+            palace_path=palace_path,
+        )
 
 
 class LocalStorageFactory(StorageFactory):

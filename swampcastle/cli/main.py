@@ -167,7 +167,17 @@ def main():
     p.add_argument("--device", default=None)
 
     # armory (embedders)
-    sub.add_parser("armory", aliases=["embedders"], help="List available embedding models")
+    p = sub.add_parser("armory", aliases=["embedders"], help="List available embedding models")
+    p.add_argument(
+        "--verify",
+        action="store_true",
+        help="Print the active embedder fingerprint and deterministic probe hash for cross-machine comparison",
+    )
+    p.add_argument(
+        "--json",
+        action="store_true",
+        help="With --verify, emit the verification report as JSON",
+    )
 
     # kg proposal review
     p_kg = sub.add_parser("kg", help="Review and manage KG candidate triples")

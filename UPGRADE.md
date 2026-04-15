@@ -226,9 +226,30 @@ drawer data.
 
 ### Embedding consistency
 
-Both nodes **must use the same embedding model** for vectors to be
-compatible.  Configure both machines with the same `embedder` in
-`config.json`.  If you change model, run `swampcastle reindex` on both sides.
+Both nodes **must use the same embedding contract** for vectors to be
+compatible. That means the same backend / model combination, not just the same
+nominal model family. SwampCastle now stores and checks embedder fingerprints
+so obvious mixed-index mistakes fail earlier.
+
+Configure both machines with the same `embedder` in `config.json`. For the
+strictest offline-safe path, use the canonical CPU-only ONNX backend:
+
+```json
+{
+  "embedder": "onnx"
+}
+```
+
+If you change model, run `swampcastle reindex` on both sides.
+
+To confirm two machines really match before syncing precomputed vectors:
+
+```bash
+swampcastle embedders --verify
+swampcastle embedders --verify --json
+```
+
+The fingerprint and probe hash should match on both machines.
 
 ### Conflict resolution
 

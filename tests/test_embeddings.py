@@ -8,6 +8,7 @@ from swampcastle.embeddings import (
     OnnxEmbedder,
     SentenceTransformerEmbedder,
     OllamaEmbedder,
+    build_embedding_verification_report,
     get_embedder,
     resolve_model_name,
     list_embedders,
@@ -190,6 +191,36 @@ def test_onnx_embedder_missing_tokenizers():
             e.embed(["test"])
 
 
+def test_onnx_embedder_pins_cpu_execution_provider():
+    fake_session = MagicMock()
+    fake_session_options = MagicMock()
+    fake_tokenizer = MagicMock()
+
+    fake_ort = MagicMock()
+    fake_ort.SessionOptions.return_value = fake_session_options
+    fake_ort.InferenceSession.return_value = fake_session
+    fake_ort.get_available_providers.return_value = [
+        "AzureExecutionProvider",
+        "CPUExecutionProvider",
+    ]
+
+    fake_tokenizers = MagicMock()
+    fake_tokenizers.Tokenizer.from_file.return_value = fake_tokenizer
+
+    with patch.dict(
+        "sys.modules",
+        {
+            "onnxruntime": fake_ort,
+            "tokenizers": fake_tokenizers,
+        },
+    ):
+        with patch("swampcastle.embeddings._ensure_onnx_model", return_value="/tmp/fake-onnx"):
+            embedder = OnnxEmbedder()
+            embedder._load()
+
+    assert fake_ort.InferenceSession.call_args.kwargs["providers"] == ["CPUExecutionProvider"]
+
+
 # ── get_embedder factory ──────────────────────────────────────────────
 
 
@@ -201,6 +232,11 @@ def test_get_embedder_default():
 
 def test_get_embedder_explicit_onnx():
     e = get_embedder({"embedder": "all-MiniLM-L6-v2"})
+    assert isinstance(e, OnnxEmbedder)
+
+
+def test_get_embedder_backend_alias_onnx():
+    e = get_embedder({"embedder": "onnx"})
     assert isinstance(e, OnnxEmbedder)
 
 
@@ -257,6 +293,27 @@ def test_list_embedders_returns_list():
         assert "notes" in e
 
 
+def test_build_embedding_verification_report_is_deterministic():
+    class FakeEmbedder:
+        model_name = "fake-embedder"
+        dimension = 3
+        fingerprint = {
+            "backend": "fake",
+            "model_name": "fake-embedder",
+            "dimension": 3,
+        }
+
+        def embed(self, texts):
+            return [[float(i), float(len(text)), 1.0] for i, text in enumerate(texts, start=1)]
+
+    report_a = build_embedding_verification_report(FakeEmbedder())
+    report_b = build_embedding_verification_report(FakeEmbedder())
+
+    assert report_a == report_b
+    assert report_a["embedder"]["model_name"] == "fake-embedder"
+    assert report_a["probe_hash"]
+
+
 # ── embedding_model tracking in db.py ─────────────────────────────────
 
 
@@ -282,8 +339,10 @@ def test_embedding_model_stored_in_metadata(tmp_path):
     result = col.get(ids=["t1"], include=["metadatas"])
     meta = result["metadatas"][0]
     assert "embedding_model" in meta
+    assert "embedding_fingerprint" in meta
     # Default embedder is now OnnxEmbedder, same model name
     assert meta["embedding_model"] == "all-MiniLM-L6-v2"
+    assert meta["embedding_fingerprint"]["backend"] == "onnx"
 
 
 def test_lance_dimension_mismatch_guard(tmp_path):
@@ -321,6 +380,51 @@ def test_lance_dimension_mismatch_guard(tmp_path):
 
     with pytest.raises(RuntimeError, match="dimension"):
         open_collection(palace, backend="lance", embedder=FakeEmbedder768())
+
+
+def test_lance_fingerprint_mismatch_guard_for_same_dimension(tmp_path):
+    from swampcastle.storage.lance import LanceBackend
+
+    def open_collection(path, **kw):
+        return LanceBackend().get_collection(
+            path,
+            "swampcastle_chests",
+            create=True,
+            embedder=kw.get("embedder"),
+        )
+
+    class FakeEmbedderA:
+        model_name = "same-model"
+        dimension = 384
+        fingerprint = {
+            "backend": "fake-a",
+            "model_name": "same-model",
+            "dimension": 384,
+        }
+
+        def embed(self, texts):
+            return [[0.1] * 384 for _ in texts]
+
+    class FakeEmbedderB:
+        model_name = "same-model"
+        dimension = 384
+        fingerprint = {
+            "backend": "fake-b",
+            "model_name": "same-model",
+            "dimension": 384,
+        }
+
+        def embed(self, texts):
+            return [[0.2] * 384 for _ in texts]
+
+    palace = str(tmp_path / "palace")
+    col = open_collection(palace, embedder=FakeEmbedderA())
+    col.upsert(
+        documents=["seed"], ids=["s1"], metadatas=[{"wing": "t", "room": "r", "source_file": ""}]
+    )
+
+    with pytest.raises(RuntimeError, match="fingerprint"):
+        open_collection(palace, embedder=FakeEmbedderB())
 
 
 def test_lance_node_id_seq_are_filterable_columns(tmp_path):

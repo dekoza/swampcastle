@@ -19,6 +19,37 @@ class TestFactoryRouter:
         factory = factory_from_settings(settings)
         assert isinstance(factory, LocalStorageFactory)
 
+    def test_lance_backend_uses_embedder_from_settings(self, tmp_path, monkeypatch):
+        settings = CastleSettings(
+            castle_path=tmp_path / "castle",
+            backend="lance",
+            embedder="bge-small",
+            embedder_device="cpu",
+            _env_file=None,
+        )
+        sentinel_embedder = object()
+        captured = {}
+
+        def fake_get_embedder(config=None):
+            captured["config"] = config
+            return sentinel_embedder
+
+        class DummyFactory:
+            def __init__(self, castle_path, embedder=None):
+                self.castle_path = castle_path
+                self.embedder = embedder
+
+        monkeypatch.setattr("swampcastle.storage.get_embedder", fake_get_embedder)
+        monkeypatch.setattr("swampcastle.storage.lance.LocalStorageFactory", DummyFactory)
+
+        factory = factory_from_settings(settings)
+
+        assert factory.embedder is sentinel_embedder
+        assert captured["config"] == {
+            "embedder": "bge-small",
+            "embedder_options": {"device": "cpu"},
+        }
+
     def test_chroma_backend_raises_not_implemented(self, tmp_path):
         settings = CastleSettings(castle_path=tmp_path / "castle", backend="chroma", _env_file=None)
         with pytest.raises(NotImplementedError, match="removed in v4"):

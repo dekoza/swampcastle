@@ -680,12 +680,37 @@ def test_cmd_armory_lists_models(capsys):
             }
         ],
     ):
-        commands.cmd_armory(SimpleNamespace())
+        commands.cmd_armory(SimpleNamespace(verify=False, json=False, palace=None, backend=None))
 
     out = capsys.readouterr().out
     assert "all-MiniLM-L6-v2" in out
     assert "minilm" in out
     assert "onnx" in out
+
+
+def test_cmd_armory_verify_prints_report(capsys):
+    fake_report = {
+        "embedder": {
+            "backend": "onnx",
+            "model_name": "all-MiniLM-L6-v2",
+            "dimension": 384,
+        },
+        "fingerprint_hash": "fp123",
+        "probe_hash": "probe456",
+        "probe_count": 8,
+    }
+
+    with patch("swampcastle.embeddings.get_embedder", return_value=object()):
+        with patch(
+            "swampcastle.embeddings.build_embedding_verification_report", return_value=fake_report
+        ):
+            commands.cmd_armory(SimpleNamespace(verify=True, json=False, palace=None, backend=None))
+
+    out = capsys.readouterr().out
+    assert "Embedder verification" in out
+    assert "all-MiniLM-L6-v2" in out
+    assert "fp123" in out
+    assert "probe456" in out
 
 
 def test_cmd_garrison_exits_when_uvicorn_missing(capsys):

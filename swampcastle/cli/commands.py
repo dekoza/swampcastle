@@ -481,7 +481,30 @@ def cmd_reforge(args):
 
 
 def cmd_armory(args):
-    from swampcastle.embeddings import list_embedders
+    from swampcastle.embeddings import (
+        build_embedding_verification_report,
+        get_embedder,
+        list_embedders,
+    )
+
+    if getattr(args, "verify", False):
+        import json
+
+        settings = _settings(args)
+        embedder = get_embedder(settings.embedder_config)
+        report = build_embedding_verification_report(embedder)
+        if getattr(args, "json", False):
+            print(json.dumps(report, indent=2, sort_keys=True))
+            return
+
+        _print_section("Embedder verification")
+        _print_kv("Backend", report["embedder"].get("backend", "unknown"))
+        _print_kv("Model", report["embedder"].get("model_name", "unknown"))
+        _print_kv("Dimension", report["embedder"].get("dimension", "unknown"))
+        _print_kv("Fingerprint", report["fingerprint_hash"])
+        _print_kv("Probe hash", report["probe_hash"])
+        _print_kv("Probe texts", report["probe_count"])
+        return
 
     models = list_embedders()
     print("  Available embedding models:")

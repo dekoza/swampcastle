@@ -27,30 +27,24 @@ th{background:#0b3d91;color:#fff}
 <div class="card">
 <h2>What changed (implementation notes)</h2>
 <ul>
-<li>Added a module-level worker <code>_distill_worker(args)</code> which constructs a <code>Dialect</code> instance and returns (doc_id, metadata_with_aaak).</li>
-<li>Main process submits doc-level tasks to a process pool using a bounded sliding window to avoid unbounded memory from many futures.</li>
-<li>Main process collects worker results into an ordered update list and performs a single bulk <code>collection.update(...)</code> call.</li>
-<li>Safeguards: worker failures are logged and skipped; BrokenProcessPool is re-raised so catastrophic pool failures are visible; max worker count is capped (32).</li>
-<li>Benchmarks script added: <code>benchmarks/distill_bench.py</code></li>
+<li>Workers are started with a <code>spawn</code> multiprocessing context to avoid inheriting fork-unsafe storage state from the orchestrator process.</li>
+<li>A module-level <code>_init_worker(config_path)</code> initializes one <code>Dialect</code> instance per worker process.</li>
+<li>The orchestrator submits bounded batches, gathers completed results with <code>wait(..., FIRST_COMPLETED)</code>, preserves drawer order, and flushes metadata updates in batches.</li>
+<li>Benchmarks now use repeated fresh runs, alternating execution order, and explicit sequential/parallel parity checks instead of one-shot timing.</li>
+<li>Scripts: <code>benchmarks/distill_bench.py</code> and <code>benchmarks/mine_bench.py</code></li>
 </ul>
 </div>
 
 <div class="card">
-<h2>Micro-benchmarks (before vs after — sequential vs parallel)</h2>
-<p>Test setup: generated 1,000 drawers each containing a repeated paragraph (multiplier = 500) to make compression CPU-bound. Measured wall-clock time for <code>VaultService.distill()</code> run in the same process for the sequential path and for the parallel path with varying worker counts.</p>
-
-<table>
-<thead>
-<tr><th>Scenario</th><th>Time (s)</th><th>Notes</th></tr>
-</thead>
-<tbody>
-<tr><td>Sequential (baseline)</td><td>~2.73 s</td><td>Single-process compression of 1000 larger docs (mult=500)</td></tr>
-<tr><td>Parallel — 2 workers</td><td>~1.41 s</td><td>~1.93× speedup vs baseline</td></tr>
-<tr><td>Parallel — 4 workers</td><td>~0.73 s</td><td>~3.7× speedup vs baseline</td></tr>
-<tr><td>Parallel — 8 workers</td><td>~0.39 s</td><td>~7.0× speedup vs baseline</td></tr>
-</tbody>
-</table>
-<p class="small">Runtimes were measured on the development machine. Absolute timings will vary across machines. For small documents (< 50 repetitions) the compression work is too light and process overhead dominates; parallelism is most beneficial when per-document CPU work is non-trivial.</p>
+<h2>Benchmark methodology</h2>
+<p>The original one-shot timings were too weak to justify hard speedup claims. Current benchmarks use a fairer method:</p>
+<ul>
+<li>fresh state for every measured run,</li>
+<li>alternating sequential/parallel execution order to reduce warm-cache bias,</li>
+<li>multiple measured runs plus warmups,</li>
+<li>parity checks that fail if sequential and parallel outputs differ.</li>
+</ul>
+<p class="small">Interpret the output as machine-specific measurements. The scripts report min/mean/median/max/stdev instead of a single anecdotal number.</p>
 </div>
 
 <div class="card">
@@ -65,9 +59,11 @@ th{background:#0b3d91;color:#fff}
 
 <div class="card">
 <h2>How to run the benchmark</h2>
-<p>Use the included script:</p>
-<pre>uv run python benchmarks/distill_bench.py -n 1000 -w 4 -m 500</pre>
-<p>Flags: <code>-n</code> number of drawers, <code>-w</code> worker count, <code>-m</code> repetition multiplier per document to tune CPU work.</p>
+<p>Distill:</p>
+<pre>uv run python benchmarks/distill_bench.py -n 1000 -w 4 -m 500 --runs 5 --warmup 1</pre>
+<p>Mine:</p>
+<pre>uv run python benchmarks/mine_bench.py --files 300 --lines-per-file 80 -w 4 --runs 5 --warmup 1</pre>
+<p>Use <code>--json</code> on either script for machine-readable output.</p>
 </div>
 
 </div>

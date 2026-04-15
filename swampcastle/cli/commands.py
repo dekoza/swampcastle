@@ -164,8 +164,13 @@ def cmd_gather(args):
     palace_path = str(settings.castle_path)
     project_dir = os.path.expanduser(args.dir)
     storage_factory = None
+    progress_callback = None
     if not args.dry_run:
         storage_factory = factory_from_settings(settings)
+        if args.mode == "projects" and not getattr(args, "explain", False):
+
+            def progress_callback(processed: int, total: int) -> None:
+                _print_progress("Mining", processed, total)
 
     _print_section("Gather")
     _print_kv("Mode", args.mode)
@@ -205,6 +210,7 @@ def cmd_gather(args):
                 explain=getattr(args, "explain", False),
                 extract_kg_proposals=getattr(args, "extract_kg_proposals", False),
                 embed_batch_size=getattr(settings, "embed_batch_size", None),
+                progress_callback=progress_callback,
             )
     except KeyboardInterrupt:
         print("\n  Cancelled by user.")
@@ -284,6 +290,12 @@ def cmd_distill(args):
     config_path = getattr(args, "config", None)
     apply = getattr(args, "apply", False)
     effective_dry_run = args.dry_run or not apply
+    progress_callback = None
+
+    if not effective_dry_run:
+
+        def progress_callback(processed: int, total: int) -> None:
+            _print_progress("Distilling", processed, total)
 
     with Castle(settings, factory_from_settings(settings)) as castle:
         count = castle.vault.distill(
@@ -291,6 +303,7 @@ def cmd_distill(args):
             room=args.room,
             dry_run=effective_dry_run,
             config_path=config_path,
+            progress_callback=progress_callback,
         )
         if count == 0:
             print("  No drawers to distill.")

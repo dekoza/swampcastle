@@ -168,6 +168,7 @@ def test_cmd_gather_projects_uses_miner(tmp_path, capsys):
     assert mock_mine.call_args.kwargs["include_ignored"] == ["*.log"]
     assert mock_mine.call_args.kwargs["extract_kg_proposals"] is True
     assert mock_mine.call_args.kwargs["embed_batch_size"] == 128
+    assert callable(mock_mine.call_args.kwargs["progress_callback"])
 
 
 def test_cmd_gather_exits_cleanly_on_keyboard_interrupt(tmp_path, capsys):
@@ -228,6 +229,40 @@ def test_cmd_gather_convos_uses_convo_miner_in_dry_run(tmp_path):
     assert mock_mine.call_args.kwargs["storage_factory"] is None
     assert mock_mine.call_args.kwargs["extract_mode"] == "exchange"
     assert mock_mine.call_args.kwargs["extract_kg_proposals"] is True
+
+
+def test_cmd_gather_projects_renders_progress_bar(tmp_path, capsys):
+    target = tmp_path / "proj"
+    target.mkdir()
+    args = SimpleNamespace(
+        dir=str(target),
+        mode="projects",
+        wing="wing1",
+        agent="swampcastle",
+        dry_run=False,
+        no_gitignore=False,
+        include_ignored=[],
+        limit=0,
+        extract_kg_proposals=False,
+        palace=None,
+        backend=None,
+    )
+    settings = SimpleNamespace(castle_path=tmp_path / "castle", embed_batch_size=128)
+
+    def fake_mine(*args, **kwargs):
+        progress_callback = kwargs["progress_callback"]
+        progress_callback(0, 3)
+        progress_callback(2, 3)
+        progress_callback(3, 3)
+
+    with patch("swampcastle.cli.commands._settings", return_value=settings):
+        with patch("swampcastle.cli.commands.factory_from_settings", return_value="factory"):
+            with patch("swampcastle.mining.miner.mine", side_effect=fake_mine):
+                commands.cmd_gather(args)
+
+    out = capsys.readouterr().out
+    assert "Mining" in out
+    assert "3/3" in out
 
 
 def test_cmd_herald_prints_protocol_only(capsys):
@@ -328,7 +363,15 @@ def test_cmd_distill_defaults_to_preview_mode(capsys):
         with patch("swampcastle.cli.commands.factory_from_settings", return_value=object()):
             commands.cmd_distill(args)
 
-    assert castle.calls == [{"wing": "w", "room": "r", "dry_run": True, "config_path": None}]
+    assert castle.calls == [
+        {
+            "wing": "w",
+            "room": "r",
+            "dry_run": True,
+            "config_path": None,
+            "progress_callback": None,
+        }
+    ]
     out = capsys.readouterr().out
     assert "DRY RUN" in out
     assert "--apply" in out
@@ -359,7 +402,13 @@ def test_cmd_distill_passes_config_and_dry_run(capsys):
             commands.cmd_distill(args)
 
     assert castle.calls == [
-        {"wing": "w", "room": "r", "dry_run": True, "config_path": "entities.json"}
+        {
+            "wing": "w",
+            "room": "r",
+            "dry_run": True,
+            "config_path": "entities.json",
+            "progress_callback": None,
+        }
     ]
     assert "DRY RUN" in capsys.readouterr().out
 
@@ -382,8 +431,44 @@ def test_cmd_distill_apply_enables_real_write(capsys):
         with patch("swampcastle.cli.commands.factory_from_settings", return_value=object()):
             commands.cmd_distill(args)
 
-    assert castle.calls == [{"wing": "w", "room": "r", "dry_run": False, "config_path": None}]
+    assert castle.calls[0]["wing"] == "w"
+    assert castle.calls[0]["room"] == "r"
+    assert castle.calls[0]["dry_run"] is False
+    assert castle.calls[0]["config_path"] is None
+    assert callable(castle.calls[0]["progress_callback"])
     assert "Distilled 2 drawers with AAAK dialect." in capsys.readouterr().out
+
+
+def test_cmd_distill_renders_progress_bar(capsys):
+    class DistillCastle(DummyCastle):
+        def __init__(self, settings, factory):
+            self.calls = []
+            self.catalog = SimpleNamespace(status=lambda: None)
+            self.search = SimpleNamespace(search=lambda q: None)
+
+            def distill(**kwargs):
+                self.calls.append(kwargs)
+                progress_callback = kwargs["progress_callback"]
+                progress_callback(0, 3)
+                progress_callback(2, 3)
+                progress_callback(3, 3)
+                return 3
+
+            self.vault = SimpleNamespace(distill=distill)
+            self._collection = object()
+
+    castle = DistillCastle(None, None)
+    args = SimpleNamespace(
+        wing="w", room="r", dry_run=False, apply=True, config=None, palace=None, backend=None
+    )
+
+    with patch("swampcastle.castle.Castle", lambda s, f: castle):
+        with patch("swampcastle.cli.commands.factory_from_settings", return_value=object()):
+            commands.cmd_distill(args)
+
+    out = capsys.readouterr().out
+    assert "Distilling" in out
+    assert "3/3" in out
 
 
 def test_cmd_kg_extract_defaults_to_preview_mode(capsys):
@@ -394,18 +479,20 @@ def test_cmd_kg_extract_defaults_to_preview_mode(capsys):
             self.search = SimpleNamespace(search=lambda q: None)
             self.vault = SimpleNamespace(distill=lambda **kwargs: 0, reforge=lambda **kwargs: 0)
             self.kg_proposals = SimpleNamespace(
-                extract_from_drawers=lambda **kwargs: self.calls.append(kwargs)
-                or [
-                    SimpleNamespace(
-                        candidate_id="cand_1",
-                        subject_text="swampcastle",
-                        predicate="uses",
-                        object_text="LanceDB",
-                        confidence=0.9,
-                        modality="asserted",
-                        status="proposed",
-                    )
-                ]
+                extract_from_drawers=lambda **kwargs: (
+                    self.calls.append(kwargs)
+                    or [
+                        SimpleNamespace(
+                            candidate_id="cand_1",
+                            subject_text="swampcastle",
+                            predicate="uses",
+                            object_text="LanceDB",
+                            confidence=0.9,
+                            modality="asserted",
+                            status="proposed",
+                        )
+                    ]
+                )
             )
             self._collection = object()
 
@@ -432,18 +519,20 @@ def test_cmd_kg_extract_apply_persists_proposals(capsys):
             self.search = SimpleNamespace(search=lambda q: None)
             self.vault = SimpleNamespace(distill=lambda **kwargs: 0, reforge=lambda **kwargs: 0)
             self.kg_proposals = SimpleNamespace(
-                extract_from_drawers=lambda **kwargs: self.calls.append(kwargs)
-                or [
-                    SimpleNamespace(
-                        candidate_id="cand_1",
-                        subject_text="swampcastle",
-                        predicate="uses",
-                        object_text="LanceDB",
-                        confidence=0.9,
-                        modality="asserted",
-                        status="proposed",
-                    )
-                ]
+                extract_from_drawers=lambda **kwargs: (
+                    self.calls.append(kwargs)
+                    or [
+                        SimpleNamespace(
+                            candidate_id="cand_1",
+                            subject_text="swampcastle",
+                            predicate="uses",
+                            object_text="LanceDB",
+                            confidence=0.9,
+                            modality="asserted",
+                            status="proposed",
+                        )
+                    ]
+                )
             )
             self._collection = object()
 
@@ -608,29 +697,35 @@ def test_cmd_kg_accept_and_reject(capsys):
             self.search = SimpleNamespace(search=lambda q: None)
             self.vault = SimpleNamespace(distill=lambda **kwargs: 0, reforge=lambda **kwargs: 0)
             self.kg_proposals = SimpleNamespace(
-                accept=lambda cmd: calls.append(("accept", cmd))
-                or SimpleNamespace(
-                    success=True,
-                    candidate_id=cmd.candidate_id,
-                    status="accepted",
-                    triple_id="t1",
-                    subject_text=cmd.subject_text or "SwampCastle",
-                    predicate=cmd.predicate or "uses",
-                    object_text=cmd.object_text or "Clerk",
-                    invalidated_count=(1 if cmd.action == "accept_and_invalidate_conflict" else 0),
-                    error=None,
+                accept=lambda cmd: (
+                    calls.append(("accept", cmd))
+                    or SimpleNamespace(
+                        success=True,
+                        candidate_id=cmd.candidate_id,
+                        status="accepted",
+                        triple_id="t1",
+                        subject_text=cmd.subject_text or "SwampCastle",
+                        predicate=cmd.predicate or "uses",
+                        object_text=cmd.object_text or "Clerk",
+                        invalidated_count=(
+                            1 if cmd.action == "accept_and_invalidate_conflict" else 0
+                        ),
+                        error=None,
+                    )
                 ),
-                reject=lambda candidate_id: calls.append(("reject", candidate_id))
-                or SimpleNamespace(
-                    success=True,
-                    candidate_id=candidate_id,
-                    status="rejected",
-                    triple_id=None,
-                    subject_text=None,
-                    predicate=None,
-                    object_text=None,
-                    invalidated_count=0,
-                    error=None,
+                reject=lambda candidate_id: (
+                    calls.append(("reject", candidate_id))
+                    or SimpleNamespace(
+                        success=True,
+                        candidate_id=candidate_id,
+                        status="rejected",
+                        triple_id=None,
+                        subject_text=None,
+                        predicate=None,
+                        object_text=None,
+                        invalidated_count=0,
+                        error=None,
+                    )
                 ),
             )
             self._collection = object()

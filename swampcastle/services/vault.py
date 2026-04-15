@@ -36,6 +36,7 @@ _DISTILL_MAX_WORKERS = 32
 _DISTILL_MAX_IN_FLIGHT_BATCHES = 32
 _DISTILL_TASK_BATCH_SIZE = 50
 _DISTILL_WRITE_BATCH_SIZE = 500
+_DISTILL_PROGRESS_UPDATE_STEP = 100
 
 
 def _init_worker(cfg_path):
@@ -82,6 +83,31 @@ def _flush_distill_updates(collection: CollectionStore, updates: list[tuple[str,
     )
 
 
+def _should_report_distill_progress(processed: int, total: int) -> bool:
+    return processed >= total or processed % _DISTILL_PROGRESS_UPDATE_STEP == 0
+
+
+def _resolve_distill_workers(explicit: int | None) -> int | None:
+    if explicit is not None:
+        if explicit <= 1:
+            return None
+        return min(explicit, _DISTILL_MAX_WORKERS)
+    if os.environ.get("SWAMPCASTLE_DISTILL_PARALLEL", "").lower() in (
+        "1",
+        "true",
+        "yes",
+    ):
+        raw = os.environ.get("SWAMPCASTLE_DISTILL_WORKERS", "")
+        try:
+            configured = int(raw) if raw else (os.cpu_count() or 2)
+        except ValueError:
+            configured = os.cpu_count() or 2
+        if configured <= 1:
+            return None
+        return min(configured, _DISTILL_MAX_WORKERS)
+    return None
+
+
 _DIARY_READ_SCAN_LIMIT = 100_000
 _REFORGE_MIN_BATCH_SIZE = 1000
 _REFORGE_MAX_PROGRESS_UPDATES = 20
@@ -106,6 +132,112 @@ class VaultService:
     def _invalidate_graph_cache(self) -> None:
         if self._graph_cache_invalidator is not None:
             self._graph_cache_invalidator()
+
+    def _distill_sequential(
+        self,
+        ids: list[str],
+        documents: list[str],
+        metadatas: list[dict],
+        *,
+        total: int,
+        dry_run: bool,
+        config_path: str | None,
+        progress_callback: Callable[[int, int], None] | None,
+    ) -> int:
+        from swampcastle.dialect import Dialect
+
+        if config_path:
+            dialect = Dialect.from_config(config_path)
+        else:
+            dialect = Dialect()
+
+        updates = []
+        processed = 0
+        for doc_id, doc, meta in zip(ids, documents, metadatas):
+            meta_copy = dict(meta)
+            aaak = dialect.compress(doc, metadata=meta_copy)
+            meta_copy["aaak"] = aaak
+            updates.append((doc_id, meta_copy))
+            processed += 1
+
+            if progress_callback is not None and _should_report_distill_progress(processed, total):
+                progress_callback(processed, total)
+
+        if not dry_run and updates:
+            _flush_distill_updates(self._col, updates)
+
+        return len(ids)
+
+    def _distill_parallel(
+        self,
+        ids: list[str],
+        documents: list[str],
+        metadatas: list[dict],
+        *,
+        total: int,
+        dry_run: bool,
+        config_path: str | None,
+        max_workers: int,
+        progress_callback: Callable[[int, int], None] | None,
+    ) -> int:
+        task_batch_size = max(1, len(ids) // (max_workers * 4))
+        task_batch_size = min(task_batch_size, _DISTILL_TASK_BATCH_SIZE)
+        in_flight_limit = min(max_workers * 4, _DISTILL_MAX_IN_FLIGHT_BATCHES)
+        batch_iter = iter(_iter_distill_batches(ids, documents, metadatas, task_batch_size))
+        write_buffer = []
+        ready_results = {}
+        next_write_index = 0
+        processed = 0
+        spawn_context = multiprocessing.get_context("spawn")
+
+        with ProcessPoolExecutor(
+            max_workers=max_workers,
+            mp_context=spawn_context,
+            initializer=_init_worker,
+            initargs=(config_path,),
+        ) as ex:
+            pending = set()
+
+            for _ in range(in_flight_limit):
+                batch = next(batch_iter, None)
+                if batch is None:
+                    break
+                pending.add(ex.submit(_distill_worker, batch))
+
+            while pending:
+                done, pending = wait(pending, return_when=FIRST_COMPLETED)
+
+                for future in done:
+                    batch_results = future.result()
+                    processed += len(batch_results)
+
+                    if progress_callback is not None:
+                        progress_callback(processed, total)
+
+                    if not dry_run:
+                        for doc_id, metadata in batch_results:
+                            ready_results[doc_id] = metadata
+
+                        while next_write_index < len(ids):
+                            next_doc_id = ids[next_write_index]
+                            if next_doc_id not in ready_results:
+                                break
+
+                            write_buffer.append((next_doc_id, ready_results.pop(next_doc_id)))
+                            next_write_index += 1
+
+                            if len(write_buffer) >= _DISTILL_WRITE_BATCH_SIZE:
+                                _flush_distill_updates(self._col, write_buffer)
+                                write_buffer.clear()
+
+                    batch = next(batch_iter, None)
+                    if batch is not None:
+                        pending.add(ex.submit(_distill_worker, batch))
+
+        if not dry_run and write_buffer:
+            _flush_distill_updates(self._col, write_buffer)
+
+        return processed
 
     def add_drawer(self, cmd: AddDrawerCommand) -> DrawerResult:
         drawer_id = cmd.drawer_id()
@@ -289,6 +421,7 @@ class VaultService:
         dry_run: bool = False,
         config_path: str = None,
         parallel_workers: int | None = None,
+        progress_callback: Callable[[int, int], None] | None = None,
     ) -> int:
         """Compute and store AAAK Dialect summaries in drawer metadata.
 
@@ -303,6 +436,7 @@ class VaultService:
             config_path: Path to entities.json for custom Dialect config.
             parallel_workers: Optional worker count for CPU-bound AAAK compression.
                 Values <= 1 keep the sequential path.
+            progress_callback: Optional callback receiving (processed, total).
 
         Returns:
             Number of drawers processed.
@@ -317,110 +451,40 @@ class VaultService:
         ids = results.get("ids", [])
         documents = results.get("documents", [])
         metadatas = results.get("metadatas", [])
+        total = len(ids)
 
         if not ids:
+            if progress_callback is not None:
+                progress_callback(0, 0)
             return 0
 
-        # Determine parallelism: explicit arg > env var > disabled
-        def _resolve_workers(explicit: int | None) -> int | None:
-            if explicit is not None:
-                if explicit <= 1:
-                    return None
-                return min(explicit, _DISTILL_MAX_WORKERS)
-            if os.environ.get("SWAMPCASTLE_DISTILL_PARALLEL", "").lower() in (
-                "1",
-                "true",
-                "yes",
-            ):
-                raw = os.environ.get("SWAMPCASTLE_DISTILL_WORKERS", "")
-                try:
-                    configured = int(raw) if raw else (os.cpu_count() or 2)
-                except ValueError:
-                    configured = os.cpu_count() or 2
-                if configured <= 1:
-                    return None
-                return min(configured, _DISTILL_MAX_WORKERS)
-            return None
+        if progress_callback is not None:
+            progress_callback(0, total)
 
-        max_workers = _resolve_workers(parallel_workers)
+        max_workers = _resolve_distill_workers(parallel_workers)
 
         # Sequential fallback (preserve current behaviour by default)
         if max_workers is None:
-            from swampcastle.dialect import Dialect
+            return self._distill_sequential(
+                ids,
+                documents,
+                metadatas,
+                total=total,
+                dry_run=dry_run,
+                config_path=config_path,
+                progress_callback=progress_callback,
+            )
 
-            if config_path:
-                dialect = Dialect.from_config(config_path)
-            else:
-                dialect = Dialect()
-
-            updates = []
-            for doc_id, doc, meta in zip(ids, documents, metadatas):
-                meta_copy = dict(meta)
-                aaak = dialect.compress(doc, metadata=meta_copy)
-                meta_copy["aaak"] = aaak
-                updates.append((doc_id, meta_copy))
-
-            if not dry_run and updates:
-                _flush_distill_updates(self._col, updates)
-
-            return len(ids)
-
-        # Parallel path: orchestrator owns collection I/O, workers only compress batches.
-        task_batch_size = max(1, len(ids) // (max_workers * 4))
-        task_batch_size = min(task_batch_size, _DISTILL_TASK_BATCH_SIZE)
-        in_flight_limit = min(max_workers * 4, _DISTILL_MAX_IN_FLIGHT_BATCHES)
-        batch_iter = iter(_iter_distill_batches(ids, documents, metadatas, task_batch_size))
-        write_buffer = []
-        ready_results = {}
-        next_write_index = 0
-        processed = 0
-        spawn_context = multiprocessing.get_context("spawn")
-
-        with ProcessPoolExecutor(
+        return self._distill_parallel(
+            ids,
+            documents,
+            metadatas,
+            total=total,
+            dry_run=dry_run,
+            config_path=config_path,
             max_workers=max_workers,
-            mp_context=spawn_context,
-            initializer=_init_worker,
-            initargs=(config_path,),
-        ) as ex:
-            pending = set()
-
-            for _ in range(in_flight_limit):
-                batch = next(batch_iter, None)
-                if batch is None:
-                    break
-                pending.add(ex.submit(_distill_worker, batch))
-
-            while pending:
-                done, pending = wait(pending, return_when=FIRST_COMPLETED)
-
-                for future in done:
-                    batch_results = future.result()
-                    processed += len(batch_results)
-
-                    if not dry_run:
-                        for doc_id, metadata in batch_results:
-                            ready_results[doc_id] = metadata
-
-                        while next_write_index < len(ids):
-                            next_doc_id = ids[next_write_index]
-                            if next_doc_id not in ready_results:
-                                break
-
-                            write_buffer.append((next_doc_id, ready_results.pop(next_doc_id)))
-                            next_write_index += 1
-
-                            if len(write_buffer) >= _DISTILL_WRITE_BATCH_SIZE:
-                                _flush_distill_updates(self._col, write_buffer)
-                                write_buffer.clear()
-
-                    batch = next(batch_iter, None)
-                    if batch is not None:
-                        pending.add(ex.submit(_distill_worker, batch))
-
-        if not dry_run and write_buffer:
-            _flush_distill_updates(self._col, write_buffer)
-
-        return processed
+            progress_callback=progress_callback,
+        )
 
     def reforge(
         self,

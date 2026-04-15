@@ -181,6 +181,70 @@ def test_mine_parallel_env_var(monkeypatch):
         assert col.count() > 0
 
 
+def test_mine_reports_progress_sequential():
+    progress_updates = []
+
+    with tempfile.TemporaryDirectory() as tmpdir:
+        root = Path(tmpdir).resolve()
+        _make_project(root, wing="progress_seq")
+
+        mine(
+            str(root),
+            str(root / "palace"),
+            dry_run=True,
+            progress_callback=lambda processed, total: progress_updates.append((processed, total)),
+        )
+
+    assert progress_updates[0] == (0, 4)
+    assert progress_updates[-1] == (4, 4)
+    assert [processed for processed, _ in progress_updates] == sorted(
+        processed for processed, _ in progress_updates
+    )
+
+
+def test_mine_reports_progress_parallel():
+    progress_updates = []
+
+    with tempfile.TemporaryDirectory() as tmpdir:
+        root = Path(tmpdir).resolve()
+        _make_project(root, wing="progress_par")
+
+        mine(
+            str(root),
+            str(root / "palace"),
+            dry_run=True,
+            parallel_workers=2,
+            progress_callback=lambda processed, total: progress_updates.append((processed, total)),
+        )
+
+    assert progress_updates[0] == (0, 4)
+    assert progress_updates[-1] == (4, 4)
+    assert [processed for processed, _ in progress_updates] == sorted(
+        processed for processed, _ in progress_updates
+    )
+
+
+def test_mine_parallel_progress_counts_already_mined_files():
+    progress_updates = []
+
+    with tempfile.TemporaryDirectory() as tmpdir:
+        root = Path(tmpdir).resolve()
+        _make_project(root, wing="progress_skip")
+        factory = InMemoryStorageFactory()
+
+        mine(str(root), str(root / "palace"), storage_factory=factory, parallel_workers=2)
+        mine(
+            str(root),
+            str(root / "palace"),
+            storage_factory=factory,
+            parallel_workers=2,
+            progress_callback=lambda processed, total: progress_updates.append((processed, total)),
+        )
+
+    assert progress_updates[0] == (0, 4)
+    assert progress_updates[-1] == (4, 4)
+
+
 def test_mine_parallel_workers_one_uses_sequential_path(monkeypatch):
     def fail_if_called(*args, **kwargs):
         raise AssertionError("ProcessPoolExecutor should not be used for parallel_workers=1")

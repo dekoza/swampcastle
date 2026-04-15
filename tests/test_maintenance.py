@@ -106,6 +106,21 @@ def test_distill_dry_run_does_not_modify(castle):
         assert "aaak" not in meta
 
 
+def test_distill_reports_progress_sequential(castle):
+    progress_updates = []
+
+    count = castle.vault.distill(
+        progress_callback=lambda processed, total: progress_updates.append((processed, total))
+    )
+
+    assert count == 2
+    assert progress_updates[0] == (0, 2)
+    assert progress_updates[-1] == (2, 2)
+    assert [processed for processed, _ in progress_updates] == sorted(
+        processed for processed, _ in progress_updates
+    )
+
+
 def test_reforge_with_wing_filter(castle):
     """Reforge should respect wing filter."""
     castle.vault.add_drawer(AddDrawerCommand(wing="other", room="r1", content="Other wing"))
@@ -327,3 +342,35 @@ def test_distill_parallel_matches_sequential_output(tmp_path):
     }
 
     assert parallel_aaak == sequential_aaak
+
+
+def test_distill_parallel_reports_progress(tmp_path):
+    from swampcastle.wal import WalWriter
+
+    factory = InMemoryStorageFactory()
+    wal = WalWriter(tmp_path / "wal")
+    service = VaultService(factory.open_collection("distill_progress"), wal)
+
+    for index in range(3):
+        service.add_drawer(
+            AddDrawerCommand(
+                wing="test",
+                room="r1",
+                content=f"Document {index} talks about architecture and testing.",
+                source_file=f"f{index}.md",
+            )
+        )
+
+    progress_updates = []
+
+    count = service.distill(
+        parallel_workers=2,
+        progress_callback=lambda processed, total: progress_updates.append((processed, total)),
+    )
+
+    assert count == 3
+    assert progress_updates[0] == (0, 3)
+    assert progress_updates[-1] == (3, 3)
+    assert [processed for processed, _ in progress_updates] == sorted(
+        processed for processed, _ in progress_updates
+    )

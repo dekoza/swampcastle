@@ -15,8 +15,9 @@ import multiprocessing
 import os
 import re
 import sys
+from collections.abc import Callable
 from collections import defaultdict
-from concurrent.futures import ProcessPoolExecutor, as_completed
+from concurrent.futures import FIRST_COMPLETED, ProcessPoolExecutor, wait
 from concurrent.futures.process import BrokenProcessPool
 from datetime import datetime
 from pathlib import Path
@@ -1098,6 +1099,7 @@ def mine(  # noqa: C901
     embed_batch_size: int | None = None,
     _force_remine: bool = False,
     parallel_workers: int | None = None,
+    progress_callback: Callable[[int, int], None] | None = None,
 ):
     """Mine a project directory into the palace."""
 
@@ -1161,8 +1163,15 @@ def mine(  # noqa: C901
     total_drawers = 0
     files_skipped = 0
     room_counts = defaultdict(int)
+    total_files = len(files)
+
+    def _report_progress(processed: int) -> None:
+        if progress_callback is not None:
+            progress_callback(processed, total_files)
 
     max_workers = _resolve_parallel_workers(parallel_workers)
+
+    _report_progress(0)
 
     if max_workers is None:
         # Sequential path — original behaviour, unchanged
@@ -1185,17 +1194,19 @@ def mine(  # noqa: C901
             if drawers == 0:
                 if not dry_run:
                     files_skipped += 1
+                _report_progress(i)
                 continue
 
             total_drawers += drawers
             room_counts[room] += 1
-            if not dry_run:
+            if not dry_run and progress_callback is None:
                 print(f"  ✓ [{i:4}/{len(files)}] {filepath.name[:50]:50} +{drawers}")
+
+            _report_progress(i)
     else:
         # Parallel path — workers handle I/O + chunking; consumer handles all storage writes.
         # A sliding window of _PARALLEL_WINDOW futures bounds peak memory on large repos.
-        submit_count = 0
-        completed = 0
+        processed_files = 0
 
         def _submittable_args(fp: Path) -> tuple | None:
             """Return worker args for fp, or None if the file should be skipped."""
@@ -1281,52 +1292,56 @@ def mine(  # noqa: C901
         spawn_context = multiprocessing.get_context("spawn")
 
         with ProcessPoolExecutor(max_workers=max_workers, mp_context=spawn_context) as ex:
-            # Prime the window
-            for fp in files_iter:
-                worker_args = _submittable_args(fp)
-                if worker_args is None:
-                    files_skipped += 1
-                    continue
-                fut = ex.submit(_process_file_worker, worker_args)
-                in_flight[fut] = fp
-                submit_count += 1
-                if len(in_flight) >= _PARALLEL_WINDOW:
-                    break
 
-            while in_flight:
-                done_fut = next(as_completed(in_flight))
-                source_fp = in_flight.pop(done_fut)
-                completed += 1
+            def _fill_window() -> None:
+                nonlocal processed_files, files_skipped
 
-                try:
-                    res = done_fut.result()
-                except BrokenProcessPool:
-                    raise
-                except Exception as e:
-                    logger.warning("Worker failed for %s: %s", source_fp, e)
-                    if not dry_run:
-                        files_skipped += 1
-                    res = None
+                while len(in_flight) < _PARALLEL_WINDOW:
+                    fp = next(files_iter, None)
+                    if fp is None:
+                        break
 
-                if res is not None:
-                    added, skipped_delta = _consume(res, source_fp)
-                    total_drawers += added
-                    files_skipped += skipped_delta
-                    if not dry_run and added > 0:
-                        print(
-                            f"  ✓ [{completed:4}/{submit_count}] {source_fp.name[:50]:50} +{added}"
-                        )
-
-                # Slide the window: submit one more for each completion
-                for fp in files_iter:
                     worker_args = _submittable_args(fp)
                     if worker_args is None:
                         files_skipped += 1
+                        processed_files += 1
+                        _report_progress(processed_files)
                         continue
+
                     fut = ex.submit(_process_file_worker, worker_args)
                     in_flight[fut] = fp
-                    submit_count += 1
-                    break  # one submission per completion to keep window size stable
+
+            _fill_window()
+
+            while in_flight:
+                done, _ = wait(in_flight, return_when=FIRST_COMPLETED)
+
+                for done_fut in done:
+                    source_fp = in_flight.pop(done_fut)
+
+                    try:
+                        res = done_fut.result()
+                    except BrokenProcessPool:
+                        raise
+                    except Exception as e:
+                        logger.warning("Worker failed for %s: %s", source_fp, e)
+                        if not dry_run:
+                            files_skipped += 1
+                        res = None
+
+                    if res is not None:
+                        added, skipped_delta = _consume(res, source_fp)
+                        total_drawers += added
+                        files_skipped += skipped_delta
+                        if not dry_run and added > 0 and progress_callback is None:
+                            print(
+                                f"  ✓ [{processed_files + 1:4}/{total_files}] {source_fp.name[:50]:50} +{added}"
+                            )
+
+                    processed_files += 1
+                    _report_progress(processed_files)
+
+                _fill_window()
 
     # flush any remaining buffered embeddings; update total from actual stored count
     if embed_buffer is not None:

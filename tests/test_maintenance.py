@@ -121,6 +121,24 @@ def test_distill_reports_progress_sequential(castle):
     )
 
 
+def test_distill_reports_phase_progress_sequential(castle, monkeypatch):
+    phase_updates = []
+
+    monkeypatch.setattr("swampcastle.services.vault._DISTILL_WRITE_BATCH_SIZE", 1)
+
+    count = castle.vault.distill(
+        phase_progress_callback=lambda phase, processed, total: phase_updates.append(
+            (phase, processed, total)
+        )
+    )
+
+    assert count == 2
+    assert phase_updates[0] == ("distill", 0, 2)
+    assert ("distill", 2, 2) in phase_updates
+    assert ("persist", 0, 2) in phase_updates
+    assert phase_updates[-1] == ("persist", 2, 2)
+
+
 def test_reforge_with_wing_filter(castle):
     """Reforge should respect wing filter."""
     castle.vault.add_drawer(AddDrawerCommand(wing="other", room="r1", content="Other wing"))
@@ -374,3 +392,41 @@ def test_distill_parallel_reports_progress(tmp_path):
     assert [processed for processed, _ in progress_updates] == sorted(
         processed for processed, _ in progress_updates
     )
+
+
+def test_distill_parallel_reports_persist_phase(tmp_path, monkeypatch):
+    from swampcastle.wal import WalWriter
+
+    monkeypatch.setattr("swampcastle.services.vault._DISTILL_WRITE_BATCH_SIZE", 2)
+
+    factory = InMemoryStorageFactory()
+    wal = WalWriter(tmp_path / "wal")
+    service = VaultService(factory.open_collection("distill_phase_progress"), wal)
+
+    for index in range(3):
+        service.add_drawer(
+            AddDrawerCommand(
+                wing="test",
+                room="r1",
+                content=f"Document {index} talks about architecture and testing.",
+                source_file=f"f{index}.md",
+            )
+        )
+
+    phase_updates = []
+
+    count = service.distill(
+        parallel_workers=2,
+        phase_progress_callback=lambda phase, processed, total: phase_updates.append(
+            (phase, processed, total)
+        ),
+    )
+
+    assert count == 3
+    assert phase_updates[0] == ("distill", 0, 3)
+    assert ("distill", 3, 3) in phase_updates
+
+    persist_updates = [update for update in phase_updates if update[0] == "persist"]
+    assert persist_updates[0][1] == 0
+    assert persist_updates[-1][1] == persist_updates[-1][2]
+    assert persist_updates[-1][2] > 0

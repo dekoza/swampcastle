@@ -202,6 +202,30 @@ def test_mine_reports_progress_sequential():
     )
 
 
+def test_mine_reports_flush_phase_non_dry_run():
+    phase_updates = []
+
+    with tempfile.TemporaryDirectory() as tmpdir:
+        root = Path(tmpdir).resolve()
+        _make_project(root, wing="flush_phase")
+        factory = InMemoryStorageFactory()
+
+        mine(
+            str(root),
+            str(root / "palace"),
+            storage_factory=factory,
+            parallel_workers=2,
+            phase_progress_callback=lambda phase, processed, total: phase_updates.append(
+                (phase, processed, total)
+            ),
+        )
+
+    assert phase_updates[0] == ("mine", 0, 4)
+    assert ("mine", 4, 4) in phase_updates
+    assert ("flush", 0, 5) in phase_updates
+    assert phase_updates[-1] == ("flush", 5, 5)
+
+
 def test_mine_reports_progress_parallel():
     progress_updates = []
 

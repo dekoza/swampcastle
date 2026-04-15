@@ -1100,6 +1100,7 @@ def mine(  # noqa: C901
     _force_remine: bool = False,
     parallel_workers: int | None = None,
     progress_callback: Callable[[int, int], None] | None = None,
+    phase_progress_callback: Callable[[str, int, int], None] | None = None,
 ):
     """Mine a project directory into the palace."""
 
@@ -1168,6 +1169,12 @@ def mine(  # noqa: C901
     def _report_progress(processed: int) -> None:
         if progress_callback is not None:
             progress_callback(processed, total_files)
+        if phase_progress_callback is not None:
+            phase_progress_callback("mine", processed, total_files)
+
+    def _report_phase(phase: str, processed: int, total: int) -> None:
+        if phase_progress_callback is not None:
+            phase_progress_callback(phase, processed, total)
 
     max_workers = _resolve_parallel_workers(parallel_workers)
 
@@ -1345,7 +1352,12 @@ def mine(  # noqa: C901
 
     # flush any remaining buffered embeddings; update total from actual stored count
     if embed_buffer is not None:
-        embed_buffer.flush()
+        pending_docs = len(embed_buffer._docs)
+        if pending_docs > 0:
+            _report_phase("flush", 0, pending_docs)
+        flushed = embed_buffer.flush()
+        if pending_docs > 0:
+            _report_phase("flush", flushed, pending_docs)
         total_drawers = embed_buffer.stored_count
 
     extracted_candidates = 0
@@ -1355,12 +1367,14 @@ def mine(  # noqa: C901
         and storage_factory is not None
         and collection is not None
     ):
+        _report_phase("kg_extract", 0, 1)
         extracted_candidates = persist_kg_proposals_for_wing(
             palace_path=palace_path,
             storage_factory=storage_factory,
             collection=collection,
             wing=wing,
         )
+        _report_phase("kg_extract", 1, 1)
 
     print(f"\n{'=' * 55}")
     print("  Done.")

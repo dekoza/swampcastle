@@ -87,6 +87,42 @@ def _should_report_distill_progress(processed: int, total: int) -> bool:
     return processed >= total or processed % _DISTILL_PROGRESS_UPDATE_STEP == 0
 
 
+def _emit_progress(
+    progress_callback: Callable[[int, int], None] | None,
+    phase_progress_callback: Callable[[str, int, int], None] | None,
+    *,
+    primary_phase: str,
+    phase: str,
+    processed: int,
+    total: int,
+) -> None:
+    if phase == primary_phase and progress_callback is not None:
+        progress_callback(processed, total)
+    if phase_progress_callback is not None:
+        phase_progress_callback(phase, processed, total)
+
+
+def _flush_distill_updates_with_progress(
+    collection: CollectionStore,
+    updates: list[tuple[str, dict]],
+    *,
+    phase_progress_callback: Callable[[str, int, int], None] | None,
+) -> None:
+    if not updates:
+        return
+
+    if phase_progress_callback is not None:
+        phase_progress_callback("persist", 0, len(updates))
+
+    persisted = 0
+    for start in range(0, len(updates), _DISTILL_WRITE_BATCH_SIZE):
+        batch = updates[start : start + _DISTILL_WRITE_BATCH_SIZE]
+        _flush_distill_updates(collection, batch)
+        persisted += len(batch)
+        if phase_progress_callback is not None:
+            phase_progress_callback("persist", persisted, len(updates))
+
+
 def _resolve_distill_workers(explicit: int | None) -> int | None:
     if explicit is not None:
         if explicit <= 1:
@@ -143,6 +179,7 @@ class VaultService:
         dry_run: bool,
         config_path: str | None,
         progress_callback: Callable[[int, int], None] | None,
+        phase_progress_callback: Callable[[str, int, int], None] | None,
     ) -> int:
         from swampcastle.dialect import Dialect
 
@@ -160,11 +197,22 @@ class VaultService:
             updates.append((doc_id, meta_copy))
             processed += 1
 
-            if progress_callback is not None and _should_report_distill_progress(processed, total):
-                progress_callback(processed, total)
+            if _should_report_distill_progress(processed, total):
+                _emit_progress(
+                    progress_callback,
+                    phase_progress_callback,
+                    primary_phase="distill",
+                    phase="distill",
+                    processed=processed,
+                    total=total,
+                )
 
         if not dry_run and updates:
-            _flush_distill_updates(self._col, updates)
+            _flush_distill_updates_with_progress(
+                self._col,
+                updates,
+                phase_progress_callback=phase_progress_callback,
+            )
 
         return len(ids)
 
@@ -179,6 +227,7 @@ class VaultService:
         config_path: str | None,
         max_workers: int,
         progress_callback: Callable[[int, int], None] | None,
+        phase_progress_callback: Callable[[str, int, int], None] | None,
     ) -> int:
         task_batch_size = max(1, len(ids) // (max_workers * 4))
         task_batch_size = min(task_batch_size, _DISTILL_TASK_BATCH_SIZE)
@@ -211,8 +260,14 @@ class VaultService:
                     batch_results = future.result()
                     processed += len(batch_results)
 
-                    if progress_callback is not None:
-                        progress_callback(processed, total)
+                    _emit_progress(
+                        progress_callback,
+                        phase_progress_callback,
+                        primary_phase="distill",
+                        phase="distill",
+                        processed=processed,
+                        total=total,
+                    )
 
                     if not dry_run:
                         for doc_id, metadata in batch_results:
@@ -235,7 +290,11 @@ class VaultService:
                         pending.add(ex.submit(_distill_worker, batch))
 
         if not dry_run and write_buffer:
-            _flush_distill_updates(self._col, write_buffer)
+            _flush_distill_updates_with_progress(
+                self._col,
+                write_buffer,
+                phase_progress_callback=phase_progress_callback,
+            )
 
         return processed
 
@@ -422,6 +481,7 @@ class VaultService:
         config_path: str = None,
         parallel_workers: int | None = None,
         progress_callback: Callable[[int, int], None] | None = None,
+        phase_progress_callback: Callable[[str, int, int], None] | None = None,
     ) -> int:
         """Compute and store AAAK Dialect summaries in drawer metadata.
 
@@ -437,6 +497,8 @@ class VaultService:
             parallel_workers: Optional worker count for CPU-bound AAAK compression.
                 Values <= 1 keep the sequential path.
             progress_callback: Optional callback receiving (processed, total).
+            phase_progress_callback: Optional callback receiving
+                (phase, processed, total). Phases: distill, persist.
 
         Returns:
             Number of drawers processed.
@@ -454,12 +516,24 @@ class VaultService:
         total = len(ids)
 
         if not ids:
-            if progress_callback is not None:
-                progress_callback(0, 0)
+            _emit_progress(
+                progress_callback,
+                phase_progress_callback,
+                primary_phase="distill",
+                phase="distill",
+                processed=0,
+                total=0,
+            )
             return 0
 
-        if progress_callback is not None:
-            progress_callback(0, total)
+        _emit_progress(
+            progress_callback,
+            phase_progress_callback,
+            primary_phase="distill",
+            phase="distill",
+            processed=0,
+            total=total,
+        )
 
         max_workers = _resolve_distill_workers(parallel_workers)
 
@@ -473,6 +547,7 @@ class VaultService:
                 dry_run=dry_run,
                 config_path=config_path,
                 progress_callback=progress_callback,
+                phase_progress_callback=phase_progress_callback,
             )
 
         return self._distill_parallel(
@@ -484,6 +559,7 @@ class VaultService:
             config_path=config_path,
             max_workers=max_workers,
             progress_callback=progress_callback,
+            phase_progress_callback=phase_progress_callback,
         )
 
     def reforge(

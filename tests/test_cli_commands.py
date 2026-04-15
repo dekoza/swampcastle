@@ -168,7 +168,8 @@ def test_cmd_gather_projects_uses_miner(tmp_path, capsys):
     assert mock_mine.call_args.kwargs["include_ignored"] == ["*.log"]
     assert mock_mine.call_args.kwargs["extract_kg_proposals"] is True
     assert mock_mine.call_args.kwargs["embed_batch_size"] == 128
-    assert callable(mock_mine.call_args.kwargs["progress_callback"])
+    assert mock_mine.call_args.kwargs["progress_callback"] is None
+    assert callable(mock_mine.call_args.kwargs["phase_progress_callback"])
 
 
 def test_cmd_gather_exits_cleanly_on_keyboard_interrupt(tmp_path, capsys):
@@ -250,10 +251,11 @@ def test_cmd_gather_projects_renders_progress_bar(tmp_path, capsys):
     settings = SimpleNamespace(castle_path=tmp_path / "castle", embed_batch_size=128)
 
     def fake_mine(*args, **kwargs):
-        progress_callback = kwargs["progress_callback"]
-        progress_callback(0, 3)
-        progress_callback(2, 3)
-        progress_callback(3, 3)
+        phase_progress_callback = kwargs["phase_progress_callback"]
+        phase_progress_callback("mine", 0, 3)
+        phase_progress_callback("mine", 3, 3)
+        phase_progress_callback("flush", 0, 2)
+        phase_progress_callback("flush", 2, 2)
 
     with patch("swampcastle.cli.commands._settings", return_value=settings):
         with patch("swampcastle.cli.commands.factory_from_settings", return_value="factory"):
@@ -263,6 +265,8 @@ def test_cmd_gather_projects_renders_progress_bar(tmp_path, capsys):
     out = capsys.readouterr().out
     assert "Mining" in out
     assert "3/3" in out
+    assert "Flushing" in out
+    assert "2/2" in out
 
 
 def test_cmd_herald_prints_protocol_only(capsys):
@@ -370,6 +374,7 @@ def test_cmd_distill_defaults_to_preview_mode(capsys):
             "dry_run": True,
             "config_path": None,
             "progress_callback": None,
+            "phase_progress_callback": None,
         }
     ]
     out = capsys.readouterr().out
@@ -408,6 +413,7 @@ def test_cmd_distill_passes_config_and_dry_run(capsys):
             "dry_run": True,
             "config_path": "entities.json",
             "progress_callback": None,
+            "phase_progress_callback": None,
         }
     ]
     assert "DRY RUN" in capsys.readouterr().out
@@ -435,7 +441,8 @@ def test_cmd_distill_apply_enables_real_write(capsys):
     assert castle.calls[0]["room"] == "r"
     assert castle.calls[0]["dry_run"] is False
     assert castle.calls[0]["config_path"] is None
-    assert callable(castle.calls[0]["progress_callback"])
+    assert castle.calls[0]["progress_callback"] is None
+    assert callable(castle.calls[0]["phase_progress_callback"])
     assert "Distilled 2 drawers with AAAK dialect." in capsys.readouterr().out
 
 
@@ -448,10 +455,11 @@ def test_cmd_distill_renders_progress_bar(capsys):
 
             def distill(**kwargs):
                 self.calls.append(kwargs)
-                progress_callback = kwargs["progress_callback"]
-                progress_callback(0, 3)
-                progress_callback(2, 3)
-                progress_callback(3, 3)
+                phase_progress_callback = kwargs["phase_progress_callback"]
+                phase_progress_callback("distill", 0, 3)
+                phase_progress_callback("distill", 3, 3)
+                phase_progress_callback("persist", 0, 3)
+                phase_progress_callback("persist", 3, 3)
                 return 3
 
             self.vault = SimpleNamespace(distill=distill)
@@ -469,6 +477,7 @@ def test_cmd_distill_renders_progress_bar(capsys):
     out = capsys.readouterr().out
     assert "Distilling" in out
     assert "3/3" in out
+    assert "Persisting" in out
 
 
 def test_cmd_kg_extract_defaults_to_preview_mode(capsys):

@@ -3,7 +3,10 @@
 import hashlib
 import heapq
 import logging
+import os
 from collections.abc import Callable
+from concurrent.futures import ProcessPoolExecutor, as_completed
+from concurrent.futures.process import BrokenProcessPool
 from datetime import datetime
 
 from pydantic import BaseModel, Field
@@ -24,6 +27,23 @@ from swampcastle.storage.base import CollectionStore
 from swampcastle.wal import WalWriter
 
 logger = logging.getLogger("swampcastle.vault")
+
+
+# Worker must be module-level so it can be pickled by multiprocessing
+def _distill_worker(args):
+    doc_id, doc, meta, cfg_path = args
+    from swampcastle.dialect import Dialect
+
+    if cfg_path:
+        d = Dialect.from_config(cfg_path)
+    else:
+        d = Dialect()
+
+    meta_copy = dict(meta)
+    aaak = d.compress(doc, metadata=meta_copy)
+    meta_copy["aaak"] = aaak
+    return doc_id, meta_copy
+
 
 _DIARY_READ_SCAN_LIMIT = 100_000
 _REFORGE_MIN_BATCH_SIZE = 1000
@@ -231,6 +251,7 @@ class VaultService:
         room: str = None,
         dry_run: bool = False,
         config_path: str = None,
+        parallel_workers: int | None = None,
     ) -> int:
         """Compute and store AAAK Dialect summaries in drawer metadata.
 
@@ -267,27 +288,98 @@ class VaultService:
         if not ids:
             return 0
 
-        updates = []
-        for doc_id, doc, meta in zip(ids, documents, metadatas):
-            # Copy metadata before mutating to avoid side effects
-            meta_copy = dict(meta)
-            aaak = dialect.compress(doc, metadata=meta_copy)
-            meta_copy["aaak"] = aaak
-            updates.append(
-                {
-                    "id": doc_id,
-                    "metadata": meta_copy,
-                }
-            )
+        # Determine parallelism: explicit arg > env var > disabled
+        def _resolve_workers(explicit: int | None) -> int | None:
+            MAX = 32
+            if explicit is not None and explicit > 0:
+                return min(explicit, MAX)
+            if os.environ.get("SWAMPCASTLE_DISTILL_PARALLEL", "").lower() in (
+                "1",
+                "true",
+                "yes",
+            ):
+                raw = os.environ.get("SWAMPCASTLE_DISTILL_WORKERS", "")
+                return min(int(raw) if raw.isdigit() else (os.cpu_count() or 2), MAX)
+            return None
 
-        if not dry_run:
-            # use update() which backends must implement
+        max_workers = _resolve_workers(parallel_workers)
+
+        # Sequential fallback (preserve current behaviour by default)
+        if max_workers is None:
+            updates = []
+            for doc_id, doc, meta in zip(ids, documents, metadatas):
+                meta_copy = dict(meta)
+                aaak = dialect.compress(doc, metadata=meta_copy)
+                meta_copy["aaak"] = aaak
+                updates.append({"id": doc_id, "metadata": meta_copy})
+
+            if not dry_run:
+                self._col.update(
+                    ids=[u["id"] for u in updates],
+                    metadatas=[u["metadata"] for u in updates],
+                )
+
+            return len(ids)
+
+        # Parallel path: compute aaak in worker processes and perform a single bulk update in main process.
+        _PARALLEL_WINDOW = 256
+        updates_map: dict = {}
+
+        args_iter = (
+            (doc_id, doc, meta, config_path) for doc_id, doc, meta in zip(ids, documents, metadatas)
+        )
+
+        in_flight: dict = {}
+        submitted = 0
+        processed = 0
+
+        with ProcessPoolExecutor(max_workers=max_workers) as ex:
+            # prime window
+            for args in args_iter:
+                fut = ex.submit(_distill_worker, args)
+                in_flight[fut] = args[0]
+                submitted += 1
+                if len(in_flight) >= _PARALLEL_WINDOW:
+                    break
+
+            while in_flight:
+                done_fut = next(as_completed(in_flight))
+                doc_id = in_flight.pop(done_fut)
+                try:
+                    res_id, meta_out = done_fut.result()
+                except BrokenProcessPool:
+                    raise
+                except Exception as e:
+                    logger.warning("distill worker failed for %s: %s", doc_id, e)
+                    # treat as skipped
+                    continue
+
+                updates_map[res_id] = meta_out
+                processed += 1
+
+                # slide window by submitting one more
+                for args in args_iter:
+                    fut = ex.submit(_distill_worker, args)
+                    in_flight[fut] = args[0]
+                    submitted += 1
+                    break
+
+        # Build ordered updates in same order as ids
+        ordered_updates = []
+        for doc_id in ids:
+            meta_out = updates_map.get(doc_id)
+            if meta_out is None:
+                # Worker failed; skip this doc
+                continue
+            ordered_updates.append({"id": doc_id, "metadata": meta_out})
+
+        if not dry_run and ordered_updates:
             self._col.update(
-                ids=[u["id"] for u in updates],
-                metadatas=[u["metadata"] for u in updates],
+                ids=[u["id"] for u in ordered_updates],
+                metadatas=[u["metadata"] for u in ordered_updates],
             )
 
-        return len(ids)
+        return len(ordered_updates)
 
     def reforge(
         self,

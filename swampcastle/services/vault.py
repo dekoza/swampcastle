@@ -5,8 +5,7 @@ import heapq
 import logging
 import os
 from collections.abc import Callable
-from concurrent.futures import ProcessPoolExecutor, as_completed
-from concurrent.futures.process import BrokenProcessPool
+from concurrent.futures import ProcessPoolExecutor
 from datetime import datetime
 
 from pydantic import BaseModel, Field
@@ -29,18 +28,25 @@ from swampcastle.wal import WalWriter
 logger = logging.getLogger("swampcastle.vault")
 
 
-# Worker must be module-level so it can be pickled by multiprocessing
-def _distill_worker(args):
-    doc_id, doc, meta, cfg_path = args
+# Module-level variable to hold the initialized Dialect instance for the worker process
+_worker_dialect = None
+
+
+def _init_worker(cfg_path):
+    global _worker_dialect
     from swampcastle.dialect import Dialect
 
     if cfg_path:
-        d = Dialect.from_config(cfg_path)
+        _worker_dialect = Dialect.from_config(cfg_path)
     else:
-        d = Dialect()
+        _worker_dialect = Dialect()
 
+
+# Worker must be module-level so it can be pickled by multiprocessing
+def _distill_worker(args):
+    doc_id, doc, meta = args
     meta_copy = dict(meta)
-    aaak = d.compress(doc, metadata=meta_copy)
+    aaak = _worker_dialect.compress(doc, metadata=meta_copy)
     meta_copy["aaak"] = aaak
     return doc_id, meta_copy
 
@@ -322,54 +328,24 @@ class VaultService:
             return len(ids)
 
         # Parallel path: compute aaak in worker processes and perform a single bulk update in main process.
-        _PARALLEL_WINDOW = 256
-        updates_map: dict = {}
+        chunksize = max(1, len(ids) // (max_workers * 4))
+        if chunksize > 50:
+            chunksize = 50
 
-        args_iter = (
-            (doc_id, doc, meta, config_path) for doc_id, doc, meta in zip(ids, documents, metadatas)
-        )
+        updates_map = {}
+        args_iter = ((doc_id, doc, meta) for doc_id, doc, meta in zip(ids, documents, metadatas))
 
-        in_flight: dict = {}
-        submitted = 0
-        processed = 0
-
-        with ProcessPoolExecutor(max_workers=max_workers) as ex:
-            # prime window
-            for args in args_iter:
-                fut = ex.submit(_distill_worker, args)
-                in_flight[fut] = args[0]
-                submitted += 1
-                if len(in_flight) >= _PARALLEL_WINDOW:
-                    break
-
-            while in_flight:
-                done_fut = next(as_completed(in_flight))
-                doc_id = in_flight.pop(done_fut)
-                try:
-                    res_id, meta_out = done_fut.result()
-                except BrokenProcessPool:
-                    raise
-                except Exception as e:
-                    logger.warning("distill worker failed for %s: %s", doc_id, e)
-                    # treat as skipped
-                    continue
-
+        with ProcessPoolExecutor(
+            max_workers=max_workers, initializer=_init_worker, initargs=(config_path,)
+        ) as ex:
+            for res_id, meta_out in ex.map(_distill_worker, args_iter, chunksize=chunksize):
                 updates_map[res_id] = meta_out
-                processed += 1
-
-                # slide window by submitting one more
-                for args in args_iter:
-                    fut = ex.submit(_distill_worker, args)
-                    in_flight[fut] = args[0]
-                    submitted += 1
-                    break
 
         # Build ordered updates in same order as ids
         ordered_updates = []
         for doc_id in ids:
             meta_out = updates_map.get(doc_id)
             if meta_out is None:
-                # Worker failed; skip this doc
                 continue
             ordered_updates.append({"id": doc_id, "metadata": meta_out})
 

@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from concurrent.futures import Future
+
 import pytest
 
 from swampcastle.castle import Castle
@@ -185,3 +187,143 @@ def test_reforge_uses_larger_adaptive_batches_for_progress(tmp_path):
     assert service._col.upsert_calls == [1000, 1000, 1000, 1000, 1000]
     assert progress_updates[0] == (0, 5000)
     assert progress_updates[-1] == (5000, 5000)
+
+
+def test_distill_parallel_workers_one_uses_sequential_path(castle, monkeypatch):
+    def fail_if_called(*args, **kwargs):
+        raise AssertionError("ProcessPoolExecutor should not be used for parallel_workers=1")
+
+    monkeypatch.setattr("swampcastle.services.vault.ProcessPoolExecutor", fail_if_called)
+
+    count = castle.vault.distill(parallel_workers=1)
+
+    assert count == 2
+    results = castle.vault._col.get(include=["metadatas"])
+    for meta in results["metadatas"]:
+        assert "aaak" in meta
+
+
+def test_distill_parallel_uses_spawn_context(castle, monkeypatch):
+    captured: dict[str, object] = {}
+
+    class RecordingExecutor:
+        def __init__(self, *, max_workers, mp_context=None, initializer=None, initargs=()):
+            captured["max_workers"] = max_workers
+            captured["mp_context"] = mp_context
+            self._initializer = initializer
+            self._initargs = initargs
+
+        def __enter__(self):
+            if self._initializer is not None:
+                self._initializer(*self._initargs)
+            return self
+
+        def __exit__(self, exc_type, exc, tb):
+            return False
+
+        def map(self, fn, iterable, chunksize=1):
+            for item in iterable:
+                yield fn(item)
+
+        def submit(self, fn, *args, **kwargs):
+            future = Future()
+            future.set_result(fn(*args, **kwargs))
+            return future
+
+    monkeypatch.setattr("swampcastle.services.vault.ProcessPoolExecutor", RecordingExecutor)
+
+    count = castle.vault.distill(parallel_workers=2)
+
+    assert count == 2
+    assert captured["max_workers"] == 2
+    assert captured["mp_context"] is not None
+    assert captured["mp_context"].get_start_method() == "spawn"
+
+
+def test_distill_parallel_flushes_updates_in_batches(tmp_path, monkeypatch):
+    from swampcastle.wal import WalWriter
+
+    class SpyCollection:
+        def __init__(self):
+            self.update_calls: list[list[str]] = []
+
+        def get(self, *, ids=None, where=None, limit=None, offset=None, include=None):
+            return {
+                "ids": ["d1", "d2", "d3", "d4", "d5"],
+                "documents": [f"doc {i}" for i in range(1, 6)],
+                "metadatas": [{"wing": "test", "room": "r1", "source_file": ""} for _ in range(5)],
+            }
+
+        def update(self, *, ids, documents=None, metadatas=None):
+            self.update_calls.append(list(ids))
+
+    class RecordingExecutor:
+        def __init__(self, *, max_workers, mp_context=None, initializer=None, initargs=()):
+            self._initializer = initializer
+            self._initargs = initargs
+
+        def __enter__(self):
+            if self._initializer is not None:
+                self._initializer(*self._initargs)
+            return self
+
+        def __exit__(self, exc_type, exc, tb):
+            return False
+
+        def map(self, fn, iterable, chunksize=1):
+            for item in iterable:
+                yield fn(item)
+
+        def submit(self, fn, *args, **kwargs):
+            future = Future()
+            future.set_result(fn(*args, **kwargs))
+            return future
+
+    monkeypatch.setattr("swampcastle.services.vault.ProcessPoolExecutor", RecordingExecutor)
+    monkeypatch.setattr("swampcastle.services.vault._DISTILL_WRITE_BATCH_SIZE", 2, raising=False)
+
+    service = VaultService(SpyCollection(), WalWriter(tmp_path / "wal"))
+
+    count = service.distill(parallel_workers=2)
+
+    assert count == 5
+    assert service._col.update_calls == [["d1", "d2"], ["d3", "d4"], ["d5"]]
+
+
+def test_distill_parallel_matches_sequential_output(tmp_path):
+    from swampcastle.wal import WalWriter
+
+    factory = InMemoryStorageFactory()
+    wal = WalWriter(tmp_path / "wal")
+    sequential = VaultService(factory.open_collection("distill_seq"), wal)
+    parallel = VaultService(factory.open_collection("distill_par"), wal)
+
+    contents = [
+        "Alice discussed vector search and testing strategy.",
+        "Bob fixed the broken deployment after the database migration.",
+        "Carol documented the architecture and reviewed the benchmark numbers.",
+    ]
+
+    for index, content in enumerate(contents, start=1):
+        command = AddDrawerCommand(
+            wing="test", room="r1", content=content, source_file=f"f{index}.md"
+        )
+        sequential.add_drawer(command)
+        parallel.add_drawer(command)
+
+    assert sequential.distill() == len(contents)
+    assert parallel.distill(parallel_workers=2) == len(contents)
+
+    sequential_results = sequential._col.get(include=["metadatas"])
+    parallel_results = parallel._col.get(include=["metadatas"])
+
+    sequential_aaak = {
+        doc_id: meta["aaak"]
+        for doc_id, meta in zip(sequential_results["ids"], sequential_results["metadatas"])
+    }
+    parallel_aaak = {
+        doc_id: meta["aaak"]
+        for doc_id, meta in zip(parallel_results["ids"], parallel_results["metadatas"])
+    }
+
+    assert parallel_aaak == sequential_aaak

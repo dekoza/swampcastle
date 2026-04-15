@@ -1,5 +1,6 @@
 """CLI command handlers — each creates a Castle and calls services."""
 
+import logging
 import os
 import shlex
 import sqlite3
@@ -12,6 +13,8 @@ from swampcastle.runtime_config import ensure_runtime_config
 from swampcastle.settings import CastleSettings
 from swampcastle.storage import factory_from_settings
 
+
+logger = logging.getLogger("swampcastle.cli.commands")
 
 DESKELETON_BATCH_SIZE = 1000
 
@@ -171,37 +174,47 @@ def cmd_gather(args):
     if args.wing:
         _print_kv("Wing", args.wing)
 
-    if args.mode == "convos":
-        from swampcastle.mining.convo import mine_convos
+    try:
+        if args.mode == "convos":
+            from swampcastle.mining.convo import mine_convos
 
-        mine_convos(
-            project_dir,
-            palace_path,
-            wing=args.wing,
-            agent=args.agent,
-            dry_run=args.dry_run,
-            extract_mode=args.extract,
-            limit=args.limit,
-            storage_factory=storage_factory,
-            extract_kg_proposals=getattr(args, "extract_kg_proposals", False),
-        )
-    else:
-        from swampcastle.mining.miner import mine
+            mine_convos(
+                project_dir,
+                palace_path,
+                wing=args.wing,
+                agent=args.agent,
+                dry_run=args.dry_run,
+                extract_mode=args.extract,
+                limit=args.limit,
+                storage_factory=storage_factory,
+                extract_kg_proposals=getattr(args, "extract_kg_proposals", False),
+            )
+        else:
+            from swampcastle.mining.miner import mine
 
-        mine(
-            project_dir,
-            palace_path,
-            wing=args.wing,
-            agent=args.agent,
-            respect_gitignore=not args.no_gitignore,
-            include_ignored=args.include_ignored,
-            dry_run=args.dry_run,
-            limit=args.limit,
-            storage_factory=storage_factory,
-            explain=getattr(args, "explain", False),
-            extract_kg_proposals=getattr(args, "extract_kg_proposals", False),
-            embed_batch_size=getattr(settings, "embed_batch_size", None),
-        )
+            mine(
+                project_dir,
+                palace_path,
+                wing=args.wing,
+                agent=args.agent,
+                respect_gitignore=not args.no_gitignore,
+                include_ignored=args.include_ignored,
+                dry_run=args.dry_run,
+                limit=args.limit,
+                storage_factory=storage_factory,
+                explain=getattr(args, "explain", False),
+                extract_kg_proposals=getattr(args, "extract_kg_proposals", False),
+                embed_batch_size=getattr(settings, "embed_batch_size", None),
+            )
+    except KeyboardInterrupt:
+        print("\n  Cancelled by user.")
+        raise SystemExit(130)
+    finally:
+        if storage_factory is not None:
+            try:
+                storage_factory.close()
+            except Exception as exc:
+                logger.warning("Error closing storage factory after gather: %s", exc)
 
 
 def cmd_herald(args):

@@ -4,6 +4,10 @@ import logging
 import os
 import platform
 
+from .lancedb_compat import patch_lancedb_background_loop  # noqa: E402
+
+patch_lancedb_background_loop()
+
 from .cli import main  # noqa: E402
 from .version import __version__  # noqa: E402
 

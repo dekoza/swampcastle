@@ -170,6 +170,42 @@ def test_cmd_gather_projects_uses_miner(tmp_path, capsys):
     assert mock_mine.call_args.kwargs["embed_batch_size"] == 128
 
 
+def test_cmd_gather_exits_cleanly_on_keyboard_interrupt(tmp_path, capsys):
+    target = tmp_path / "proj"
+    target.mkdir()
+    args = SimpleNamespace(
+        dir=str(target),
+        mode="projects",
+        wing="wing1",
+        agent="swampcastle",
+        dry_run=False,
+        no_gitignore=False,
+        include_ignored=[],
+        limit=0,
+        extract_kg_proposals=False,
+        palace=None,
+        backend=None,
+    )
+    settings = SimpleNamespace(castle_path=tmp_path / "castle", embed_batch_size=128)
+
+    closed = {"called": False}
+
+    class DummyFactory:
+        def close(self):
+            closed["called"] = True
+
+    with patch("swampcastle.cli.commands._settings", return_value=settings):
+        with patch("swampcastle.cli.commands.factory_from_settings", return_value=DummyFactory()):
+            with patch("swampcastle.mining.miner.mine", side_effect=KeyboardInterrupt):
+                with pytest.raises(SystemExit) as exc:
+                    commands.cmd_gather(args)
+
+    assert exc.value.code == 130
+    assert closed["called"] is True
+    out = capsys.readouterr().out
+    assert "Cancelled by user" in out
+
+
 def test_cmd_gather_convos_uses_convo_miner_in_dry_run(tmp_path):
     target = tmp_path / "proj"
     target.mkdir()

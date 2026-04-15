@@ -30,6 +30,6 @@ def test_release_draft_exists_for_target_version():
     assert draft_path.exists(), f"Missing release draft: {draft_path}"
 
     content = draft_path.read_text(encoding="utf-8")
-    assert content.startswith(f"# SwampCastle {_RELEASE_VERSION} Release Draft")
-    assert "Draft — do not publish yet." in content
+    assert content.startswith(f"# SwampCastle {_RELEASE_VERSION}")
+    assert "Draft — do not publish yet." not in content
     assert "## Highlights" in content

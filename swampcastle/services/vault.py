@@ -26,6 +26,8 @@ from swampcastle.wal import WalWriter
 logger = logging.getLogger("swampcastle.vault")
 
 _DIARY_READ_SCAN_LIMIT = 100_000
+_REFORGE_MIN_BATCH_SIZE = 1000
+_REFORGE_MAX_PROGRESS_UPDATES = 20
 
 
 class DiaryReadQuery(BaseModel):
@@ -292,7 +294,7 @@ class VaultService:
         wing: str = None,
         room: str = None,
         dry_run: bool = False,
-        batch_size: int = 100,
+        batch_size: int | None = None,
         progress_callback: Callable[[int, int], None] | None = None,
     ) -> int:
         """Re-embed all drawers using the currently configured embedding model.
@@ -300,7 +302,9 @@ class VaultService:
         Useful when switching to a different model (e.g. ST -> ONNX or ONNX -> Ollama).
 
         Args:
-            batch_size: Number of drawers to re-embed per write batch.
+            batch_size: Optional override for re-embed write batch size. If omitted,
+                reforge uses a large adaptive batch size to keep progress visible
+                without causing severe slowdown from many tiny upserts.
             progress_callback: Optional callback receiving (processed, total).
 
         Returns:
@@ -327,7 +331,15 @@ class VaultService:
         if dry_run:
             return total
 
-        effective_batch_size = max(1, batch_size)
+        if batch_size is not None:
+            effective_batch_size = max(1, batch_size)
+        elif progress_callback is None:
+            effective_batch_size = total
+        else:
+            target_updates = max(1, _REFORGE_MAX_PROGRESS_UPDATES)
+            adaptive_batch_size = (total + target_updates - 1) // target_updates
+            effective_batch_size = min(total, max(_REFORGE_MIN_BATCH_SIZE, adaptive_batch_size))
+
         for start in range(0, total, effective_batch_size):
             end = min(start + effective_batch_size, total)
             self._col.upsert(

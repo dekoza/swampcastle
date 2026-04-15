@@ -152,3 +152,36 @@ def test_reforge_reports_batch_progress(tmp_path):
     assert count == 5
     assert service._col.upsert_calls == [["d1", "d2"], ["d3", "d4"], ["d5"]]
     assert progress_updates == [(0, 5), (2, 5), (4, 5), (5, 5)]
+
+
+def test_reforge_uses_larger_adaptive_batches_for_progress(tmp_path):
+    from swampcastle.wal import WalWriter
+
+    class SpyCollection:
+        def __init__(self):
+            self.upsert_calls = []
+            self.ids = [f"d{i}" for i in range(5000)]
+
+        def get(self, *, ids=None, where=None, limit=None, offset=None, include=None):
+            return {
+                "ids": self.ids,
+                "documents": [f"doc {i}" for i in range(5000)],
+                "metadatas": [
+                    {"wing": "test", "room": "r1", "source_file": ""} for _ in range(5000)
+                ],
+            }
+
+        def upsert(self, *, documents, ids, metadatas=None):
+            self.upsert_calls.append(len(ids))
+
+    progress_updates = []
+    service = VaultService(SpyCollection(), WalWriter(tmp_path / "wal"))
+
+    count = service.reforge(
+        progress_callback=lambda processed, total: progress_updates.append((processed, total)),
+    )
+
+    assert count == 5000
+    assert service._col.upsert_calls == [1000, 1000, 1000, 1000, 1000]
+    assert progress_updates[0] == (0, 5000)
+    assert progress_updates[-1] == (5000, 5000)

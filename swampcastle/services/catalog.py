@@ -11,14 +11,35 @@ from swampcastle.storage.base import CollectionStore
 
 CASTLE_PROTOCOL = """SwampCastle protocol
 
-1. Do not state project history, past decisions, people, facts, or prior work from memory alone.
-2. Before making such claims, query SwampCastle first:
-   - use swampcastle_search for prior discussions, decisions, and text evidence
-   - use swampcastle_kg_query for entity and relationship facts
-3. If results are missing or ambiguous, say so explicitly. Do not guess.
-4. Use wing and room filters when the project context is known.
-5. Write durable notes only when the workflow calls for memory updates.
-6. When a stored fact is outdated, invalidate the old fact before adding the replacement."""
+SwampCastle is a persistent memory system accessed via MCP tools (all prefixed swampcastle_).
+
+Core discipline
+
+1. Never state project history, past decisions, people, or prior work from memory. Query first; if results are missing or ambiguous, say so — do not guess.
+2. Scope queries with wing/room filters when the project context is known. Run swampcastle_get_taxonomy if you don't know the castle's structure yet.
+
+Reading
+
+| Purpose | Tool | Notes |
+|---|---|---|
+| Prior discussions, decisions, context | swampcastle_search | query = short keywords only, not sentences or prompts |
+| Entity facts and relationships | swampcastle_kg_query | Query by entity name; use as_of for point-in-time |
+| Fact timeline | swampcastle_kg_timeline | Chronological view of an entity's history |
+| Castle structure | swampcastle_status, swampcastle_get_taxonomy | Use on first interaction or when unsure where to look |
+
+Writing
+
+Persist only when the workflow explicitly calls for it. Choose the right tool:
+
+| Tool | What to store | Example |
+|---|---|---|
+| swampcastle_add_drawer | Long-form content: decisions, discussions, specs | "We chose LanceDB because…" |
+| swampcastle_kg_add | Structured facts (subject → predicate → object) | ("SwampCastle", "uses", "LanceDB") |
+| swampcastle_diary_write | Agent session notes and reflections | End-of-session summary |
+
+Before writing:
+- Duplicates: call swampcastle_check_duplicate before swampcastle_add_drawer.
+- Stale facts: call swampcastle_kg_invalidate before adding a replacement via swampcastle_kg_add."""
 
 AAAK_SPEC = """AAAK is a compressed memory dialect that SwampCastle uses for efficient storage.
 It is designed to be readable by both humans and LLMs without decoding.

@@ -42,12 +42,12 @@ class TestStatus:
 
     def test_protocol_is_compact_and_operational(self, svc):
         protocol = svc.status().protocol
-        assert (
-            "Do not state project history, past decisions, people, facts, or prior work" in protocol
-        )
-        assert "use swampcastle_search" in protocol
-        assert "use swampcastle_kg_query" in protocol
-        assert "Do not guess." in protocol
+        assert "Never state project history, past decisions, people, or prior work" in protocol
+        assert "swampcastle_search" in protocol
+        assert "swampcastle_kg_query" in protocol
+        assert "do not guess." in protocol
+        assert "swampcastle_check_duplicate" in protocol
+        assert "swampcastle_kg_invalidate" in protocol
         assert "ON WAKE-UP" not in protocol
         assert "This protocol ensures" not in protocol
 

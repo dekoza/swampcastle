@@ -944,6 +944,7 @@ class TestSyncServer:
         assert "node_id" in data
         assert data["total_drawers"] == 0
         assert isinstance(data["version_vector"], dict)
+        assert data["capabilities"]["gzip_request_bodies"] is True
 
     def test_pull_returns_embeddings(self):
         engine = self._build_engine(self._tmp, self._palace)

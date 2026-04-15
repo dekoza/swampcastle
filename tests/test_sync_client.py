@@ -88,6 +88,25 @@ def test_request_decodes_gzip_responses(monkeypatch):
     assert client._request("POST", "/sync/pull", {"version_vector": {}}) == payload
 
 
+def test_request_leaves_large_json_bodies_plain_without_server_capability(monkeypatch):
+    captured = {}
+
+    def fake_urlopen(req, timeout):
+        captured["encoding"] = req.headers.get("Content-encoding")
+        captured["body"] = req.data
+        return _FakeResponse({"ok": True})
+
+    monkeypatch.setattr("swampcastle.sync_client.urlopen", fake_urlopen)
+
+    client = SyncClient("http://server:7433")
+    client._request("POST", "/sync/push", {"records": [{"document": "x" * 10_000}]})
+
+    assert captured["encoding"] is None
+    assert json.loads(captured["body"].decode("utf-8")) == {
+        "records": [{"document": "x" * 10_000}]
+    }
+
+
 def test_request_gzips_large_json_bodies(monkeypatch):
     captured = {}
 
@@ -99,6 +118,7 @@ def test_request_gzips_large_json_bodies(monkeypatch):
     monkeypatch.setattr("swampcastle.sync_client.urlopen", fake_urlopen)
 
     client = SyncClient("http://server:7433")
+    client._server_supports_gzip_requests = True
     client._request("POST", "/sync/push", {"records": [{"document": "x" * 10_000}]})
 
     assert captured["encoding"] == "gzip"
@@ -191,6 +211,26 @@ def test_get_status_push_and_pull_delegate_to_request(monkeypatch):
         ("POST", "/sync/push", changeset.to_dict()),
         ("POST", "/sync/pull", {"version_vector": {"local": 1}}),
     ]
+
+
+def test_get_status_records_gzip_request_capability(monkeypatch):
+    monkeypatch.setattr(
+        SyncClient,
+        "_request",
+        lambda self, method, path, body=None: {
+            "node_id": "server",
+            "version_vector": {},
+            "total_drawers": 0,
+            "capabilities": {"gzip_request_bodies": True},
+        },
+    )
+
+    client = SyncClient("http://server")
+
+    status = client.get_status()
+
+    assert status["node_id"] == "server"
+    assert client._server_supports_gzip_requests is True
 
 
 def test_sync_returns_summary_without_push_or_pull(monkeypatch):

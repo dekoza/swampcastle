@@ -85,7 +85,7 @@ swampcastle parley --server http://homeserver:7433
 
 The CLI performs a single sync exchange per invocation. Continuous loop flags were removed because they were never implemented.
 
-Sync requests and responses negotiate HTTP gzip automatically. Large push and pull payloads are compressed on the wire when both sides support it.
+During a normal sync exchange the client and server negotiate HTTP gzip automatically. Servers advertise support for gzipped request bodies via `/sync/status`, and large push / pull payloads are compressed on the wire when both sides support it.
 
 ## Python API
 

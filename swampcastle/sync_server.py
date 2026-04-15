@@ -254,6 +254,7 @@ def create_app():
             "node_id": engine._identity.node_id,
             "version_vector": engine.version_vector,
             "total_drawers": col.count(),
+            "capabilities": {"gzip_request_bodies": True},
         }
         return _make_json_response(payload, accept_encoding=request.headers.get("Accept-Encoding"))
 

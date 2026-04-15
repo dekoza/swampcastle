@@ -43,6 +43,7 @@ class SyncClient:
         self._api_key = (
             api_key if api_key is not None else os.environ.get("SWAMPCASTLE_SYNC_API_KEY")
         )
+        self._server_supports_gzip_requests = False
 
     def _request(self, method: str, path: str, body: dict = None) -> dict:
         """Make an HTTP request and return parsed JSON."""
@@ -51,7 +52,7 @@ class SyncClient:
         headers = {"Accept-Encoding": "gzip"}
         if data is not None:
             headers["Content-Type"] = "application/json"
-            if len(data) >= _SYNC_GZIP_MIN_BYTES:
+            if self._server_supports_gzip_requests and len(data) >= _SYNC_GZIP_MIN_BYTES:
                 data = gzip.compress(data, compresslevel=_SYNC_GZIP_COMPRESSLEVEL)
                 headers["Content-Encoding"] = "gzip"
         if self._api_key:
@@ -74,7 +75,10 @@ class SyncClient:
 
     def get_status(self) -> dict:
         """Get server's node_id, version_vector, and drawer count."""
-        return self._request("GET", "/sync/status")
+        status = self._request("GET", "/sync/status")
+        capabilities = status.get("capabilities") or {}
+        self._server_supports_gzip_requests = bool(capabilities.get("gzip_request_bodies"))
+        return status
 
     def push(self, changeset: ChangeSet) -> dict:
         """Send a changeset to the server."""

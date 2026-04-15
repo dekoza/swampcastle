@@ -8,6 +8,7 @@ from swampcastle.castle import Castle
 from swampcastle.models.drawer import AddDrawerCommand
 from swampcastle.settings import CastleSettings
 from swampcastle.storage.memory import InMemoryStorageFactory
+from swampcastle.services.vault import VaultService
 
 
 @pytest.fixture
@@ -121,3 +122,33 @@ def test_reforge_dry_run_does_not_modify(castle):
 
     # Count should be same
     assert castle.vault._col.count() == before_count
+
+
+def test_reforge_reports_batch_progress(tmp_path):
+    from swampcastle.wal import WalWriter
+
+    class SpyCollection:
+        def __init__(self):
+            self.upsert_calls = []
+
+        def get(self, *, ids=None, where=None, limit=None, offset=None, include=None):
+            return {
+                "ids": ["d1", "d2", "d3", "d4", "d5"],
+                "documents": [f"doc {i}" for i in range(1, 6)],
+                "metadatas": [{"wing": "test", "room": "r1", "source_file": ""} for _ in range(5)],
+            }
+
+        def upsert(self, *, documents, ids, metadatas=None):
+            self.upsert_calls.append(list(ids))
+
+    progress_updates = []
+    service = VaultService(SpyCollection(), WalWriter(tmp_path / "wal"))
+
+    count = service.reforge(
+        batch_size=2,
+        progress_callback=lambda processed, total: progress_updates.append((processed, total)),
+    )
+
+    assert count == 5
+    assert service._col.upsert_calls == [["d1", "d2"], ["d3", "d4"], ["d5"]]
+    assert progress_updates == [(0, 5), (2, 5), (4, 5), (5, 5)]

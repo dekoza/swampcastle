@@ -651,7 +651,16 @@ def test_cmd_reforge_updates_embedder_settings_and_prints(capsys):
             self.calls = []
             self.catalog = SimpleNamespace(status=lambda: None)
             self.search = SimpleNamespace(search=lambda q: None)
-            self.vault = SimpleNamespace(reforge=lambda **kwargs: self.calls.append(kwargs) or 3)
+
+            def reforge(**kwargs):
+                self.calls.append(kwargs)
+                progress_callback = kwargs["progress_callback"]
+                progress_callback(0, 3)
+                progress_callback(2, 3)
+                progress_callback(3, 3)
+                return 3
+
+            self.vault = SimpleNamespace(reforge=reforge)
             self._collection = object()
 
     castle = ReforgeCastle(None, None)
@@ -663,8 +672,38 @@ def test_cmd_reforge_updates_embedder_settings_and_prints(capsys):
         with patch("swampcastle.cli.commands.factory_from_settings", return_value=object()):
             commands.cmd_reforge(args)
 
-    assert castle.calls == [{"wing": "w", "room": "r", "dry_run": False}]
-    assert "onnx embedder" in capsys.readouterr().out
+    assert castle.calls[0]["wing"] == "w"
+    assert castle.calls[0]["room"] == "r"
+    assert castle.calls[0]["dry_run"] is False
+    assert callable(castle.calls[0]["progress_callback"])
+    out = capsys.readouterr().out
+    assert "onnx embedder" in out
+    assert "Reforging" in out
+    assert "3/3" in out
+
+
+def test_cmd_reforge_dry_run_does_not_render_progress(capsys):
+    class ReforgeCastle(DummyCastle):
+        def __init__(self, settings, factory):
+            self.calls = []
+            self.catalog = SimpleNamespace(status=lambda: None)
+            self.search = SimpleNamespace(search=lambda q: None)
+            self.vault = SimpleNamespace(reforge=lambda **kwargs: self.calls.append(kwargs) or 3)
+            self._collection = object()
+
+    castle = ReforgeCastle(None, None)
+    args = SimpleNamespace(
+        wing="w", room="r", dry_run=True, embedder="onnx", device="cpu", palace=None, backend=None
+    )
+
+    with patch("swampcastle.castle.Castle", lambda s, f: castle):
+        with patch("swampcastle.cli.commands.factory_from_settings", return_value=object()):
+            commands.cmd_reforge(args)
+
+    assert castle.calls[0]["progress_callback"] is None
+    out = capsys.readouterr().out
+    assert "DRY RUN" in out
+    assert "Reforging" not in out
 
 
 def test_cmd_armory_lists_models(capsys):

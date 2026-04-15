@@ -63,6 +63,21 @@ def _print_kv(label: str, value) -> None:
     print(f"  {label}: {value}")
 
 
+def _render_progress_bar(processed: int, total: int, width: int = 24) -> str:
+    if total <= 0:
+        return "[------------------------]   0% 0/0"
+    ratio = min(max(processed / total, 0.0), 1.0)
+    filled = int(ratio * width)
+    bar = "#" * filled + "-" * (width - filled)
+    percent = int(ratio * 100)
+    return f"[{bar}] {percent:3d}% {processed}/{total}"
+
+
+def _print_progress(prefix: str, processed: int, total: int) -> None:
+    end = "\n" if total > 0 and processed >= total else ""
+    print(f"\r  {prefix}: {_render_progress_bar(processed, total)}", end=end, flush=True)
+
+
 def _settings(args) -> CastleSettings:
     kwargs = {}
     palace = getattr(args, "palace", None)
@@ -463,11 +478,18 @@ def cmd_reforge(args):
     if device:
         settings.embedder_device = device
 
+    progress_callback = None
+    if not args.dry_run:
+
+        def progress_callback(processed: int, total: int) -> None:
+            _print_progress("Reforging", processed, total)
+
     with Castle(settings, factory_from_settings(settings)) as castle:
         count = castle.vault.reforge(
             wing=args.wing,
             room=args.room,
             dry_run=args.dry_run,
+            progress_callback=progress_callback,
         )
         if count == 0:
             print("  No drawers to reforge.")

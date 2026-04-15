@@ -227,7 +227,7 @@ swampcastle reforge [--embedder NAME] [--device DEVICE] [--dry-run]
 swampcastle reindex [--embedder NAME] [--device DEVICE] [--dry-run]
 ```
 
-Honest status: this command is currently a scaffold. The full re-embed pipeline is not finished yet.
+Honest status: this command is still a fairly thin wrapper, but live re-embed runs now render a progress bar so long-running reindex jobs are not silent.
 
 ## armory / embedders
 

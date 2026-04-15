@@ -3,6 +3,7 @@
 import hashlib
 import heapq
 import logging
+from collections.abc import Callable
 from datetime import datetime
 
 from pydantic import BaseModel, Field
@@ -286,10 +287,21 @@ class VaultService:
 
         return len(ids)
 
-    def reforge(self, wing: str = None, room: str = None, dry_run: bool = False) -> int:
+    def reforge(
+        self,
+        wing: str = None,
+        room: str = None,
+        dry_run: bool = False,
+        batch_size: int = 100,
+        progress_callback: Callable[[int, int], None] | None = None,
+    ) -> int:
         """Re-embed all drawers using the currently configured embedding model.
 
         Useful when switching to a different model (e.g. ST -> ONNX or ONNX -> Ollama).
+
+        Args:
+            batch_size: Number of drawers to re-embed per write batch.
+            progress_callback: Optional callback receiving (processed, total).
 
         Returns:
             Number of drawers processed.
@@ -304,16 +316,26 @@ class VaultService:
         ids = results.get("ids", [])
         documents = results.get("documents", [])
         metadatas = results.get("metadatas", [])
+        total = len(ids)
 
         if not ids:
             return 0
 
-        if not dry_run:
-            # upsert re-embeds when embeddings aren't provided
-            self._col.upsert(
-                ids=ids,
-                documents=documents,
-                metadatas=metadatas,
-            )
+        if progress_callback is not None:
+            progress_callback(0, total)
 
-        return len(ids)
+        if dry_run:
+            return total
+
+        effective_batch_size = max(1, batch_size)
+        for start in range(0, total, effective_batch_size):
+            end = min(start + effective_batch_size, total)
+            self._col.upsert(
+                ids=ids[start:end],
+                documents=documents[start:end],
+                metadatas=metadatas[start:end],
+            )
+            if progress_callback is not None:
+                progress_callback(end, total)
+
+        return total

@@ -33,3 +33,4 @@ def test_release_draft_exists_for_target_version():
     assert content.startswith(f"# SwampCastle {_RELEASE_VERSION}")
     assert "Draft — do not publish yet." not in content
     assert "## Highlights" in content
+    assert "## Suggested release title" not in content

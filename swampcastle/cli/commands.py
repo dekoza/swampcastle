@@ -200,6 +200,7 @@ def cmd_gather(args):
             storage_factory=storage_factory,
             explain=getattr(args, "explain", False),
             extract_kg_proposals=getattr(args, "extract_kg_proposals", False),
+            embed_batch_size=getattr(settings, "embed_batch_size", None),
         )
 
 

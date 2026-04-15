@@ -52,6 +52,9 @@ class CastleSettings(BaseSettings):
     embedder_model: Optional[str] = None
     embedder_device: Optional[str] = None
     embedder_options: dict[str, Any] = Field(default_factory=dict)
+    embed_batch_size: Optional[int] = Field(default=None, ge=1)
+    onnx_intra_op_threads: Optional[int] = Field(default=None, ge=1)
+    onnx_inter_op_threads: Optional[int] = Field(default=None, ge=1)
     sync_api_key: Optional[str] = Field(
         default=None,
         description=(
@@ -108,6 +111,10 @@ class CastleSettings(BaseSettings):
 
         if self.embedder_device and "device" not in options:
             options["device"] = self.embedder_device
+        if self.onnx_intra_op_threads and "intra_op_num_threads" not in options:
+            options["intra_op_num_threads"] = self.onnx_intra_op_threads
+        if self.onnx_inter_op_threads and "inter_op_num_threads" not in options:
+            options["inter_op_num_threads"] = self.onnx_inter_op_threads
 
         if self.embedder == "ollama":
             if self.embedder_model and "model" not in options:

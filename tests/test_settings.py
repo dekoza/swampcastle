@@ -17,6 +17,9 @@ def clear_swampcastle_env(monkeypatch):
         "SWAMPCASTLE_DATABASE_URL",
         "SWAMPCASTLE_EMBEDDER",
         "SWAMPCASTLE_EMBEDDER_DEVICE",
+        "SWAMPCASTLE_EMBED_BATCH_SIZE",
+        "SWAMPCASTLE_ONNX_INTRA_OP_THREADS",
+        "SWAMPCASTLE_ONNX_INTER_OP_THREADS",
     ]:
         monkeypatch.delenv(key, raising=False)
 
@@ -102,6 +105,21 @@ class TestEmbedderConfig:
             "embedder_options": {
                 "model": "nomic-embed-text",
                 "base_url": "http://server:11434",
+            },
+        }
+
+    def test_embedder_config_merges_onnx_thread_options(self):
+        s = CastleSettings(
+            embedder="onnx",
+            onnx_intra_op_threads=8,
+            onnx_inter_op_threads=1,
+            _env_file=None,
+        )
+        assert s.embedder_config == {
+            "embedder": "onnx",
+            "embedder_options": {
+                "intra_op_num_threads": 8,
+                "inter_op_num_threads": 1,
             },
         }
 

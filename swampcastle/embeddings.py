@@ -12,6 +12,8 @@ Config in ~/.swampcastle/config.json:
     {"embedder": "all-MiniLM-L6-v2"}      — same as default
     {"embedder": "bge-small"}             — requires [gpu]
     {"embedder": "ollama", "embedder_options": {"model": "nomic-embed-text"}}
+    {"onnx_intra_op_threads": 8, "onnx_inter_op_threads": 1, "embed_batch_size": 128}
+                                          — tune canonical CPU ONNX throughput without changing the embedding contract
 """
 
 from __future__ import annotations
@@ -23,6 +25,8 @@ import struct
 import threading
 from importlib.metadata import PackageNotFoundError, version
 from typing import Any, Protocol, runtime_checkable
+
+from .tuning import suggest_onnx_tuning
 
 logger = logging.getLogger("swampcastle")
 
@@ -208,10 +212,17 @@ class OnnxEmbedder:
     MAX_SEQ_LENGTH = 256
     BATCH_SIZE = 32
 
-    def __init__(self, providers: tuple[str, ...] | None = None):
+    def __init__(
+        self,
+        providers: tuple[str, ...] | None = None,
+        intra_op_num_threads: int | None = None,
+        inter_op_num_threads: int | None = None,
+    ):
         self._providers = tuple(providers or _ONNX_PROVIDERS)
         self._session = None
         self._tokenizer = None
+        self._intra_op_num_threads = _positive_int_or_none(intra_op_num_threads)
+        self._inter_op_num_threads = _positive_int_or_none(inter_op_num_threads)
 
     @property
     def model_name(self) -> str:
@@ -268,6 +279,9 @@ class OnnxEmbedder:
 
         so = ort.SessionOptions()
         so.log_severity_level = 3
+        suggested = suggest_onnx_tuning()
+        so.intra_op_num_threads = self._intra_op_num_threads or suggested["onnx_intra_op_threads"]
+        so.inter_op_num_threads = self._inter_op_num_threads or suggested["onnx_inter_op_threads"]
         self._session = ort.InferenceSession(
             os.path.join(model_dir, "model.onnx"),
             providers=list(self._providers),
@@ -476,6 +490,14 @@ _embedder_cache: dict[str, Embedder] = {}
 _embedder_lock = threading.Lock()
 
 
+def _positive_int_or_none(value: Any) -> int | None:
+    try:
+        parsed = int(value)
+    except (TypeError, ValueError):
+        return None
+    return parsed if parsed > 0 else None
+
+
 MODEL_ALIASES = {
     "onnx": "onnx",
     "minilm": "all-MiniLM-L6-v2",
@@ -531,17 +553,42 @@ def get_embedder(config: dict | None = None) -> Embedder:
         )
 
     device = options.get("device", "cpu")
+    onnx_intra = _positive_int_or_none(options.get("intra_op_num_threads"))
+    onnx_inter = _positive_int_or_none(options.get("inter_op_num_threads"))
+    onnx_cache_suffix = f"{onnx_intra or 'auto'}:{onnx_inter or 'auto'}"
     if name == "onnx":
         if device != "cpu":
             raise ValueError(
                 "The ONNX embedder is CPU-only. Use all-MiniLM-L6-v2 with ST for cuda/mps."
             )
-        return _get_or_create("onnx:all-MiniLM-L6-v2:cpu", OnnxEmbedder)
+        if onnx_intra is None and onnx_inter is None:
+            return _get_or_create(
+                f"onnx:all-MiniLM-L6-v2:cpu:{onnx_cache_suffix}",
+                OnnxEmbedder,
+            )
+        return _get_or_create(
+            f"onnx:all-MiniLM-L6-v2:cpu:{onnx_cache_suffix}",
+            lambda: OnnxEmbedder(
+                intra_op_num_threads=onnx_intra,
+                inter_op_num_threads=onnx_inter,
+            ),
+        )
 
     resolved = resolve_model_name(name)
 
     if resolved == "all-MiniLM-L6-v2" and device == "cpu":
-        return _get_or_create("onnx:all-MiniLM-L6-v2:cpu", OnnxEmbedder)
+        if onnx_intra is None and onnx_inter is None:
+            return _get_or_create(
+                f"onnx:all-MiniLM-L6-v2:cpu:{onnx_cache_suffix}",
+                OnnxEmbedder,
+            )
+        return _get_or_create(
+            f"onnx:all-MiniLM-L6-v2:cpu:{onnx_cache_suffix}",
+            lambda: OnnxEmbedder(
+                intra_op_num_threads=onnx_intra,
+                inter_op_num_threads=onnx_inter,
+            ),
+        )
 
     cache_key = f"st:{resolved}:{device}"
     return _get_or_create(

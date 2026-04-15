@@ -221,6 +221,34 @@ def test_onnx_embedder_pins_cpu_execution_provider():
     assert fake_ort.InferenceSession.call_args.kwargs["providers"] == ["CPUExecutionProvider"]
 
 
+def test_onnx_embedder_applies_explicit_thread_settings():
+    fake_session = MagicMock()
+    fake_session_options = MagicMock()
+    fake_tokenizer = MagicMock()
+
+    fake_ort = MagicMock()
+    fake_ort.SessionOptions.return_value = fake_session_options
+    fake_ort.InferenceSession.return_value = fake_session
+    fake_ort.get_available_providers.return_value = ["CPUExecutionProvider"]
+
+    fake_tokenizers = MagicMock()
+    fake_tokenizers.Tokenizer.from_file.return_value = fake_tokenizer
+
+    with patch.dict(
+        "sys.modules",
+        {
+            "onnxruntime": fake_ort,
+            "tokenizers": fake_tokenizers,
+        },
+    ):
+        with patch("swampcastle.embeddings._ensure_onnx_model", return_value="/tmp/fake-onnx"):
+            embedder = OnnxEmbedder(intra_op_num_threads=8, inter_op_num_threads=1)
+            embedder._load()
+
+    assert fake_session_options.intra_op_num_threads == 8
+    assert fake_session_options.inter_op_num_threads == 1
+
+
 # ── get_embedder factory ──────────────────────────────────────────────
 
 
@@ -278,6 +306,32 @@ def test_get_embedder_different_configs():
     assert e1 is not e2
 
 
+def test_get_embedder_onnx_thread_options_affect_cache_key():
+    from swampcastle import embeddings as embeddings_module
+
+    embeddings_module._embedder_cache.clear()
+
+    first = object()
+    second = object()
+    with patch("swampcastle.embeddings.OnnxEmbedder", side_effect=[first, second]) as mock_cls:
+        e1 = get_embedder(
+            {
+                "embedder": "onnx",
+                "embedder_options": {"intra_op_num_threads": 4, "inter_op_num_threads": 1},
+            }
+        )
+        e2 = get_embedder(
+            {
+                "embedder": "onnx",
+                "embedder_options": {"intra_op_num_threads": 8, "inter_op_num_threads": 1},
+            }
+        )
+
+    assert e1 is first
+    assert e2 is second
+    assert mock_cls.call_count == 2
+
+
 # ── list_embedders ────────────────────────────────────────────────────
 
 
@@ -312,6 +366,16 @@ def test_build_embedding_verification_report_is_deterministic():
     assert report_a == report_b
     assert report_a["embedder"]["model_name"] == "fake-embedder"
     assert report_a["probe_hash"]
+
+
+def test_onnx_verification_report_unchanged_by_thread_tuning():
+    default_report = build_embedding_verification_report(OnnxEmbedder())
+    tuned_report = build_embedding_verification_report(
+        OnnxEmbedder(intra_op_num_threads=1, inter_op_num_threads=1)
+    )
+
+    assert default_report["fingerprint_hash"] == tuned_report["fingerprint_hash"]
+    assert default_report["probe_hash"] == tuned_report["probe_hash"]
 
 
 # ── embedding_model tracking in db.py ─────────────────────────────────

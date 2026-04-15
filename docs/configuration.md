@@ -22,6 +22,9 @@ Fields:
 | `embedder_model` | `str \| None` | `None` | optional model override; mainly useful for Ollama or explicit HF model names |
 | `embedder_device` | `str \| None` | `None` | optional device override passed into embedder config (e.g. `cpu`, `cuda`) |
 | `embedder_options` | `dict[str, Any]` | `{}` | raw embedder option bag merged into `embedder_config`; supports fields like `base_url`, `timeout`, `device` |
+| `embed_batch_size` | `int \| None` | `None` | outer mining batch size for buffered embed+upsert work; env/config override for `SWAMPCASTLE_EMBED_BATCH_SIZE` |
+| `onnx_intra_op_threads` | `int \| None` | `None` | preferred ONNX Runtime intra-op thread count for the canonical CPU embedder |
+| `onnx_inter_op_threads` | `int \| None` | `None` | preferred ONNX Runtime inter-op thread count for the canonical CPU embedder |
 
 Computed fields:
 
@@ -47,6 +50,9 @@ Common variables:
 | `SWAMPCASTLE_EMBEDDER` | embedder name |
 | `SWAMPCASTLE_EMBEDDER_MODEL` | embedder model override |
 | `SWAMPCASTLE_EMBEDDER_DEVICE` | device override |
+| `SWAMPCASTLE_EMBED_BATCH_SIZE` | outer mining embed batch size |
+| `SWAMPCASTLE_ONNX_INTRA_OP_THREADS` | ONNX Runtime intra-op thread count |
+| `SWAMPCASTLE_ONNX_INTER_OP_THREADS` | ONNX Runtime inter-op thread count |
 | `SWAMPCASTLE_ONNX_CACHE` | cache directory for the default ONNX model |
 | `SWAMPCASTLE_EMBEDDER_OPTIONS` | JSON-encoded raw option bag for advanced cases |
 | `SWAMPCASTLE_SOURCE_DIR` | default source directory for `cleave` |
@@ -96,6 +102,13 @@ The CLI now auto-creates and auto-loads `~/.swampcastle/config.json` on first us
 ```bash
 swampcastle wizard
 ```
+
+For the canonical CPU ONNX path, `wizard` can also tune three performance knobs and store them in `config.json`:
+- `onnx_intra_op_threads`
+- `onnx_inter_op_threads`
+- `embed_batch_size`
+
+If you skip benchmarking, the wizard proposes safe defaults based on logical CPU count and total memory.
 
 The same runtime directory may also contain:
 - `entity_registry.json` — your self identity plus known people/projects

@@ -21,6 +21,7 @@ from pathlib import Path
 from ..project_config import PROJECT_CONFIG_NAME, resolve_project_config
 from ..settings import CastleSettings
 from ..storage import StorageFactory, factory_from_settings
+from ..tuning import suggest_onnx_tuning
 from .contributor import detect_contributor
 from .kg_extract import persist_kg_proposals_for_wing
 from .skeleton import get_skeleton_extractor
@@ -610,8 +611,7 @@ class EmbeddingBuffer:
             except (ValueError, TypeError):
                 pass
 
-        cpu = os.cpu_count() or 1
-        default_bs = max(32, min(512, cpu * 16))
+        default_bs = suggest_onnx_tuning()["embed_batch_size"]
         self.batch_size = (
             batch_size
             if batch_size is not None
@@ -1003,6 +1003,7 @@ def mine(
     force_no_skeleton: bool = False,
     only_force_included: bool = False,
     extract_kg_proposals: bool = False,
+    embed_batch_size: int | None = None,
     _force_remine: bool = False,
 ):
     """Mine a project directory into the palace."""
@@ -1055,7 +1056,11 @@ def mine(
         collection = storage_factory.open_collection("swampcastle_chests")
         # prepare embedding buffer
         embedder = getattr(storage_factory, "_embedder", None)
-        embed_buffer = EmbeddingBuffer(collection, embedder=embedder)
+        embed_buffer = EmbeddingBuffer(
+            collection,
+            embedder=embedder,
+            batch_size=embed_batch_size,
+        )
     else:
         collection = None
         embed_buffer = None

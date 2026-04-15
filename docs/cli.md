@@ -32,6 +32,13 @@ swampcastle wizard
 
 The wizard edits `~/.swampcastle/config.json` and supports the default Lance backend or manual PostgreSQL configuration. It can also seed `~/.swampcastle/entity_registry.json` with your self identity and known people/projects.
 
+When the active runtime embedder is the canonical CPU ONNX path, the wizard also offers to benchmark your machine and store tuned values for:
+- `onnx_intra_op_threads`
+- `onnx_inter_op_threads`
+- `embed_batch_size`
+
+If you skip the benchmark, the wizard proposes safe defaults based on logical CPU count and RAM.
+
 ## gather / mine
 
 Ingest files into the configured collection backend.

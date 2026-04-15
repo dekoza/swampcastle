@@ -418,6 +418,12 @@ def cmd_wizard(args):
     run_wizard()
 
 
+def cmd_tune(args):
+    from swampcastle.wizard import run_tune
+
+    run_tune()
+
+
 def cmd_drawbridge_setup(args):
     base_cmd = "swampcastle drawbridge run"
     palace = getattr(args, "palace", None)

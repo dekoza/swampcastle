@@ -209,6 +209,14 @@ def _print_onnx_tuning(label: str, tuning: dict[str, int]) -> None:
     print(f"    Mine embed batch size:  {tuning['embed_batch_size']}")
 
 
+def _save_runtime_tuning(config: dict, tuning: dict[str, int], *, label: str) -> Path:
+    updated = dict(config)
+    updated.update(tuning)
+    config_path = save_runtime_config(updated)
+    print(f"\n  {label}: {config_path}")
+    return config_path
+
+
 def _configure_onnx_performance(config: dict) -> dict[str, int]:
     if not _is_cpu_onnx_config(config):
         return {}
@@ -360,6 +368,28 @@ def _save_identity(
 # ── Main wizard flow ─────────────────────────────────────────────────────────
 
 
+def run_tune() -> None:
+    config = load_runtime_config()
+
+    print("  SwampCastle Tune")
+    print("  Benchmark ONNX CPU ingest tuning without the full wizard.")
+
+    if not _is_cpu_onnx_config(config):
+        print("  Tune currently supports only the canonical CPU ONNX embedder path.")
+        print("  Set 'embedder' to 'onnx' and keep device='cpu', then rerun this command.")
+        return
+
+    try:
+        tuning = _benchmark_onnx_settings(config)
+    except Exception as exc:
+        print(f"\n  Benchmark failed: {exc}")
+        print("  No changes were saved.")
+        return
+
+    _print_onnx_tuning("Benchmarked ONNX settings", tuning)
+    _save_runtime_tuning(config, tuning, label="Saved tuned runtime config")
+
+
 def run_wizard() -> None:
     config = load_runtime_config()
 
@@ -368,8 +398,7 @@ def run_wizard() -> None:
 
     updated = _configure_backend(config)
     updated.update(_configure_onnx_performance(updated))
-    config_path = save_runtime_config(updated)
-    print(f"\n  Saved runtime config: {config_path}")
+    _save_runtime_tuning(updated, {}, label="Saved runtime config")
 
     # Part 2: personal identity (optional)
     if _yn("\n  Set up personal identity? (who you are, people, projects)", default=True):

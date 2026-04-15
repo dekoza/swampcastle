@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import json
 
-from swampcastle.wizard import run_wizard
+from swampcastle.wizard import run_tune, run_wizard
 
 
 SAFE_TUNING = {
@@ -171,3 +171,35 @@ def test_wizard_benchmark_saves_measured_onnx_settings(tmp_path, monkeypatch):
     assert data["onnx_intra_op_threads"] == 12
     assert data["onnx_inter_op_threads"] == 1
     assert data["embed_batch_size"] == 256
+
+
+def test_run_tune_benchmarks_and_saves_runtime_config(tmp_path, monkeypatch, capsys):
+    monkeypatch.setattr("swampcastle.runtime_config.Path.home", lambda: tmp_path)
+    config_dir = tmp_path / ".swampcastle"
+    config_dir.mkdir(parents=True)
+    (config_dir / "config.json").write_text(
+        json.dumps(
+            {
+                "backend": "lance",
+                "castle_path": str(config_dir / "castle"),
+                "embedder": "onnx",
+            }
+        )
+    )
+    monkeypatch.setattr(
+        "swampcastle.wizard._benchmark_onnx_settings",
+        lambda config: {
+            "onnx_intra_op_threads": 10,
+            "onnx_inter_op_threads": 1,
+            "embed_batch_size": 192,
+        },
+    )
+
+    run_tune()
+
+    data = json.loads((config_dir / "config.json").read_text())
+    assert data["onnx_intra_op_threads"] == 10
+    assert data["onnx_inter_op_threads"] == 1
+    assert data["embed_batch_size"] == 192
+    out = capsys.readouterr().out
+    assert "Saved tuned runtime config" in out

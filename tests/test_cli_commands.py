@@ -633,6 +633,12 @@ def test_cmd_wizard_runs_runtime_wizard():
     mock.assert_called_once_with()
 
 
+def test_cmd_tune_runs_runtime_tuner():
+    with patch("swampcastle.wizard.run_tune") as mock:
+        commands.cmd_tune(SimpleNamespace())
+    mock.assert_called_once_with()
+
+
 def test_cmd_drawbridge_setup_prints_examples(capsys):
     commands.cmd_drawbridge_setup(SimpleNamespace(palace=None))
     out = capsys.readouterr().out

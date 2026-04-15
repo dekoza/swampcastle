@@ -110,6 +110,12 @@ For the canonical CPU ONNX path, `wizard` can also tune three performance knobs 
 
 If you skip benchmarking, the wizard proposes safe defaults based on logical CPU count and total memory.
 
+To rerun just the ONNX CPU benchmark later without reopening the full wizard, use:
+
+```bash
+swampcastle tune
+```
+
 The same runtime directory may also contain:
 - `entity_registry.json` — your self identity plus known people/projects
 - `aaak_entities.md` — AAAK-oriented entity aliases derived from the registry

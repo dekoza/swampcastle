@@ -78,6 +78,12 @@ swampcastle wizard
 
 The wizard can also store your own identity in `~/.swampcastle/entity_registry.json` so SwampCastle can recognize you by name or nickname during ingest.
 
+If you stick with the canonical CPU ONNX embedder and want to rerun the local performance benchmark later, use:
+
+```bash
+swampcastle tune
+```
+
 ### 1. Prepare a project
 
 ```bash

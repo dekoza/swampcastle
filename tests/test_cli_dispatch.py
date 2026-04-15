@@ -144,6 +144,14 @@ class TestWizard:
                 mock.assert_called_once()
 
 
+class TestTune:
+    def test_dispatches(self):
+        with patch("sys.argv", ["swampcastle", "tune"]):
+            with patch("swampcastle.cli.commands.cmd_tune") as mock:
+                main()
+                mock.assert_called_once()
+
+
 class TestCleave:
     def test_dispatches(self, tmp_path):
         with patch("sys.argv", ["swampcastle", "cleave", str(tmp_path)]):

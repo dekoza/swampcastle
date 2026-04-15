@@ -11,6 +11,7 @@ import fnmatch
 import hashlib
 import inspect
 import logging
+import multiprocessing
 import os
 import re
 import sys
@@ -996,11 +997,18 @@ _PARALLEL_WINDOW = 256  # max in-flight futures at once
 
 def _resolve_parallel_workers(explicit: int | None) -> int | None:
     """Return worker count from explicit arg or env vars, or None for sequential."""
-    if explicit is not None and explicit > 0:
+    if explicit is not None:
+        if explicit <= 1:
+            return None
         return min(explicit, _MAX_PARALLEL_WORKERS)
     if os.environ.get("SWAMPCASTLE_PARALLEL", "").lower() in ("1", "true", "yes"):
         raw = os.environ.get("SWAMPCASTLE_PARALLEL_WORKERS", "")
-        count = int(raw) if raw.isdigit() else (os.cpu_count() or 2)
+        try:
+            count = int(raw) if raw else (os.cpu_count() or 2)
+        except ValueError:
+            count = os.cpu_count() or 2
+        if count <= 1:
+            return None
         return min(count, _MAX_PARALLEL_WORKERS)
     return None
 
@@ -1270,7 +1278,9 @@ def mine(  # noqa: C901
         files_iter = iter(files)
         in_flight: dict = {}
 
-        with ProcessPoolExecutor(max_workers=max_workers) as ex:
+        spawn_context = multiprocessing.get_context("spawn")
+
+        with ProcessPoolExecutor(max_workers=max_workers, mp_context=spawn_context) as ex:
             # Prime the window
             for fp in files_iter:
                 worker_args = _submittable_args(fp)

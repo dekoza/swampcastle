@@ -1,4 +1,5 @@
 import tempfile
+from concurrent.futures import Future
 from pathlib import Path
 from unittest.mock import patch
 
@@ -35,6 +36,10 @@ def test_resolve_explicit_arg_capped():
 
 def test_resolve_explicit_zero_means_sequential():
     assert _resolve_parallel_workers(0) is None
+
+
+def test_resolve_explicit_one_means_sequential():
+    assert _resolve_parallel_workers(1) is None
 
 
 def test_resolve_env_var(monkeypatch):
@@ -174,3 +179,46 @@ def test_mine_parallel_env_var(monkeypatch):
         mine(str(root), str(root / "palace"), storage_factory=factory)
         col = factory.open_collection("swampcastle_chests")
         assert col.count() > 0
+
+
+def test_mine_parallel_workers_one_uses_sequential_path(monkeypatch):
+    def fail_if_called(*args, **kwargs):
+        raise AssertionError("ProcessPoolExecutor should not be used for parallel_workers=1")
+
+    monkeypatch.setattr("swampcastle.mining.miner.ProcessPoolExecutor", fail_if_called)
+
+    with tempfile.TemporaryDirectory() as tmpdir:
+        root = Path(tmpdir).resolve()
+        _make_project(root, wing="workers_one_test")
+        mine(str(root), str(root / "palace"), dry_run=True, parallel_workers=1)
+
+
+def test_mine_parallel_uses_spawn_context(monkeypatch):
+    captured: dict[str, object] = {}
+
+    class RecordingExecutor:
+        def __init__(self, *, max_workers, mp_context=None):
+            captured["max_workers"] = max_workers
+            captured["mp_context"] = mp_context
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, exc_type, exc, tb):
+            return False
+
+        def submit(self, fn, *args, **kwargs):
+            future = Future()
+            future.set_result(fn(*args, **kwargs))
+            return future
+
+    monkeypatch.setattr("swampcastle.mining.miner.ProcessPoolExecutor", RecordingExecutor)
+
+    with tempfile.TemporaryDirectory() as tmpdir:
+        root = Path(tmpdir).resolve()
+        _make_project(root, wing="spawn_test")
+        mine(str(root), str(root / "palace"), dry_run=True, parallel_workers=2)
+
+    assert captured["max_workers"] == 2
+    assert captured["mp_context"] is not None
+    assert captured["mp_context"].get_start_method() == "spawn"

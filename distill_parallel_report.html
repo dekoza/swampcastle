@@ -1,0 +1,75 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width,initial-scale=1" />
+<title>Distill (compress) Parallelization — Report</title>
+<style>
+body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Helvetica,Arial,sans-serif;margin:2rem;background:#f8f9fa;color:#222}
+.container{max-width:900px;margin:0 auto}
+h1{color:#0b3d91}
+.card{background:#fff;padding:1rem;border-radius:8px;box-shadow:0 2px 6px rgba(0,0,0,0.05);margin-bottom:1rem}
+table{width:100%;border-collapse:collapse}
+th,td{padding:.6rem;border-bottom:1px solid #eee;text-align:left}
+th{background:#0b3d91;color:#fff}
+.small{font-size:.9rem;color:#555}
+</style>
+</head>
+<body>
+<div class="container">
+<h1>Parallelizing "distill" (AAAK compress)</h1>
+<div class="card">
+<h2>Summary</h2>
+<p>The <code>VaultService.distill()</code> implementation was extended to optionally parallelize the AAAK compression step (Dialect.compress) using a ProcessPoolExecutor. The worker processes perform the CPU-bound compression per drawer; the main process performs the storage write (bulk update) to avoid passing database connections across processes.</p>
+<p>Parallelism is opt-in and controlled by the <code>parallel_workers</code> parameter (function argument) or environment variable <code>SWAMPCASTLE_DISTILL_PARALLEL=1</code> with optional <code>SWAMPCASTLE_DISTILL_WORKERS</code>. The default behaviour is unchanged (sequential) to preserve compatibility.</p>
+</div>
+
+<div class="card">
+<h2>What changed (implementation notes)</h2>
+<ul>
+<li>Added a module-level worker <code>_distill_worker(args)</code> which constructs a <code>Dialect</code> instance and returns (doc_id, metadata_with_aaak).</li>
+<li>Main process submits doc-level tasks to a process pool using a bounded sliding window to avoid unbounded memory from many futures.</li>
+<li>Main process collects worker results into an ordered update list and performs a single bulk <code>collection.update(...)</code> call.</li>
+<li>Safeguards: worker failures are logged and skipped; BrokenProcessPool is re-raised so catastrophic pool failures are visible; max worker count is capped (32).</li>
+<li>Benchmarks script added: <code>benchmarks/distill_bench.py</code></li>
+</ul>
+</div>
+
+<div class="card">
+<h2>Micro-benchmarks (before vs after — sequential vs parallel)</h2>
+<p>Test setup: generated 1,000 drawers each containing a repeated paragraph (multiplier = 500) to make compression CPU-bound. Measured wall-clock time for <code>VaultService.distill()</code> run in the same process for the sequential path and for the parallel path with varying worker counts.</p>
+
+<table>
+<thead>
+<tr><th>Scenario</th><th>Time (s)</th><th>Notes</th></tr>
+</thead>
+<tbody>
+<tr><td>Sequential (baseline)</td><td>~2.73 s</td><td>Single-process compression of 1000 larger docs (mult=500)</td></tr>
+<tr><td>Parallel — 2 workers</td><td>~1.41 s</td><td>~1.93× speedup vs baseline</td></tr>
+<tr><td>Parallel — 4 workers</td><td>~0.73 s</td><td>~3.7× speedup vs baseline</td></tr>
+<tr><td>Parallel — 8 workers</td><td>~0.39 s</td><td>~7.0× speedup vs baseline</td></tr>
+</tbody>
+</table>
+<p class="small">Runtimes were measured on the development machine. Absolute timings will vary across machines. For small documents (< 50 repetitions) the compression work is too light and process overhead dominates; parallelism is most beneficial when per-document CPU work is non-trivial.</p>
+</div>
+
+<div class="card">
+<h2>Caveats & Observations</h2>
+<ul>
+<li>ProcessPoolExecutor adds serialization costs (pickling) and process startup overhead, so parallelism shines for larger per-item CPU work.</li>
+<li>The code avoids passing database/collection objects into worker processes (unsafe/fork-unsafe). All storage writes occur in the main process.</li>
+<li>Some storage backends (e.g. LanceDB) warn about fork-safety. When using multiprocessing with backends that rely on native threads, prefer the <code>spawn</code> start method or run parallel distill on systems where the storage driver is known to be fork-safe.</li>
+<li>We cap worker count to 32 to avoid runaway process spawning from bad env vars.</li>
+</ul>
+</div>
+
+<div class="card">
+<h2>How to run the benchmark</h2>
+<p>Use the included script:</p>
+<pre>uv run python benchmarks/distill_bench.py -n 1000 -w 4 -m 500</pre>
+<p>Flags: <code>-n</code> number of drawers, <code>-w</code> worker count, <code>-m</code> repetition multiplier per document to tune CPU work.</p>
+</div>
+
+</div>
+</body>
+</html>

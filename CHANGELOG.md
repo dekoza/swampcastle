@@ -51,8 +51,8 @@ Knowledge-graph extraction, embedder hardening, and search / indexing ergonomics
 - Reduced reindex progress overhead by switching to large adaptive batches instead of many tiny upserts.
 
 ### Quality gates
-- Non-integration suite passing (`937 passed, 2 skipped, 5 deselected`).
-- Added targeted tests for KG extraction quality, embedder reproducibility metadata, CLI review flows, and reindex progress behavior.
+- Non-integration suite passing (`940 passed, 2 skipped, 5 deselected`).
+- Added targeted tests for KG extraction quality, embedder reproducibility metadata, CLI review flows, reindex progress behavior, and release metadata consistency.
 
 ## [4.0.2] - 2026-04-13
 

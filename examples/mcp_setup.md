@@ -18,9 +18,12 @@ claude mcp add swampcastle -- python -m swampcastle.drawbridge
 
 The server exposes the full SwampCastle MCP toolset. Common entry points include:
 
-- **swampcastle_status** — palace stats (wings, rooms, drawer counts)
-- **swampcastle_search** — semantic search across all memories
-- **swampcastle_list_wings** — list all projects in the palace
+- **status** — palace stats (wings, rooms, drawer counts)
+- **search** — semantic search across all memories
+- **list_wings** — list all projects in the palace
+
+Some MCP clients add the server namespace when rendering tool names, so you may still see
+forms like `swampcastle_search` in the UI even though raw discovery now advertises `search`.
 
 ## Usage in Claude Code
 

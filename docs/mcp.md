@@ -2,6 +2,11 @@
 
 SwampCastle exposes 19 tools over JSON-RPC stdin/stdout.
 
+Raw MCP discovery now advertises short tool names such as `status`, `search`, and `kg_query`.
+Many MCP clients add their own server namespace on top, so you may still see rendered names
+such as `swampcastle_search` in client UIs. For one compatibility release, legacy
+`swampcastle_*` names remain callable as hidden aliases but are omitted from discovery.
+
 ## Start the server
 
 Recommended:
@@ -50,41 +55,41 @@ At startup the server:
 ## Tool catalog
 
 ### Catalog / status
-- `swampcastle_status`
-- `swampcastle_list_wings`
-- `swampcastle_list_rooms`
-- `swampcastle_get_taxonomy`
-- `swampcastle_get_aaak_spec`
+- `status`
+- `list_wings`
+- `list_rooms`
+- `get_taxonomy`
+- `get_aaak_spec`
 
 ### Search
-- `swampcastle_search`
-- `swampcastle_check_duplicate`
+- `search`
+- `check_duplicate`
 
 ### Drawer writes
-- `swampcastle_add_drawer`
-- `swampcastle_delete_drawer`
+- `add_drawer`
+- `delete_drawer`
 
 ### Knowledge graph
-- `swampcastle_kg_query`
-- `swampcastle_kg_add`
-- `swampcastle_kg_invalidate`
-- `swampcastle_kg_timeline`
-- `swampcastle_kg_stats`
+- `kg_query`
+- `kg_add`
+- `kg_invalidate`
+- `kg_timeline`
+- `kg_stats`
 
 ### Castle graph navigation
-- `swampcastle_traverse`
-- `swampcastle_find_tunnels`
-- `swampcastle_graph_stats`
+- `traverse`
+- `find_tunnels`
+- `graph_stats`
 
 ### Agent diary
-- `swampcastle_diary_write`
-- `swampcastle_diary_read`
+- `diary_write`
+- `diary_read`
 
 ## Important request shapes
 
 ### search
 
-`swampcastle_search` uses the `SearchQuery` model:
+`search` uses the `SearchQuery` model:
 
 | Field | Type | Required |
 |---|---|---|
@@ -99,7 +104,7 @@ At startup the server:
 
 ### add drawer
 
-`swampcastle_add_drawer` uses `AddDrawerCommand`:
+`add_drawer` uses `AddDrawerCommand`:
 
 | Field | Type | Required |
 |---|---|---|
@@ -111,7 +116,7 @@ At startup the server:
 
 ### graph query
 
-`swampcastle_kg_query` uses `KGQueryParams`:
+`kg_query` uses `KGQueryParams`:
 
 | Field | Type | Required |
 |---|---|---|
@@ -121,11 +126,11 @@ At startup the server:
 
 ## Protocol expectations
 
-`swampcastle_status` returns a strict memory-use protocol and AAAK spec. The intended usage is:
+`status` returns a strict memory-use protocol and AAAK spec. The intended usage is:
 
 1. do not state project history, past decisions, people, facts, or prior work from memory alone
-2. use `swampcastle_search` for prior discussions, decisions, and text evidence
-3. use `swampcastle_kg_query` for entity and relationship facts
+2. use `search` for prior discussions, decisions, and text evidence
+3. use `kg_query` for entity and relationship facts
 4. if results are missing or ambiguous, say so explicitly instead of guessing
 5. invalidate and replace KG facts when reality changes
 

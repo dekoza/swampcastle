@@ -9,7 +9,7 @@ from pydantic import BaseModel
 
 from swampcastle.castle import Castle
 from swampcastle.errors import CastleError
-from swampcastle.mcp.tools import ToolDef, register_tools
+from swampcastle.mcp.tools import ToolDef, register_tools, resolve_tool_name
 from swampcastle.version import __version__
 
 logger = logging.getLogger("swampcastle.mcp")
@@ -63,7 +63,7 @@ def create_handler(castle: Castle):
             return _result(req_id, {"tools": tool_list})
 
         if method == "tools/call":
-            tool_name = (params or {}).get("name", "")
+            tool_name = resolve_tool_name((params or {}).get("name", ""))
             arguments = (params or {}).get("arguments") or {}
             return _call_tool(req_id, tools, tool_name, arguments)
 

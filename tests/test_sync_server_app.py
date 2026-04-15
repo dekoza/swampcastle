@@ -3,6 +3,8 @@
 from __future__ import annotations
 
 import asyncio
+import gzip
+import json
 import sys
 import types
 from types import SimpleNamespace
@@ -33,12 +35,24 @@ class FakeFastAPI:
 
 
 class FakeRequest:
-    def __init__(self, payload, headers=None):
+    def __init__(self, payload=None, headers=None, raw_body=None):
         self._payload = payload
         self.headers = headers or {}
+        self._raw_body = raw_body
 
     async def json(self):
         return self._payload
+
+    async def body(self):
+        if self._raw_body is not None:
+            return self._raw_body
+        return json.dumps(self._payload).encode("utf-8")
+
+
+def _response_payload(response):
+    if hasattr(response, "body"):
+        return json.loads(response.body.decode("utf-8"))
+    return response
 
 
 def _install_fake_fastapi(monkeypatch):
@@ -117,7 +131,7 @@ def test_create_app_routes_use_engine(monkeypatch):
 
     assert app.routes["GET"]["/health"]() == {"status": "ok", "service": "swampcastle-sync"}
     fake_req = FakeRequest({})
-    assert app.routes["GET"]["/sync/status"](fake_req) == {
+    assert _response_payload(app.routes["GET"]["/sync/status"](fake_req)) == {
         "node_id": "node-1",
         "version_vector": {"node-1": 2},
         "total_drawers": 4,
@@ -144,12 +158,39 @@ def test_create_app_routes_use_engine(monkeypatch):
     )
     pull_req = FakeRequest({"version_vector": {}})
 
-    push_resp = asyncio.run(app.routes["POST"]["/sync/push"](push_req))
-    pull_resp = asyncio.run(app.routes["POST"]["/sync/pull"](pull_req))
+    push_resp = _response_payload(asyncio.run(app.routes["POST"]["/sync/push"](push_req)))
+    pull_resp = _response_payload(asyncio.run(app.routes["POST"]["/sync/pull"](pull_req)))
 
     assert push_resp == {"accepted": 1, "rejected_conflicts": 0, "errors": []}
     assert pull_resp["source_node"] == "remote"
     assert pull_resp["records"][0]["id"] == "r1"
+
+
+def test_read_json_body_decodes_gzip(monkeypatch):
+    _install_fake_fastapi(monkeypatch)
+    import swampcastle.sync_server as server
+
+    payload = {"source_node": "client", "records": []}
+    request = FakeRequest(
+        headers={"Content-Encoding": "gzip"},
+        raw_body=gzip.compress(json.dumps(payload).encode("utf-8")),
+    )
+
+    decoded = asyncio.run(server._read_json_body(request))
+
+    assert decoded == payload
+
+
+def test_make_json_response_gzips_large_payload():
+    pytest.importorskip("fastapi")
+    import swampcastle.sync_server as server
+
+    payload = {"records": [{"document": "x" * 10_000, "metadata": {}}]}
+
+    response = server._make_json_response(payload, accept_encoding="gzip")
+
+    assert response.headers["Content-Encoding"] == "gzip"
+    assert json.loads(gzip.decompress(response.body).decode("utf-8")) == payload
 
 
 def test_lifespan_shutdowns_engine(monkeypatch):

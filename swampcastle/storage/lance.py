@@ -437,12 +437,24 @@ class LanceCollection(CollectionStore):
                 if k not in self.SCHEMA_COLUMNS and not k.startswith("_")
             }
 
+    def _extract_embedding(self, record: dict) -> list[float] | None:
+        vector = record.get("vector")
+        if vector is None:
+            return None
+        if isinstance(vector, list):
+            return vector
+        if hasattr(vector, "tolist"):
+            return vector.tolist()
+        return list(vector)
+
     def _format_get_results(self, results: list, include: list) -> dict:
         out: Dict[str, List] = {"ids": []}
         if "documents" in include:
             out["documents"] = []
         if "metadatas" in include:
             out["metadatas"] = []
+        if "embeddings" in include:
+            out["embeddings"] = []
 
         for r in results:
             out["ids"].append(r.get("id", ""))
@@ -450,6 +462,8 @@ class LanceCollection(CollectionStore):
                 out["documents"].append(r.get("document", ""))
             if "metadatas" in include:
                 out["metadatas"].append(self._extract_metadata(r))
+            if "embeddings" in include:
+                out["embeddings"].append(self._extract_embedding(r))
 
         return out
 

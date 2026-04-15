@@ -15,6 +15,7 @@ Optional auth:
 
 from __future__ import annotations
 
+import gzip
 import json
 import logging
 import os
@@ -23,6 +24,9 @@ from urllib.request import Request, urlopen
 from .sync import ChangeSet, SyncEngine
 
 logger = logging.getLogger("swampcastle.sync_client")
+
+_SYNC_GZIP_MIN_BYTES = 4096
+_SYNC_GZIP_COMPRESSLEVEL = 6
 
 
 class SyncClient:
@@ -43,13 +47,22 @@ class SyncClient:
     def _request(self, method: str, path: str, body: dict = None) -> dict:
         """Make an HTTP request and return parsed JSON."""
         url = f"{self._url}{path}"
-        data = json.dumps(body).encode("utf-8") if body else None
-        headers = {"Content-Type": "application/json"} if data else {}
+        data = json.dumps(body).encode("utf-8") if body is not None else None
+        headers = {"Accept-Encoding": "gzip"}
+        if data is not None:
+            headers["Content-Type"] = "application/json"
+            if len(data) >= _SYNC_GZIP_MIN_BYTES:
+                data = gzip.compress(data, compresslevel=_SYNC_GZIP_COMPRESSLEVEL)
+                headers["Content-Encoding"] = "gzip"
         if self._api_key:
             headers["Authorization"] = f"Bearer {self._api_key}"
         req = Request(url, data=data, headers=headers, method=method)
         with urlopen(req, timeout=self._timeout) as resp:
-            return json.loads(resp.read().decode("utf-8"))
+            raw = resp.read()
+            content_encoding = getattr(resp, "headers", {}).get("Content-Encoding", "")
+            if "gzip" in content_encoding.lower():
+                raw = gzip.decompress(raw)
+            return json.loads(raw.decode("utf-8"))
 
     def is_reachable(self) -> bool:
         """Check if the server is reachable."""

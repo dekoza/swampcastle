@@ -174,6 +174,14 @@ def _row_value(row: Any, key: str, index: int) -> Any:
     return row[index]
 
 
+def _normalize_embedding(value: Any) -> list[float] | None:
+    if value is None:
+        return None
+    if hasattr(value, "tolist"):
+        return value.tolist()
+    return list(value)
+
+
 class PostgresCollectionStore(CollectionStore):
     """pgvector-backed drawer storage."""
 
@@ -380,7 +388,13 @@ class PostgresCollectionStore(CollectionStore):
             conn.commit()
         self._maybe_create_vector_index()
 
-    def _row_to_result(self, row: Any) -> tuple[str, str, dict[str, Any], float | None]:
+    def _row_to_result(
+        self,
+        row: Any,
+        *,
+        has_embedding: bool = False,
+        has_distance: bool = False,
+    ) -> tuple[str, str, dict[str, Any], list[float] | None, float | None]:
         row_id = _row_value(row, "id", 0)
         document = _row_value(row, "document", 1) or ""
         metadata = _decode_metadata(_row_value(row, "metadata", 2))
@@ -389,16 +403,23 @@ class PostgresCollectionStore(CollectionStore):
         metadata.setdefault("source_file", _row_value(row, "source_file", 5) or "")
         metadata.setdefault("node_id", _row_value(row, "node_id", 6) or "")
         metadata.setdefault("seq", _row_value(row, "seq", 7) or 0)
+
+        extra_index = 8
+        embedding = None
+        if has_embedding:
+            embedding = _normalize_embedding(_row_value(row, "embedding", extra_index))
+            extra_index += 1
+
         distance = None
-        if isinstance(row, dict) and "distance" in row:
-            distance = row.get("distance")
-        elif not isinstance(row, dict) and len(row) > 8:
-            distance = row[8]
-        return row_id, document, metadata, distance
+        if has_distance:
+            distance = _row_value(row, "distance", extra_index)
+
+        return row_id, document, metadata, embedding, distance
 
     def get(self, *, ids=None, where=None, limit=None, offset=None, include=None) -> dict[str, Any]:
         self._ensure_schema()
         include = include or ["documents", "metadatas"]
+        include_embeddings = "embeddings" in include
 
         clauses = []
         params: list[Any] = []
@@ -411,10 +432,11 @@ class PostgresCollectionStore(CollectionStore):
                 clauses.append(where_sql)
                 params.extend(where_params)
 
-        sql = (
-            f"SELECT id, document, metadata, wing, room, source_file, node_id, seq "
-            f"FROM {self._table_name}"
-        )
+        select_columns = "id, document, metadata, wing, room, source_file, node_id, seq"
+        if include_embeddings:
+            select_columns += ", embedding"
+
+        sql = f"SELECT {select_columns} FROM {self._table_name}"
         if clauses:
             sql += " WHERE " + " AND ".join(f"({clause})" for clause in clauses)
         sql += " ORDER BY id"
@@ -435,14 +457,21 @@ class PostgresCollectionStore(CollectionStore):
             result["documents"] = []
         if "metadatas" in include:
             result["metadatas"] = []
+        if include_embeddings:
+            result["embeddings"] = []
 
         for row in rows:
-            row_id, document, metadata, _ = self._row_to_result(row)
+            row_id, document, metadata, embedding, _ = self._row_to_result(
+                row,
+                has_embedding=include_embeddings,
+            )
             result["ids"].append(row_id)
             if "documents" in include:
                 result["documents"].append(document)
             if "metadatas" in include:
                 result["metadatas"].append(metadata)
+            if include_embeddings:
+                result["embeddings"].append(embedding)
         return result
 
     def query(self, *, query_texts, n_results=5, where=None, include=None) -> dict[str, Any]:
@@ -483,7 +512,10 @@ class PostgresCollectionStore(CollectionStore):
         metas_out: list[dict[str, Any]] = []
         dists_out: list[float] = []
         for row in rows:
-            row_id, document, metadata, distance = self._row_to_result(row)
+            row_id, document, metadata, _, distance = self._row_to_result(
+                row,
+                has_distance=True,
+            )
             ids_out.append(row_id)
             docs_out.append(document)
             metas_out.append(metadata)

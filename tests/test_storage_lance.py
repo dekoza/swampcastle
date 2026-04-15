@@ -32,6 +32,15 @@ class TestLanceCollection:
         assert r["ids"] == ["a"]
         assert r["documents"] == ["doc1"]
 
+    def test_get_can_include_embeddings(self, col):
+        col.upsert(documents=["doc1"], ids=["a"], metadatas=[{"wing": "w"}])
+
+        result = col.get(ids=["a"], include=["embeddings"])
+
+        assert result["ids"] == ["a"]
+        assert len(result["embeddings"]) == 1
+        assert len(result["embeddings"][0]) > 0
+
     def test_get_by_where(self, col):
         col.upsert(
             documents=["alpha", "beta"],

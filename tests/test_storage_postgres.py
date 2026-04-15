@@ -192,6 +192,17 @@ class TestPostgresCollectionStore:
         assert rows[0][0] == "d1"
         assert rows[0][3] == "proj"
 
+    def test_get_can_include_embeddings(self):
+        conn = RecordingConnection(
+            fetchall=[[("d1", "auth policy", {"wing": "proj"}, "proj", "", "", "node", 7, [1.0, 0.0, 0.0])]]
+        )
+        store = PostgresCollectionStore(RecordingPool(conn), "swampcastle_chests", FakeEmbedder())
+        store._schema_ready = True
+
+        result = store.get(ids=["d1"], include=["embeddings"])
+
+        assert result == {"ids": ["d1"], "embeddings": [[1.0, 0.0, 0.0]]}
+
     def test_update_raises_when_id_missing(self):
         conn = RecordingConnection(fetchone=[None], rowcount=0)
         store = PostgresCollectionStore(RecordingPool(conn), "swampcastle_chests", FakeEmbedder())

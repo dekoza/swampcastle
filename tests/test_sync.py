@@ -156,6 +156,21 @@ class TestSyncEngine:
         assert len(cs.records) == 2
         assert cs.source_node == ni.node_id
 
+    def test_get_changes_includes_embeddings(self, tmp_path):
+        engine, col, ni = _make_engine(tmp_path)
+
+        col.upsert(
+            documents=["doc one"],
+            ids=["d1"],
+            metadatas=[{"wing": "proj", "room": "a", "source_file": ""}],
+        )
+
+        cs = engine.get_changes_since({})
+
+        assert len(cs.records) == 1
+        assert cs.records[0].embedding is not None
+        assert len(cs.records[0].embedding) > 0
+
     def test_get_changes_respects_remote_vv(self, tmp_path):
         engine, col, ni = _make_engine(tmp_path)
 
@@ -929,6 +944,23 @@ class TestSyncServer:
         assert "node_id" in data
         assert data["total_drawers"] == 0
         assert isinstance(data["version_vector"], dict)
+
+    def test_pull_returns_embeddings(self):
+        engine = self._build_engine(self._tmp, self._palace)
+        engine._col.upsert(
+            documents=["server document"],
+            ids=["srv_1"],
+            metadatas=[{"wing": "proj", "room": "server", "source_file": ""}],
+        )
+
+        response = self._client().post("/sync/pull", json={"version_vector": {}})
+
+        assert response.status_code == 200
+        payload = response.json()
+        assert len(payload["records"]) == 1
+        assert payload["records"][0]["id"] == "srv_1"
+        assert payload["records"][0]["embedding"] is not None
+        assert len(payload["records"][0]["embedding"]) > 0
 
     def test_push_and_pull(self):
         c = self._client()

@@ -207,12 +207,22 @@ class SyncEngine:
         records = self._col.get(
             where=where,
             limit=100_000,
-            include=["documents", "metadatas"],
+            include=["documents", "metadatas", "embeddings"],
         )
+        embeddings = list(records.get("embeddings", []))
+        if len(embeddings) < len(records["ids"]):
+            embeddings.extend([None] * (len(records["ids"]) - len(embeddings)))
 
         changeset = ChangeSet(source_node=our_node)
-        for id_, doc, meta in zip(records["ids"], records["documents"], records["metadatas"]):
-            changeset.records.append(SyncRecord(id=id_, document=doc, metadata=meta))
+        for id_, doc, meta, emb in zip(
+            records["ids"],
+            records["documents"],
+            records["metadatas"],
+            embeddings,
+        ):
+            changeset.records.append(
+                SyncRecord(id=id_, document=doc, metadata=meta, embedding=emb)
+            )
 
         return changeset
 

@@ -23,7 +23,9 @@ Endpoints:
 """
 
 import atexit
+import gzip
 import hmac
+import json
 import logging
 import os
 from contextlib import asynccontextmanager
@@ -35,6 +37,9 @@ from .sync_meta import get_identity
 from .version import __version__
 
 logger = logging.getLogger("swampcastle.sync_server")
+
+_SYNC_GZIP_MIN_BYTES = 4096
+_SYNC_GZIP_COMPRESSLEVEL = 6
 
 
 # ── Auth helpers ──────────────────────────────────────────────────────────────
@@ -61,6 +66,70 @@ def _check_bearer(authorization: str | None, expected: str) -> bool:
     if not token:
         return False
     return hmac.compare_digest(token, expected)
+
+
+class RequestDecodeError(ValueError):
+    """Raised when a sync request body cannot be decoded."""
+
+
+def _accepts_gzip(accept_encoding: str | None) -> bool:
+    if not accept_encoding:
+        return False
+    for raw_part in accept_encoding.split(","):
+        part = raw_part.strip()
+        if not part:
+            continue
+        encoding, *params = [item.strip() for item in part.split(";")]
+        if encoding.lower() != "gzip":
+            continue
+        for param in params:
+            key, _, value = param.partition("=")
+            if key.lower() == "q" and value.strip() == "0":
+                return False
+        return True
+    return False
+
+
+def _is_gzip_encoded(content_encoding: str | None) -> bool:
+    if not content_encoding:
+        return False
+    return any(part.strip().lower() == "gzip" for part in content_encoding.split(","))
+
+
+async def _read_json_body(request) -> dict:
+    if not hasattr(request, "body"):
+        return await request.json()
+
+    raw = await request.body()
+    if not raw:
+        return {}
+
+    if _is_gzip_encoded(request.headers.get("Content-Encoding")):
+        try:
+            raw = gzip.decompress(raw)
+        except OSError as exc:
+            raise RequestDecodeError("Invalid gzip request body") from exc
+
+    try:
+        return json.loads(raw.decode("utf-8"))
+    except (UnicodeDecodeError, json.JSONDecodeError) as exc:
+        raise RequestDecodeError("Invalid JSON request body") from exc
+
+
+def _make_json_response(payload: dict, *, accept_encoding: str | None):
+    try:
+        from fastapi.responses import JSONResponse, Response
+    except ImportError:
+        return payload
+
+    body = json.dumps(payload).encode("utf-8")
+    if _accepts_gzip(accept_encoding) and len(body) >= _SYNC_GZIP_MIN_BYTES:
+        return Response(
+            content=gzip.compress(body, compresslevel=_SYNC_GZIP_COMPRESSLEVEL),
+            media_type="application/json",
+            headers={"Content-Encoding": "gzip", "Vary": "Accept-Encoding"},
+        )
+    return JSONResponse(content=payload)
 
 
 # ── Lazy globals (initialised on first request) ───────────────────────────────
@@ -181,37 +250,46 @@ def create_app():
         _require_auth(request)
         engine = _get_engine()
         col = engine._col
-        return {
+        payload = {
             "node_id": engine._identity.node_id,
             "version_vector": engine.version_vector,
             "total_drawers": col.count(),
         }
+        return _make_json_response(payload, accept_encoding=request.headers.get("Accept-Encoding"))
 
     @app.post("/sync/push")
     async def sync_push(request: Request):  # noqa: F811
         _require_auth(request)
-        body = await request.json()
+        try:
+            body = await _read_json_body(request)
+        except RequestDecodeError as exc:
+            raise HTTPException(status_code=400, detail=str(exc)) from exc
         engine = _get_engine()
         cs = ChangeSet(
             source_node=body.get("source_node", ""),
             records=[SyncRecord.from_dict(r) for r in body.get("records", [])],
         )
         result = engine.apply_changes(cs)
-        return {
+        payload = {
             "accepted": result.accepted,
             "rejected_conflicts": result.rejected_conflicts,
             "errors": result.errors,
         }
+        return _make_json_response(payload, accept_encoding=request.headers.get("Accept-Encoding"))
 
     @app.post("/sync/pull")
     async def sync_pull(request: Request):  # noqa: F811
         _require_auth(request)
-        body = await request.json()
+        try:
+            body = await _read_json_body(request)
+        except RequestDecodeError as exc:
+            raise HTTPException(status_code=400, detail=str(exc)) from exc
         engine = _get_engine()
         cs = engine.get_changes_since(body.get("version_vector", {}))
-        return {
+        payload = {
             "source_node": cs.source_node,
             "records": [r.to_dict() for r in cs.records],
         }
+        return _make_json_response(payload, accept_encoding=request.headers.get("Accept-Encoding"))
 
     return app

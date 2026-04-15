@@ -14,7 +14,13 @@ ChromaDB is still not a supported runtime sync backend.
 
 ## Data carried with each record
 
-Each stored record includes sync metadata:
+Each synced record carries:
+
+- `document`
+- `metadata`
+- `embedding` when the source backend stores one
+
+Each stored record also includes sync metadata:
 
 - `node_id`
 - `seq`
@@ -78,6 +84,8 @@ swampcastle parley --server http://homeserver:7433
 `--dry-run` is wired.
 
 The CLI performs a single sync exchange per invocation. Continuous loop flags were removed because they were never implemented.
+
+Sync requests and responses negotiate HTTP gzip automatically. Large push and pull payloads are compressed on the wire when both sides support it.
 
 ## Python API
 

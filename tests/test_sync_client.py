@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import gzip
 import json
 from types import SimpleNamespace
 from urllib.error import HTTPError, URLError
@@ -13,10 +14,14 @@ from swampcastle.sync_client import SyncClient
 
 
 class _FakeResponse:
-    def __init__(self, payload: dict):
+    def __init__(self, payload: dict | None = None, *, raw: bytes | None = None, headers=None):
         self._payload = payload
+        self._raw = raw
+        self.headers = headers or {}
 
     def read(self):
+        if self._raw is not None:
+            return self._raw
         return json.dumps(self._payload).encode("utf-8")
 
     def __enter__(self):
@@ -65,6 +70,41 @@ def test_request_adds_bearer_header_when_api_key_passed(monkeypatch):
     client._request("POST", "/sync/push", {"x": 1})
 
     assert captured["auth"] == "Bearer secret-token"
+
+
+def test_request_decodes_gzip_responses(monkeypatch):
+    payload = {"ok": True, "records": [1, 2, 3]}
+
+    def fake_urlopen(req, timeout):
+        return _FakeResponse(
+            raw=gzip.compress(json.dumps(payload).encode("utf-8")),
+            headers={"Content-Encoding": "gzip"},
+        )
+
+    monkeypatch.setattr("swampcastle.sync_client.urlopen", fake_urlopen)
+
+    client = SyncClient("http://server:7433")
+
+    assert client._request("POST", "/sync/pull", {"version_vector": {}}) == payload
+
+
+def test_request_gzips_large_json_bodies(monkeypatch):
+    captured = {}
+
+    def fake_urlopen(req, timeout):
+        captured["encoding"] = req.headers.get("Content-encoding")
+        captured["body"] = req.data
+        return _FakeResponse({"ok": True})
+
+    monkeypatch.setattr("swampcastle.sync_client.urlopen", fake_urlopen)
+
+    client = SyncClient("http://server:7433")
+    client._request("POST", "/sync/push", {"records": [{"document": "x" * 10_000}]})
+
+    assert captured["encoding"] == "gzip"
+    assert json.loads(gzip.decompress(captured["body"]).decode("utf-8")) == {
+        "records": [{"document": "x" * 10_000}]
+    }
 
 
 def test_request_reads_api_key_from_env(monkeypatch):

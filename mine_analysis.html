@@ -1,0 +1,98 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>SwampCastle 'mine' Command Analysis</title>
+    <style>
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
+            line-height: 1.6;
+            color: #333;
+            max-width: 800px;
+            margin: 0 auto;
+            padding: 2rem;
+            background-color: #f8f9fa;
+        }
+        h1, h2 {
+            color: #2c3e50;
+            border-bottom: 2px solid #eee;
+            padding-bottom: 0.5rem;
+        }
+        .summary-card {
+            background: white;
+            padding: 1.5rem;
+            border-radius: 8px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+            margin-bottom: 2rem;
+        }
+        .code-block {
+            background: #272822;
+            color: #f8f8f2;
+            padding: 1rem;
+            border-radius: 6px;
+            overflow-x: auto;
+            font-family: monospace;
+        }
+        .key-finding {
+            border-left: 4px solid #3498db;
+            padding-left: 1rem;
+            margin: 1rem 0;
+            background: #e8f4f8;
+            padding: 1rem;
+            border-radius: 0 4px 4px 0;
+        }
+    </style>
+</head>
+<body>
+    <h1>Deep Dive: SwampCastle <code>mine</code> Command</h1>
+    
+    <div class="summary-card">
+        <h2>Performance Observation</h2>
+        <p>You observed that the <code>mine</code> command operates predominantly on a single core and fails to saturate the CPU. This behavior is directly explained by how the command is structured in the codebase.</p>
+    </div>
+
+    <h2>Why is it single-threaded?</h2>
+    
+    <div class="key-finding">
+        <strong>1. Sequential Processing Loop</strong><br>
+        The core of the <code>mine</code> function processes files in a strict, sequential <code>for</code> loop without any parallelization mechanisms (like <code>ThreadPoolExecutor</code> or <code>ProcessPoolExecutor</code>).
+    </div>
+
+    <div class="code-block">
+<pre>
+for i, filepath in enumerate(files, 1):
+    drawers, room = process_file(
+        filepath=filepath,
+        ...
+    )
+</pre>
+    </div>
+
+    <div class="key-finding">
+        <strong>2. Embedding Bottleneck</strong><br>
+        While it uses an <code>EmbeddingBuffer</code> which implies batching, the actual file reading, chunking, and preparation steps are executed sequentially for every file before being added to this buffer.
+    </div>
+
+    <div class="key-finding">
+        <strong>3. Global Interpreter Lock (GIL)</strong><br>
+        As a standard Python application, even if threads were used, CPU-bound operations (like parsing files or generating embeddings locally) would still be constrained to a single core by the Python GIL unless multiprocessing is explicitly employed.
+    </div>
+
+    <h2>Execution Flow Summary</h2>
+    <ol>
+        <li><strong>Discovery:</strong> Calls <code>scan_project()</code> to build a list of files sequentially.</li>
+        <li><strong>Initialization:</strong> Sets up storage connections and an <code>EmbeddingBuffer</code>.</li>
+        <li><strong>The Loop:</strong> Iterates through files <em>one by one</em> using <code>process_file()</code>.</li>
+        <li><strong>Extraction:</strong> Optionally extracts Knowledge Graph proposals after the main loop.</li>
+    </ol>
+
+    <h2>Potential Improvements for CPU Saturation</h2>
+    <ul>
+        <li>Implement <code>concurrent.futures.ProcessPoolExecutor</code> to parse and chunk files across multiple cores.</li>
+        <li>Use asynchronous I/O (<code>asyncio</code>) if the embedding process involves network calls to external APIs.</li>
+        <li>Decouple the file reading/chunking phase from the embedding generation phase into a producer-consumer model.</li>
+    </ul>
+
+</body>
+</html>

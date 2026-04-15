@@ -1,0 +1,121 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>SwampCastle 'mine' Command Refactoring</title>
+    <style>
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
+            line-height: 1.6;
+            color: #333;
+            max-width: 900px;
+            margin: 0 auto;
+            padding: 2rem;
+            background-color: #f8f9fa;
+        }
+        h1, h2 {
+            color: #2c3e50;
+            border-bottom: 2px solid #eee;
+            padding-bottom: 0.5rem;
+        }
+        .comparison-table {
+            width: 100%;
+            border-collapse: collapse;
+            margin: 2rem 0;
+            background: white;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+            border-radius: 8px;
+            overflow: hidden;
+        }
+        .comparison-table th, .comparison-table td {
+            padding: 1rem;
+            text-align: left;
+            border-bottom: 1px solid #ddd;
+        }
+        .comparison-table th {
+            background-color: #2c3e50;
+            color: white;
+            font-weight: 600;
+        }
+        .comparison-table tr:last-child td {
+            border-bottom: none;
+        }
+        .comparison-table tr:hover {
+            background-color: #f5f5f5;
+        }
+        .before { border-left: 4px solid #e74c3c; }
+        .after { border-left: 4px solid #2ecc71; }
+        .summary-card {
+            background: white;
+            padding: 1.5rem;
+            border-radius: 8px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+            margin-bottom: 2rem;
+        }
+        code {
+            background: #eee;
+            padding: 0.2rem 0.4rem;
+            border-radius: 4px;
+            font-family: monospace;
+        }
+    </style>
+</head>
+<body>
+    <h1>Refactoring the <code>mine</code> Command for Concurrency</h1>
+    
+    <div class="summary-card">
+        <h2>Proposed Architecture Changes</h2>
+        <p>To address the single-core bottleneck, the architecture should be updated to a producer-consumer model utilizing <code>ProcessPoolExecutor</code>.</p>
+        <ol>
+            <li><strong>Producer (Multiprocessing):</strong> A pool of worker processes reads files, parses them, and chunks the text. This is a CPU-bound task perfectly suited for multiple cores.</li>
+            <li><strong>Queue:</strong> Workers place the chunked data into a thread-safe <code>multiprocessing.Queue</code>.</li>
+            <li><strong>Consumer (Main Thread):</strong> A single consumer running on the main thread reads chunks from the queue, batches them, and feeds them to the <code>EmbeddingBuffer</code> (which manages the actual database writes and embedding API calls).</li>
+        </ol>
+    </div>
+
+    <h2>Before vs. After Comparison</h2>
+    
+    <table class="comparison-table">
+        <thead>
+            <tr>
+                <th>Aspect</th>
+                <th>Before (Current State)</th>
+                <th>After (Proposed Refactor)</th>
+            </tr>
+        </thead>
+        <tbody>
+            <tr>
+                <td style="font-weight: 600;">Execution Flow</td>
+                <td class="before">Strictly sequential loop over all files.</td>
+                <td class="after">Producer-Consumer architecture.</td>
+            </tr>
+            <tr>
+                <td style="font-weight: 600;">CPU Utilization</td>
+                <td class="before">Locked to a single core due to the synchronous <code>for</code> loop and Python's Global Interpreter Lock (GIL).</td>
+                <td class="after">Saturates available cores using <code>ProcessPoolExecutor</code> for file I/O, parsing, and chunking.</td>
+            </tr>
+            <tr>
+                <td style="font-weight: 600;">File Reading & Chunking</td>
+                <td class="before">Happens sequentially in the main thread (blocking).</td>
+                <td class="after">Delegated to worker processes, running in parallel across multiple CPU cores.</td>
+            </tr>
+            <tr>
+                <td style="font-weight: 600;">Database/Embedding Access</td>
+                <td class="before">Interleaved with file reading, causing potential idle time for the DB while waiting for the next file to be parsed.</td>
+                <td class="after">Managed efficiently by a dedicated consumer thread reading from a queue, minimizing DB connection contention.</td>
+            </tr>
+            <tr>
+                <td style="font-weight: 600;">Speed on Large Repos</td>
+                <td class="before">Scales linearly (O(n)) with single-core performance. Very slow on large codebases.</td>
+                <td class="after">Scales proportionally to the number of available CPU cores (O(n/cores)). Significantly faster.</td>
+            </tr>
+        </tbody>
+    </table>
+
+    <div class="summary-card">
+        <h2>Implementation Considerations</h2>
+        <p>When decoupling the database operations, we must ensure that the <code>StorageFactory</code> and <code>Collection</code> objects are only instantiated or accessed safely. LanceDB (the default storage) or SQLite connections often cannot be safely passed across process boundaries. By keeping the embedding generation and database writes in the main thread (consumer) and moving only the text extraction/chunking to the worker processes, we avoid complex IPC serialization issues.</p>
+    </div>
+</body>
+</html>

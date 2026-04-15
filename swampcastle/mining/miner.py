@@ -15,6 +15,8 @@ import os
 import re
 import sys
 from collections import defaultdict
+from concurrent.futures import ProcessPoolExecutor, as_completed
+from concurrent.futures.process import BrokenProcessPool
 from datetime import datetime
 from pathlib import Path
 
@@ -985,11 +987,93 @@ def scan_project(
 
 
 # =============================================================================
+# PARALLEL HELPERS
+# =============================================================================
+
+_MAX_PARALLEL_WORKERS = 32
+_PARALLEL_WINDOW = 256  # max in-flight futures at once
+
+
+def _resolve_parallel_workers(explicit: int | None) -> int | None:
+    """Return worker count from explicit arg or env vars, or None for sequential."""
+    if explicit is not None and explicit > 0:
+        return min(explicit, _MAX_PARALLEL_WORKERS)
+    if os.environ.get("SWAMPCASTLE_PARALLEL", "").lower() in ("1", "true", "yes"):
+        raw = os.environ.get("SWAMPCASTLE_PARALLEL_WORKERS", "")
+        count = int(raw) if raw.isdigit() else (os.cpu_count() or 2)
+        return min(count, _MAX_PARALLEL_WORKERS)
+    return None
+
+
+def _process_file_worker(args):
+    """Worker entry: read file, apply skeleton (if any), chunk and detect room.
+
+    Accepts a single tuple argument (to be pickle-friendly) and returns a dict with
+    keys: filepath, skipped (bool), skip_reason (str|None), chunks (list),
+          room (str), is_skeleton (bool), verbose_skip (bool)
+    """
+    (filepath_str, project_dir_str, wing, rooms, force_no_skeleton, explain) = args
+    filepath = Path(filepath_str)
+    project_path = Path(project_dir_str)
+    try:
+        content = filepath.read_text(encoding="utf-8", errors="replace")
+    except OSError:
+        return {
+            "filepath": filepath_str,
+            "skipped": True,
+            "skip_reason": "read_error",
+            "verbose_skip": explain,
+        }
+
+    content = content.strip()
+    if len(content) < MIN_CHUNK_SIZE:
+        return {
+            "filepath": filepath_str,
+            "skipped": True,
+            "skip_reason": "too_small",
+            "verbose_skip": explain,
+        }
+
+    skip_reason = _mining_rejection_reason(filepath, content)
+    if skip_reason is not None:
+        return {
+            "filepath": filepath_str,
+            "skipped": True,
+            "skip_reason": skip_reason,
+            "verbose_skip": explain,
+        }
+
+    room = detect_room(filepath, content, rooms, project_path)
+
+    is_skeleton = False
+    extractor = None
+    if not force_no_skeleton and (content.count("\n") > 2000 or len(content) > 200_000):
+        extractor = get_skeleton_extractor(str(filepath))
+
+    if extractor:
+        skeleton_content = extractor.extract(content)
+        if skeleton_content and len(skeleton_content) < len(content) * 0.5:
+            content = skeleton_content
+            is_skeleton = True
+
+    chunks = chunk_text(content, str(filepath))
+    return {
+        "filepath": filepath_str,
+        "skipped": False,
+        "skip_reason": None,
+        "chunks": chunks,
+        "room": room,
+        "is_skeleton": is_skeleton,
+        "verbose_skip": False,
+    }
+
+
+# =============================================================================
 # MAIN: MINE
 # =============================================================================
 
 
-def mine(
+def mine(  # noqa: C901
     project_dir: str,
     palace_path: str,
     wing: str = None,
@@ -1005,6 +1089,7 @@ def mine(
     extract_kg_proposals: bool = False,
     embed_batch_size: int | None = None,
     _force_remine: bool = False,
+    parallel_workers: int | None = None,
 ):
     """Mine a project directory into the palace."""
 
@@ -1069,32 +1154,169 @@ def mine(
     files_skipped = 0
     room_counts = defaultdict(int)
 
-    for i, filepath in enumerate(files, 1):
-        drawers, room = process_file(
-            filepath=filepath,
-            project_path=project_path,
-            collection=collection,
-            wing=wing,
-            rooms=rooms,
-            agent=agent,
-            dry_run=dry_run,
-            team=team,
-            registry=registry,
-            verbose=explain,
-            embed_buffer=embed_buffer,
-            force_no_skeleton=force_no_skeleton,
-            _force_remine=_force_remine,
-        )
-        if drawers == 0:
-            if not dry_run:
-                files_skipped += 1
-            # nothing to add to counts when drawers == 0
-            continue
+    max_workers = _resolve_parallel_workers(parallel_workers)
 
-        total_drawers += drawers
-        room_counts[room] += 1
-        if not dry_run:
-            print(f"  ✓ [{i:4}/{len(files)}] {filepath.name[:50]:50} +{drawers}")
+    if max_workers is None:
+        # Sequential path — original behaviour, unchanged
+        for i, filepath in enumerate(files, 1):
+            drawers, room = process_file(
+                filepath=filepath,
+                project_path=project_path,
+                collection=collection,
+                wing=wing,
+                rooms=rooms,
+                agent=agent,
+                dry_run=dry_run,
+                team=team,
+                registry=registry,
+                verbose=explain,
+                embed_buffer=embed_buffer,
+                force_no_skeleton=force_no_skeleton,
+                _force_remine=_force_remine,
+            )
+            if drawers == 0:
+                if not dry_run:
+                    files_skipped += 1
+                continue
+
+            total_drawers += drawers
+            room_counts[room] += 1
+            if not dry_run:
+                print(f"  ✓ [{i:4}/{len(files)}] {filepath.name[:50]:50} +{drawers}")
+    else:
+        # Parallel path — workers handle I/O + chunking; consumer handles all storage writes.
+        # A sliding window of _PARALLEL_WINDOW futures bounds peak memory on large repos.
+        submit_count = 0
+        completed = 0
+
+        def _submittable_args(fp: Path) -> tuple | None:
+            """Return worker args for fp, or None if the file should be skipped."""
+            if not dry_run:
+                if not _force_remine and _file_already_mined(
+                    collection, str(fp), wing=wing, check_mtime=True
+                ):
+                    return None
+            return (str(fp), str(project_path), wing, rooms, force_no_skeleton, explain)
+
+        def _consume(res: dict, source_filepath: Path) -> tuple[int, int]:
+            """Consume one worker result. Returns (drawers_added, skipped_delta)."""
+            filepath_str = res["filepath"]
+
+            if res["skipped"]:
+                if dry_run and res["verbose_skip"]:
+                    try:
+                        rel = source_filepath.relative_to(project_path)
+                    except ValueError:
+                        rel = source_filepath
+                    print(f"  - SKIP {rel}: {res['skip_reason']}")
+                return 0, (0 if dry_run else 1)
+
+            chunks = res["chunks"]
+            room = res["room"]
+            is_skeleton = res["is_skeleton"]
+
+            if dry_run:
+                print(f"    [DRY RUN] {source_filepath.name} → room:{room} ({len(chunks)} drawers)")
+                room_counts[room] += 1
+                return len(chunks), 0
+
+            _delete_existing_file_drawers(collection, source_file=filepath_str, wing=wing)
+            contributor = detect_contributor(
+                source_filepath, project_path, team=team, registry=registry
+            )
+
+            try:
+                source_mtime: float | None = os.path.getmtime(filepath_str)
+            except OSError:
+                source_mtime = None
+
+            drawers_added = 0
+            for chunk in chunks:
+                drawer_id = f"drawer_{wing}_{room}_{hashlib.sha256((filepath_str + str(chunk['chunk_index'])).encode()).hexdigest()[:24]}"
+                metadata = {
+                    "wing": wing,
+                    "room": room,
+                    "source_file": filepath_str,
+                    "chunk_index": chunk["chunk_index"],
+                    "added_by": agent,
+                    "filed_at": datetime.now().isoformat(),
+                }
+                if is_skeleton:
+                    metadata["is_skeleton"] = True
+                if contributor:
+                    metadata["contributor"] = contributor
+                if source_mtime is not None:
+                    metadata["source_mtime"] = source_mtime
+
+                if embed_buffer is not None:
+                    embed_buffer.add(chunk["content"], drawer_id, metadata)
+                    drawers_added += 1
+                else:
+                    if add_drawer(
+                        collection=collection,
+                        wing=wing,
+                        room=room,
+                        content=chunk["content"],
+                        source_file=filepath_str,
+                        chunk_index=chunk["chunk_index"],
+                        agent=agent,
+                        contributor=contributor,
+                    ):
+                        drawers_added += 1
+
+            room_counts[room] += 1
+            return drawers_added, 0
+
+        files_iter = iter(files)
+        in_flight: dict = {}
+
+        with ProcessPoolExecutor(max_workers=max_workers) as ex:
+            # Prime the window
+            for fp in files_iter:
+                worker_args = _submittable_args(fp)
+                if worker_args is None:
+                    files_skipped += 1
+                    continue
+                fut = ex.submit(_process_file_worker, worker_args)
+                in_flight[fut] = fp
+                submit_count += 1
+                if len(in_flight) >= _PARALLEL_WINDOW:
+                    break
+
+            while in_flight:
+                done_fut = next(as_completed(in_flight))
+                source_fp = in_flight.pop(done_fut)
+                completed += 1
+
+                try:
+                    res = done_fut.result()
+                except BrokenProcessPool:
+                    raise
+                except Exception as e:
+                    logger.warning("Worker failed for %s: %s", source_fp, e)
+                    if not dry_run:
+                        files_skipped += 1
+                    res = None
+
+                if res is not None:
+                    added, skipped_delta = _consume(res, source_fp)
+                    total_drawers += added
+                    files_skipped += skipped_delta
+                    if not dry_run and added > 0:
+                        print(
+                            f"  ✓ [{completed:4}/{submit_count}] {source_fp.name[:50]:50} +{added}"
+                        )
+
+                # Slide the window: submit one more for each completion
+                for fp in files_iter:
+                    worker_args = _submittable_args(fp)
+                    if worker_args is None:
+                        files_skipped += 1
+                        continue
+                    fut = ex.submit(_process_file_worker, worker_args)
+                    in_flight[fut] = fp
+                    submit_count += 1
+                    break  # one submission per completion to keep window size stable
 
     # flush any remaining buffered embeddings; update total from actual stored count
     if embed_buffer is not None:

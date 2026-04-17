@@ -135,6 +135,7 @@ def test_create_app_routes_use_engine(monkeypatch):
         "node_id": "node-1",
         "version_vector": {"node-1": 2},
         "total_drawers": 4,
+        "protocol_version": "2024-11-05",
         "capabilities": {"gzip_request_bodies": True},
     }
 

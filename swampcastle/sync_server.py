@@ -33,6 +33,8 @@ from contextlib import asynccontextmanager
 from .settings import CastleSettings as CastleConfig
 from .storage import factory_from_settings
 from .sync import ChangeSet, SyncEngine, SyncRecord
+
+SUPPORTED_PROTOCOL_VERSIONS = ["2025-03-26", "2024-11-05"]
 from .sync_meta import get_identity
 from .version import __version__
 
@@ -254,6 +256,7 @@ def create_app():
             "node_id": engine._identity.node_id,
             "version_vector": engine.version_vector,
             "total_drawers": col.count(),
+            "protocol_version": SUPPORTED_PROTOCOL_VERSIONS[-1],
             "capabilities": {"gzip_request_bodies": True},
         }
         return _make_json_response(payload, accept_encoding=request.headers.get("Accept-Encoding"))

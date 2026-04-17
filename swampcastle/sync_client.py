@@ -96,6 +96,9 @@ class SyncClient:
         """
         # 1. Get server status
         status = self.get_status()
+        server_protocol = status.get("protocol_version")
+        if server_protocol is not None and server_protocol not in ["2025-03-26", "2024-11-05"]:
+            raise ValueError(f"Incompatible or missing protocol version: {server_protocol}")
         server_vv = status["version_vector"]
         server_node = status["node_id"]
 

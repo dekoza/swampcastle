@@ -238,7 +238,7 @@ def test_sync_returns_summary_without_push_or_pull(monkeypatch):
     monkeypatch.setattr(
         client,
         "get_status",
-        lambda: {"node_id": "server", "version_vector": {}, "total_drawers": 0},
+        lambda: {"node_id": "server", "version_vector": {}, "total_drawers": 0, "protocol_version": "2024-11-05"},
     )
     monkeypatch.setattr(client, "push", lambda changeset: pytest.fail("push should not be called"))
     monkeypatch.setattr(client, "pull", lambda vv: ChangeSet(source_node="server", records=[]))
@@ -263,7 +263,7 @@ def test_sync_pushes_and_pulls_changes(monkeypatch):
     monkeypatch.setattr(
         client,
         "get_status",
-        lambda: {"node_id": "server", "version_vector": {"server": 2}, "total_drawers": 3},
+        lambda: {"node_id": "server", "version_vector": {"server": 2}, "total_drawers": 3, "protocol_version": "2024-11-05"}
     )
 
     outgoing = ChangeSet(

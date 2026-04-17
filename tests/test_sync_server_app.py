@@ -123,6 +123,7 @@ def test_create_app_routes_use_engine(monkeypatch):
             accepted=len(cs.records), rejected_conflicts=0, errors=[]
         ),
         get_changes_since=lambda vv, **_: remote_changes,
+        count_changes_since=lambda vv: 1,
     )
     monkeypatch.setattr(server, "_get_engine", lambda: engine)
     monkeypatch.setattr(server, "_get_sync_api_key", lambda: None)
@@ -166,6 +167,31 @@ def test_create_app_routes_use_engine(monkeypatch):
     assert push_resp == {"accepted": 1, "rejected_conflicts": 0, "errors": []}
     assert pull_resp["source_node"] == "remote"
     assert pull_resp["records"][0]["id"] == "r1"
+    assert pull_resp["total"] == 1  # first page includes total count
+
+
+def test_pull_total_absent_on_subsequent_pages(monkeypatch):
+    """total must be None (absent) when offset > 0 — caller already has it."""
+    _install_fake_fastapi(monkeypatch)
+    import swampcastle.sync_server as server
+
+    empty_changes = ChangeSet(source_node="node-1", records=[])
+    engine = SimpleNamespace(
+        _col=SimpleNamespace(count=lambda: 4),
+        _identity=SimpleNamespace(node_id="node-1"),
+        version_vector={"node-1": 5},
+        apply_changes=lambda cs: MergeResult(accepted=0, rejected_conflicts=0, errors=[]),
+        get_changes_since=lambda vv, **_: empty_changes,
+        count_changes_since=lambda vv: 99,
+    )
+    monkeypatch.setattr(server, "_get_engine", lambda: engine)
+    monkeypatch.setattr(server, "_get_sync_api_key", lambda: None)
+
+    app = server.create_app()
+    req = FakeRequest({"version_vector": {}, "limit": 10, "offset": 10})
+    resp = _response_payload(asyncio.run(app.routes["POST"]["/sync/pull"](req)))
+
+    assert resp["total"] is None  # not included on non-first pages
 
 
 def test_read_json_body_decodes_gzip(monkeypatch):

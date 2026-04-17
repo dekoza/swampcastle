@@ -195,6 +195,15 @@ class SyncEngine:
         )
         return {"$or": clauses}
 
+    def count_changes_since(self, remote_vv: dict[str, int]) -> int:
+        """Return the total number of records the remote hasn't seen.
+
+        Uses an IDs-only fetch to avoid loading documents and embeddings.
+        """
+        where = self._build_changes_filter(remote_vv)
+        result = self._col.get(where=where, limit=None, include=[])
+        return len(result["ids"])
+
     def get_changes_since(
         self,
         remote_vv: dict[str, int],

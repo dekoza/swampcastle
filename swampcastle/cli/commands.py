@@ -615,7 +615,10 @@ def cmd_parley(args):
         if args.dry_run:
             print("  DRY RUN — no changes.")
             return
-        result = client.sync(engine)
+        result = client.sync(
+            engine,
+            pull_progress=lambda received, total: _print_progress("Pulling", received, total),
+        )
         _print_kv("Pushed", result.get("push", {}).get("sent", 0))
         _print_kv("Pulled", result.get("pull", {}).get("received", 0))
 

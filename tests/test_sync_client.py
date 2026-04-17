@@ -325,6 +325,50 @@ def test_pull_paged_uses_same_vv_for_all_pages(monkeypatch):
     }
 
 
+def test_pull_paged_calls_progress_callback(monkeypatch):
+    """progress_callback receives (received_so_far, total) after each page."""
+    page1 = [{"id": f"r{i}", "document": "d", "metadata": {}} for i in range(3)]
+    page2 = [{"id": f"r{i}", "document": "d", "metadata": {}} for i in range(3, 5)]
+    responses = [
+        {"source_node": "s", "records": page1, "has_more": True, "total": 5},
+        {"source_node": "s", "records": page2, "has_more": False, "total": None},
+    ]
+    calls = []
+
+    def fake_request(self, method, path, body=None):
+        calls.append(body)
+        return responses[len(calls) - 1]
+
+    monkeypatch.setattr(SyncClient, "_request", fake_request)
+    client = SyncClient("http://server")
+    progress = []
+    cs = client.pull_paged(
+        {"local": 1},
+        page_size=3,
+        progress_callback=lambda received, total: progress.append((received, total)),
+    )
+
+    assert len(cs.records) == 5
+    assert progress == [(3, 5), (5, 5)]
+
+
+def test_pull_paged_skips_callback_when_server_has_no_total(monkeypatch):
+    """Callback is not invoked when the server omits total (old-server compat)."""
+    response = {
+        "source_node": "s",
+        "records": [{"id": "r0", "document": "d", "metadata": {}}],
+        "has_more": False,
+    }
+
+    monkeypatch.setattr(SyncClient, "_request", lambda self, *a, **kw: response)
+    client = SyncClient("http://server")
+    progress = []
+    cs = client.pull_paged({}, progress_callback=lambda r, t: progress.append((r, t)))
+
+    assert len(cs.records) == 1
+    assert progress == []  # no total → callback silent
+
+
 def test_sync_pushes_and_pulls_changes(monkeypatch):
     client = SyncClient("http://server")
     monkeypatch.setattr(

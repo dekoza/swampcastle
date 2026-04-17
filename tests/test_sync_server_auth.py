@@ -35,6 +35,7 @@ def _make_fake_engine() -> mock.MagicMock:
     engine._col.count.return_value = 0
     engine.version_vector = {}
     engine.get_changes_since.return_value = ChangeSet(source_node="test-node")
+    engine.count_changes_since.return_value = 0
     engine.apply_changes.return_value = MergeResult(accepted=0)
     return engine
 

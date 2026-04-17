@@ -297,10 +297,12 @@ def create_app():
             offset=offset,
         )
         has_more = limit is not None and len(cs.records) >= limit
+        total = engine.count_changes_since(body.get("version_vector", {})) if offset == 0 else None
         payload = {
             "source_node": cs.source_node,
             "records": [r.to_dict() for r in cs.records],
             "has_more": has_more,
+            "total": total,
         }
         return _make_json_response(payload, accept_encoding=request.headers.get("Accept-Encoding"))
 

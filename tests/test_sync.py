@@ -593,6 +593,48 @@ class TestSyncEngine:
 # ── Pagination ──────────────────────────────────────────────────────────────
 
 
+class TestSyncEngineCount:
+    """count_changes_since must return the total matching record count."""
+
+    def _insert(self, col, count: int, node: str = "node_x"):
+        col.upsert(
+            documents=[f"doc {i}" for i in range(count)],
+            ids=[f"{node}_{i}" for i in range(count)],
+            metadatas=[
+                {
+                    "wing": "p",
+                    "room": "r",
+                    "source_file": "",
+                    "node_id": node,
+                    "seq": i + 1,
+                    "updated_at": "2026-04-10T10:00:00+00:00",
+                }
+                for i in range(count)
+            ],
+            _raw=True,
+        )
+
+    def test_count_empty_collection(self, tmp_path):
+        engine, col, _ = _make_engine(tmp_path)
+        assert engine.count_changes_since({}) == 0
+
+    def test_count_all_records(self, tmp_path):
+        engine, col, _ = _make_engine(tmp_path)
+        self._insert(col, 7)
+        assert engine.count_changes_since({}) == 7
+
+    def test_count_respects_remote_vv(self, tmp_path):
+        engine, col, _ = _make_engine(tmp_path, "node_a")
+        self._insert(col, 5, "node_a")
+        # Remote already has seq 1-3; only seq 4 and 5 are new
+        assert engine.count_changes_since({"node_a": 3}) == 2
+
+    def test_count_zero_when_remote_is_current(self, tmp_path):
+        engine, col, _ = _make_engine(tmp_path, "node_a")
+        self._insert(col, 5, "node_a")
+        assert engine.count_changes_since({"node_a": 5}) == 0
+
+
 class TestSyncEnginePagination:
     """get_changes_since must honour limit/offset for paginated pulls."""
 

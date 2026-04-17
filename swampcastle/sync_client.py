@@ -95,17 +95,22 @@ class SyncClient:
         local_vv: dict[str, int],
         *,
         page_size: int | None = None,
+        progress_callback=None,
     ) -> ChangeSet:
         """Pull all changes from the server using paginated requests.
 
         Loops until the server reports has_more=False.  The same version
         vector is sent on every page request so the result set is stable
         for the duration of the sync session.
+
+        progress_callback: optional callable(received: int, total: int)
+            called after each page when the server provides a total count.
         """
         page_size = page_size or DEFAULT_SYNC_PAGE_SIZE
         source_node = ""
         raw_records: list[dict] = []
         offset = 0
+        total: int | None = None
 
         while True:
             resp = self._request(
@@ -117,14 +122,23 @@ class SyncClient:
             page = resp.get("records", [])
             raw_records.extend(page)
 
+            if total is None:
+                total = resp.get("total")  # only present on first page
+            if total is not None and progress_callback is not None:
+                progress_callback(len(raw_records), total)
+
             if not resp.get("has_more", False):
                 break
             offset += page_size
 
         return ChangeSet.from_dict({"source_node": source_node, "records": raw_records})
 
-    def sync(self, engine: SyncEngine) -> dict:
+    def sync(self, engine: SyncEngine, *, pull_progress=None) -> dict:
         """Full bidirectional sync: push our changes, then pull theirs.
+
+        pull_progress: optional callable(received: int, total: int)
+            forwarded to pull_paged; called after each page when the server
+            provides a total count.
 
         Returns a summary dict.
         """
@@ -161,7 +175,7 @@ class SyncClient:
 
         # 3. Pull: get records we haven't seen
         local_vv = engine.version_vector
-        remote_changes = self.pull_paged(local_vv)
+        remote_changes = self.pull_paged(local_vv, progress_callback=pull_progress)
         pull_result = {"received": 0, "accepted": 0, "rejected": 0}
         if remote_changes.records:
             merge = engine.apply_changes(remote_changes)

@@ -964,7 +964,7 @@ def test_cmd_parley_live_prints_summary(capsys):
             self.search = None
             self.vault = None
 
-    client = SimpleNamespace(sync=lambda engine: {"push": {"sent": 2}, "pull": {"received": 3}})
+    client = SimpleNamespace(sync=lambda engine, **kw: {"push": {"sent": 2}, "pull": {"received": 3}})
     with patch("swampcastle.castle.Castle", lambda s, f: ParleyCastle(s, f)):
         with patch("swampcastle.cli.commands.factory_from_settings", return_value=object()):
             with patch("swampcastle.sync.SyncEngine"):

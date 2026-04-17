@@ -233,7 +233,74 @@ def test_get_status_records_gzip_request_capability(monkeypatch):
     assert client._server_supports_gzip_requests is True
 
 
-def test_sync_returns_summary_without_push_or_pull(monkeypatch):
+def test_pull_paged_single_page(monkeypatch):
+    """pull_paged returns a single ChangeSet when has_more is False."""
+    pages = [
+        {"source_node": "server", "records": [{"id": "r1", "document": "d", "metadata": {}}], "has_more": False},
+    ]
+    calls = []
+
+    def fake_request(self, method, path, body=None):
+        calls.append(body)
+        return pages[len(calls) - 1]
+
+    monkeypatch.setattr(SyncClient, "_request", fake_request)
+    client = SyncClient("http://server")
+    cs = client.pull_paged({"local": 1})
+
+    assert isinstance(cs, ChangeSet)
+    assert len(cs.records) == 1
+    assert cs.records[0].id == "r1"
+    assert len(calls) == 1
+    assert calls[0] == {"version_vector": {"local": 1}, "limit": 500, "offset": 0}
+
+
+def test_pull_paged_multiple_pages(monkeypatch):
+    """pull_paged loops until has_more is False and concatenates all records."""
+    page1_records = [{"id": f"r{i}", "document": "d", "metadata": {}} for i in range(3)]
+    page2_records = [{"id": f"r{i}", "document": "d", "metadata": {}} for i in range(3, 5)]
+    responses = [
+        {"source_node": "server", "records": page1_records, "has_more": True},
+        {"source_node": "server", "records": page2_records, "has_more": False},
+    ]
+    calls = []
+
+    def fake_request(self, method, path, body=None):
+        calls.append(body)
+        return responses[len(calls) - 1]
+
+    monkeypatch.setattr(SyncClient, "_request", fake_request)
+    client = SyncClient("http://server")
+    cs = client.pull_paged({"local": 1}, page_size=3)
+
+    assert len(cs.records) == 5
+    assert {r.id for r in cs.records} == {f"r{i}" for i in range(5)}
+    assert len(calls) == 2
+    assert calls[0]["offset"] == 0
+    assert calls[1]["offset"] == 3
+
+
+def test_pull_paged_uses_same_vv_for_all_pages(monkeypatch):
+    """All page requests must use the same version_vector, not an updated one."""
+    calls = []
+    responses = [
+        {"source_node": "s", "records": [{"id": "r0", "document": "d", "metadata": {"node_id": "s", "seq": 1}}], "has_more": True},
+        {"source_node": "s", "records": [], "has_more": False},
+    ]
+
+    def fake_request(self, method, path, body=None):
+        calls.append(body)
+        return responses[len(calls) - 1]
+
+    monkeypatch.setattr(SyncClient, "_request", fake_request)
+    client = SyncClient("http://server")
+    client.pull_paged({"local": 5}, page_size=1)
+
+    assert calls[0]["version_vector"] == {"local": 5}
+    assert calls[1]["version_vector"] == {"local": 5}
+
+
+
     client = SyncClient("http://server")
     monkeypatch.setattr(
         client,
@@ -241,7 +308,7 @@ def test_sync_returns_summary_without_push_or_pull(monkeypatch):
         lambda: {"node_id": "server", "version_vector": {}, "total_drawers": 0, "protocol_version": "2024-11-05"},
     )
     monkeypatch.setattr(client, "push", lambda changeset: pytest.fail("push should not be called"))
-    monkeypatch.setattr(client, "pull", lambda vv: ChangeSet(source_node="server", records=[]))
+    monkeypatch.setattr(client, "pull_paged", lambda vv, **kw: ChangeSet(source_node="server", records=[]))
 
     engine = SimpleNamespace(
         get_changes_since=lambda vv: ChangeSet(source_node="local", records=[]),
@@ -302,7 +369,7 @@ def test_sync_pushes_and_pulls_changes(monkeypatch):
     )
 
     monkeypatch.setattr(client, "push", lambda changeset: {"accepted": 1, "rejected_conflicts": 0})
-    monkeypatch.setattr(client, "pull", lambda vv: incoming)
+    monkeypatch.setattr(client, "pull_paged", lambda vv, **kw: incoming)
 
     engine = SimpleNamespace(
         get_changes_since=lambda vv: outgoing,

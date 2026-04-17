@@ -122,7 +122,7 @@ def test_create_app_routes_use_engine(monkeypatch):
         apply_changes=lambda cs: MergeResult(
             accepted=len(cs.records), rejected_conflicts=0, errors=[]
         ),
-        get_changes_since=lambda vv: remote_changes,
+        get_changes_since=lambda vv, **_: remote_changes,
     )
     monkeypatch.setattr(server, "_get_engine", lambda: engine)
     monkeypatch.setattr(server, "_get_sync_api_key", lambda: None)

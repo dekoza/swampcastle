@@ -27,6 +27,7 @@ logger = logging.getLogger("swampcastle.sync_client")
 
 _SYNC_GZIP_MIN_BYTES = 4096
 _SYNC_GZIP_COMPRESSLEVEL = 6
+DEFAULT_SYNC_PAGE_SIZE = 500
 
 
 class SyncClient:
@@ -85,9 +86,42 @@ class SyncClient:
         return self._request("POST", "/sync/push", changeset.to_dict())
 
     def pull(self, local_vv: dict[str, int]) -> ChangeSet:
-        """Request records the local node hasn't seen."""
+        """Request records the local node hasn't seen (single unpaginated request)."""
         resp = self._request("POST", "/sync/pull", {"version_vector": local_vv})
         return ChangeSet.from_dict(resp)
+
+    def pull_paged(
+        self,
+        local_vv: dict[str, int],
+        *,
+        page_size: int | None = None,
+    ) -> ChangeSet:
+        """Pull all changes from the server using paginated requests.
+
+        Loops until the server reports has_more=False.  The same version
+        vector is sent on every page request so the result set is stable
+        for the duration of the sync session.
+        """
+        page_size = page_size or DEFAULT_SYNC_PAGE_SIZE
+        source_node = ""
+        raw_records: list[dict] = []
+        offset = 0
+
+        while True:
+            resp = self._request(
+                "POST",
+                "/sync/pull",
+                {"version_vector": local_vv, "limit": page_size, "offset": offset},
+            )
+            source_node = resp.get("source_node", source_node)
+            page = resp.get("records", [])
+            raw_records.extend(page)
+
+            if not resp.get("has_more", False):
+                break
+            offset += page_size
+
+        return ChangeSet.from_dict({"source_node": source_node, "records": raw_records})
 
     def sync(self, engine: SyncEngine) -> dict:
         """Full bidirectional sync: push our changes, then pull theirs.
@@ -127,7 +161,7 @@ class SyncClient:
 
         # 3. Pull: get records we haven't seen
         local_vv = engine.version_vector
-        remote_changes = self.pull(local_vv)
+        remote_changes = self.pull_paged(local_vv)
         pull_result = {"received": 0, "accepted": 0, "rejected": 0}
         if remote_changes.records:
             merge = engine.apply_changes(remote_changes)

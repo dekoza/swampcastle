@@ -289,10 +289,18 @@ def create_app():
         except RequestDecodeError as exc:
             raise HTTPException(status_code=400, detail=str(exc)) from exc
         engine = _get_engine()
-        cs = engine.get_changes_since(body.get("version_vector", {}))
+        limit = body.get("limit")
+        offset = int(body.get("offset") or 0)
+        cs = engine.get_changes_since(
+            body.get("version_vector", {}),
+            limit=limit,
+            offset=offset,
+        )
+        has_more = limit is not None and len(cs.records) >= limit
         payload = {
             "source_node": cs.source_node,
             "records": [r.to_dict() for r in cs.records],
+            "has_more": has_more,
         }
         return _make_json_response(payload, accept_encoding=request.headers.get("Accept-Encoding"))
 

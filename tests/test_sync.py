@@ -590,6 +590,61 @@ class TestSyncEngine:
         assert len(r["ids"]) == 2
 
 
+# ── Pagination ──────────────────────────────────────────────────────────────
+
+
+class TestSyncEnginePagination:
+    """get_changes_since must honour limit/offset for paginated pulls."""
+
+    def _insert(self, col, count: int, node: str = "node_x"):
+        col.upsert(
+            documents=[f"doc {i}" for i in range(count)],
+            ids=[f"{node}_{i}" for i in range(count)],
+            metadatas=[
+                {
+                    "wing": "p",
+                    "room": "r",
+                    "source_file": "",
+                    "node_id": node,
+                    "seq": i + 1,
+                    "updated_at": "2026-04-10T10:00:00+00:00",
+                }
+                for i in range(count)
+            ],
+            _raw=True,
+        )
+
+    def test_limit_restricts_returned_records(self, tmp_path):
+        engine, col, _ = _make_engine(tmp_path)
+        self._insert(col, 10)
+        cs = engine.get_changes_since({}, limit=3)
+        assert len(cs.records) == 3
+
+    def test_offset_skips_records(self, tmp_path):
+        engine, col, _ = _make_engine(tmp_path)
+        self._insert(col, 10)
+        cs_all = engine.get_changes_since({}, limit=10)
+        cs_offset = engine.get_changes_since({}, limit=10, offset=5)
+        # offset=5 should return the remaining 5 records
+        assert len(cs_offset.records) == 5
+        all_ids = {r.id for r in cs_all.records}
+        offset_ids = {r.id for r in cs_offset.records}
+        assert offset_ids.issubset(all_ids)
+        assert len(all_ids - offset_ids) == 5
+
+    def test_no_limit_returns_all(self, tmp_path):
+        engine, col, _ = _make_engine(tmp_path)
+        self._insert(col, 12)
+        cs = engine.get_changes_since({})
+        assert len(cs.records) == 12
+
+    def test_offset_beyond_total_returns_empty(self, tmp_path):
+        engine, col, _ = _make_engine(tmp_path)
+        self._insert(col, 5)
+        cs = engine.get_changes_since({}, limit=10, offset=100)
+        assert len(cs.records) == 0
+
+
 # ── Full two-node simulation ─────────────────────────────────────────────────
 
 
@@ -887,6 +942,99 @@ class TestBackendEnvVar:
 
 
 # ── FastAPI integration ───────────────────────────────────────────────────────
+
+
+class TestSyncServerPagination:
+    """Test paginated /sync/pull via FastAPI TestClient."""
+
+    @pytest.fixture(autouse=True)
+    def setup_server(self, tmp_path, monkeypatch):
+        pytest.importorskip("fastapi")
+        palace = str(tmp_path / "server_palace")
+        monkeypatch.setenv("SWAMPCASTLE_PATH", palace)
+
+        import swampcastle.sync_server as ss
+
+        ss._engine = None
+        ss._config = None
+
+        def _engine():
+            ni = NodeIdentity(config_dir=str(tmp_path / "server_config"))
+            col = open_collection(palace, backend="lance", sync_identity=ni)
+            vv_path = os.path.join(palace, "version_vector.json")
+            return SyncEngine(col, identity=ni, vv_path=vv_path)
+
+        monkeypatch.setattr(ss, "_get_engine", _engine)
+        from swampcastle.sync_server import create_app
+
+        self._app = create_app()
+        self._palace = palace
+        self._tmp = tmp_path
+
+    def _client(self):
+        from fastapi.testclient import TestClient
+
+        return TestClient(self._app)
+
+    def _engine(self):
+        ni = NodeIdentity(config_dir=str(self._tmp / "server_config"))
+        col = open_collection(self._palace, backend="lance", sync_identity=ni)
+        vv_path = os.path.join(self._palace, "version_vector.json")
+        return SyncEngine(col, identity=ni, vv_path=vv_path)
+
+    def _insert(self, count: int, node: str = "node_x"):
+        engine = self._engine()
+        engine._col.upsert(
+            documents=[f"doc {i}" for i in range(count)],
+            ids=[f"{node}_{i}" for i in range(count)],
+            metadatas=[
+                {
+                    "wing": "p",
+                    "room": "r",
+                    "source_file": "",
+                    "node_id": node,
+                    "seq": i + 1,
+                    "updated_at": "2026-04-10T10:00:00+00:00",
+                }
+                for i in range(count)
+            ],
+            _raw=True,
+        )
+
+    def test_pull_has_more_false_when_all_fit(self):
+        self._insert(3)
+        r = self._client().post("/sync/pull", json={"version_vector": {}, "limit": 10})
+        assert r.status_code == 200
+        data = r.json()
+        assert len(data["records"]) == 3
+        assert data["has_more"] is False
+
+    def test_pull_has_more_true_when_truncated(self):
+        self._insert(5)
+        r = self._client().post("/sync/pull", json={"version_vector": {}, "limit": 3})
+        assert r.status_code == 200
+        data = r.json()
+        assert len(data["records"]) == 3
+        assert data["has_more"] is True
+
+    def test_pull_offset_returns_remaining(self):
+        self._insert(5)
+        r1 = self._client().post("/sync/pull", json={"version_vector": {}, "limit": 3})
+        r2 = self._client().post("/sync/pull", json={"version_vector": {}, "limit": 3, "offset": 3})
+        assert r1.status_code == 200
+        assert r2.status_code == 200
+        ids1 = {rec["id"] for rec in r1.json()["records"]}
+        ids2 = {rec["id"] for rec in r2.json()["records"]}
+        assert len(ids2) == 2
+        assert ids1.isdisjoint(ids2), "Pages must not overlap"
+        assert r2.json()["has_more"] is False
+
+    def test_pull_without_limit_has_more_false(self):
+        """Unpaginated pull (no limit in request) must always return has_more=False."""
+        self._insert(5)
+        r = self._client().post("/sync/pull", json={"version_vector": {}})
+        assert r.status_code == 200
+        assert r.json()["has_more"] is False
 
 
 class TestSyncServer:

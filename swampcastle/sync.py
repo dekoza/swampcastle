@@ -182,21 +182,31 @@ class SyncEngine:
             return {"seq": {"$gt": 0}}
 
         # For each known node: records where seq > what remote has seen.
-        # Plus: records from any node NOT in remote_vv (seq > 0).
-        clauses = []
-        for node_id, seen_seq in remote_vv.items():
-            clauses.append({"$and": [{"node_id": node_id}, {"seq": {"$gt": seen_seq}}]})
-
-        # Unknown nodes: build NOT-IN via chained $and of $ne
-        unknown_filter = [{"seq": {"$gt": 0}}]
-        for node_id in remote_vv:
-            unknown_filter.append({"node_id": {"$ne": node_id}})
-        clauses.append({"$and": unknown_filter})
-
+        # Plus: records from any node NOT in remote_vv.
+        # $nin translates to a single NOT IN (...) clause, which LanceDB
+        # and PostgreSQL can evaluate efficiently against an indexed column.
+        known_nodes = list(remote_vv.keys())
+        clauses = [
+            {"$and": [{"node_id": node_id}, {"seq": {"$gt": seen_seq}}]}
+            for node_id, seen_seq in remote_vv.items()
+        ]
+        clauses.append(
+            {"$and": [{"seq": {"$gt": 0}}, {"node_id": {"$nin": known_nodes}}]}
+        )
         return {"$or": clauses}
 
-    def get_changes_since(self, remote_vv: dict[str, int]) -> ChangeSet:
+    def get_changes_since(
+        self,
+        remote_vv: dict[str, int],
+        *,
+        limit: int | None = None,
+        offset: int = 0,
+    ) -> ChangeSet:
         """Get all records that the remote hasn't seen.
+
+        limit/offset: paginate over the result set. When limit is given,
+        check whether the caller should fetch more by comparing
+        len(changeset.records) == limit (standard "saturated page" heuristic).
 
         Uses indexed node_id/seq columns for efficient filtering.
         Essential for hub-and-spoke: the hub relays records from any node.
@@ -204,9 +214,11 @@ class SyncEngine:
         our_node = self._identity.node_id
         where = self._build_changes_filter(remote_vv)
 
+        effective_limit = limit if limit is not None else 100_000
         records = self._col.get(
             where=where,
-            limit=100_000,
+            limit=effective_limit,
+            offset=offset if offset > 0 else None,
             include=["documents", "metadatas", "embeddings"],
         )
         embeddings = list(records.get("embeddings", []))

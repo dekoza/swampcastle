@@ -166,6 +166,32 @@ class SyncEngine:
         self._col = collection
         self._identity = identity or get_identity()
         self._vv = VersionVector(path=vv_path)
+        if not self._vv.to_dict() and hasattr(self._col, "count") and self._col.count():
+            self._rebuild_vv_from_collection()
+
+    def _rebuild_vv_from_collection(self) -> None:
+        """Scan collection metadata to reconstruct a missing or empty VV.
+
+        Runs once at startup when the collection has records but no VV file
+        exists — the typical case after 'mine'/'gather' populates a palace
+        without going through apply_changes.  After rebuilding, the VV is
+        persisted so future startups skip this scan.
+        """
+        import logging
+
+        logger = logging.getLogger("swampcastle.sync")
+        logger.info("VV empty but collection non-empty — rebuilding VV from metadata")
+        result = self._col.get(where=None, limit=None, include=["metadatas"])
+        for meta in result.get("metadatas", []):
+            node_id = meta.get("node_id", "")
+            seq = meta.get("seq", 0)
+            if isinstance(seq, str):
+                seq = int(seq) if seq else 0
+            if node_id and seq:
+                self._vv.update(node_id, seq)
+        if self._vv.to_dict():
+            self._vv.save()
+            logger.info("VV rebuilt: %s", self._vv.to_dict())
 
     @property
     def version_vector(self) -> dict[str, int]:

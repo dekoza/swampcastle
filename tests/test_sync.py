@@ -7,6 +7,7 @@ from types import SimpleNamespace
 import pytest
 
 from swampcastle.storage.lance import LanceBackend, LanceCollection
+from swampcastle.storage.memory import InMemoryCollectionStore
 from swampcastle.sync import ChangeSet, SyncEngine, SyncRecord, VersionVector
 from swampcastle.sync_meta import NodeIdentity
 
@@ -135,6 +136,46 @@ class TestChangeSet:
 
 
 class TestSyncEngine:
+    def test_rebuild_vv_from_collection_on_init(self, tmp_path):
+        """Engine must rebuild VV from metadata when VV file is absent
+        but collection already has records (post-mine scenario)."""
+        col = InMemoryCollectionStore()
+        col.upsert(
+            documents=["doc a", "doc b", "doc c"],
+            ids=["a1", "a2", "b1"],
+            metadatas=[
+                {"node_id": "node_a", "seq": 1, "wing": "p", "room": "r", "source_file": ""},
+                {"node_id": "node_a", "seq": 2, "wing": "p", "room": "r", "source_file": ""},
+                {"node_id": "node_b", "seq": 1, "wing": "p", "room": "r", "source_file": ""},
+            ],
+        )
+        ni = NodeIdentity(config_dir=str(tmp_path / "config"))
+        # No vv_path — VV is in-memory only (starts empty)
+        engine = SyncEngine(col, identity=ni, vv_path=None)
+
+        vv = engine.version_vector
+        assert vv == {"node_a": 2, "node_b": 1}, (
+            f"Expected VV to be rebuilt from collection metadata, got {vv}"
+        )
+
+    def test_rebuild_vv_not_triggered_when_vv_already_populated(self, tmp_path):
+        """If a VV file exists with data, do not overwrite with a rebuild."""
+        vv_path = str(tmp_path / "vv.json")
+        with open(vv_path, "w") as f:
+            json.dump({"node_x": 99}, f)
+
+        col = InMemoryCollectionStore()
+        col.upsert(
+            documents=["doc"],
+            ids=["r1"],
+            metadatas=[{"node_id": "node_y", "seq": 1, "wing": "p", "room": "r", "source_file": ""}],
+        )
+        ni = NodeIdentity(config_dir=str(tmp_path / "config"))
+        engine = SyncEngine(col, identity=ni, vv_path=vv_path)
+
+        # VV from file must be preserved; node_y must not appear
+        assert engine.version_vector == {"node_x": 99}
+
     def test_get_changes_empty(self, tmp_path):
         engine, col, ni = _make_engine(tmp_path)
         cs = engine.get_changes_since({})
@@ -754,6 +795,57 @@ class TestTwoNodeSync:
         # Second sync — should be empty
         cs2 = engine_a.get_changes_since(engine_b.version_vector)
         assert len(cs2.records) == 0
+
+    def test_second_sync_is_noop_when_server_has_mined_records(self, tmp_path):
+        """Regression: server collection pre-populated by 'mine' (no apply_changes)
+        has an empty VV. After a client pulls, the second sync must not push
+        all pulled records back to the server.
+        """
+        # Server-side: populate palace BEFORE the engine is created,
+        # simulating 'mine'/'gather' which writes directly to the collection
+        # without going through SyncEngine.apply_changes.
+        from swampcastle.sync_meta import NodeIdentity as NI
+
+        server_ni = NI(config_dir=str(tmp_path / "server" / "config"))
+        server_col = open_collection(str(tmp_path / "server" / "palace"), sync_identity=server_ni)
+        server_col.upsert(
+            documents=[f"doc {i}" for i in range(5)],
+            ids=[f"server_{i}" for i in range(5)],
+            metadatas=[
+                {
+                    "wing": "p", "room": "r", "source_file": "",
+                    "node_id": server_ni.node_id, "seq": i + 1,
+                    "updated_at": "2026-01-01T00:00:00+00:00",
+                }
+                for i in range(5)
+            ],
+            _raw=True,
+        )
+        # No VV file exists at this point — simulates a fresh 'mine' palace
+
+        # Engine is created AFTER records exist (same as 'garrison' startup)
+        vv_path = str(tmp_path / "server" / "palace" / "version_vector.json")
+        server_engine = SyncEngine(server_col, identity=server_ni, vv_path=vv_path)
+        # Rebuild must have populated the VV
+        assert server_engine.version_vector != {}, "VV should be rebuilt from mined records"
+
+        # Client-side: fresh, empty collection
+        client_engine, client_col, client_ni = _make_engine(tmp_path, "client")
+
+        # First sync: client pulls everything from server
+        cs_pull = server_engine.get_changes_since(client_engine.version_vector)
+        assert len(cs_pull.records) == 5  # sanity
+        client_engine.apply_changes(cs_pull)
+        assert client_col.count() == 5
+
+        # Second sync: client gets server's VV and computes what to push
+        # Must be 0 — client only has records it pulled from the server
+        server_vv = server_engine.version_vector
+        cs_push = client_engine.get_changes_since(server_vv)
+        assert len(cs_push.records) == 0, (
+            f"Second sync pushed {len(cs_push.records)} records back to server — "
+            "should be 0 since client only has records it pulled"
+        )
 
     def test_hub_relays_between_clients(self, tmp_path):
         """Hub-and-spoke: client A pushes to hub, client B pulls from hub.

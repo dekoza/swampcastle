@@ -277,6 +277,7 @@ def create_app():
         payload = {
             "accepted": result.accepted,
             "rejected_conflicts": result.rejected_conflicts,
+            "winning_records": [r.to_dict() for r in result.winning_records],
             "errors": result.errors,
         }
         return _make_json_response(payload, accept_encoding=request.headers.get("Accept-Encoding"))

@@ -81,6 +81,7 @@ class MergeResult:
     accepted: int = 0
     rejected_conflicts: int = 0
     errors: list[str] = field(default_factory=list)
+    winning_records: list["SyncRecord"] = field(default_factory=list)
 
 
 # ── Version vector ────────────────────────────────────────────────────────────
@@ -294,6 +295,7 @@ class SyncEngine:
         to_upsert_ids = []
         to_upsert_metas = []
         to_upsert_embs = []
+        winner_ids: list[str] = []
 
         for rec in changeset.records:
             local_meta = existing_map.get(rec.id)
@@ -314,6 +316,7 @@ class SyncEngine:
                     to_upsert_embs.append(rec.embedding)
                     result.accepted += 1
                 else:
+                    winner_ids.append(rec.id)
                     result.rejected_conflicts += 1
 
         if to_upsert_ids:
@@ -348,6 +351,24 @@ class SyncEngine:
                     ids=without_emb_ids,
                     metadatas=without_emb_metas,
                     _raw=True,
+                )
+
+        # Fetch full data for locally-winning conflict records so the caller
+        # can return them to the remote side (remote keeps its stale version
+        # otherwise — the seq-based pull filter won't re-deliver them).
+        if winner_ids:
+            won = self._col.get(
+                ids=winner_ids,
+                include=["documents", "metadatas", "embeddings"],
+            )
+            won_embs = list(won.get("embeddings") or [])
+            if len(won_embs) < len(won["ids"]):
+                won_embs.extend([None] * (len(won["ids"]) - len(won_embs)))
+            for wid, wdoc, wmeta, wemb in zip(
+                won["ids"], won["documents"], won["metadatas"], won_embs
+            ):
+                result.winning_records.append(
+                    SyncRecord(id=wid, document=wdoc, metadata=wmeta, embedding=wemb)
                 )
 
         # Advance our version vector

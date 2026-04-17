@@ -350,7 +350,141 @@ class TestSyncEngine:
         r = col.get(ids=["conflict_id"], include=["documents"])
         assert r["documents"][0] == "local version WINS"
 
-    def test_version_vector_advances_after_apply(self, tmp_path):
+    def test_conflict_local_wins_when_newer(self, tmp_path):
+        engine, col, ni = _make_engine(tmp_path)
+
+        # Write a local record with a known future timestamp (bypass sync injection)
+        col.upsert(
+            documents=["local version WINS"],
+            ids=["conflict_id"],
+            metadatas=[
+                {
+                    "wing": "p",
+                    "room": "r",
+                    "source_file": "",
+                    "node_id": ni.node_id,
+                    "seq": 1,
+                    "updated_at": "2099-01-01T00:00:00+00:00",
+                }
+            ],
+            _raw=True,
+        )
+
+        # Remote has an OLDER version
+        cs = ChangeSet(
+            source_node="remote",
+            records=[
+                SyncRecord(
+                    id="conflict_id",
+                    document="remote version LOSES",
+                    metadata={
+                        "wing": "p",
+                        "room": "r",
+                        "source_file": "",
+                        "node_id": "remote",
+                        "seq": 5,
+                        "updated_at": "2020-01-01T00:00:00+00:00",
+                    },
+                )
+            ],
+        )
+
+        result = engine.apply_changes(cs)
+        assert result.rejected_conflicts == 1
+
+        r = col.get(ids=["conflict_id"], include=["documents"])
+        assert r["documents"][0] == "local version WINS"
+
+    def test_apply_changes_returns_winning_records_on_local_win(self, tmp_path):
+        """When a local record beats incoming, it must appear in winning_records."""
+        engine, col, ni = _make_engine(tmp_path)
+        col.upsert(
+            documents=["local WINS"],
+            ids=["doc1"],
+            metadatas=[{
+                "wing": "p", "room": "r", "source_file": "",
+                "node_id": ni.node_id, "seq": 3,
+                "updated_at": "2099-01-01T00:00:00+00:00",
+            }],
+            _raw=True,
+        )
+
+        cs = ChangeSet(
+            source_node="remote",
+            records=[SyncRecord(
+                id="doc1",
+                document="remote LOSES",
+                metadata={
+                    "wing": "p", "room": "r", "source_file": "",
+                    "node_id": "remote", "seq": 9,
+                    "updated_at": "2020-01-01T00:00:00+00:00",
+                },
+            )],
+        )
+
+        result = engine.apply_changes(cs)
+
+        assert result.rejected_conflicts == 1
+        assert len(result.winning_records) == 1
+        w = result.winning_records[0]
+        assert w.id == "doc1"
+        assert w.document == "local WINS"
+        assert w.metadata["node_id"] == ni.node_id
+
+    def test_apply_changes_no_winning_records_when_remote_wins(self, tmp_path):
+        """When the remote wins a conflict, winning_records must be empty."""
+        engine, col, ni = _make_engine(tmp_path)
+        col.upsert(
+            documents=["local OLD"],
+            ids=["doc1"],
+            metadatas=[{
+                "wing": "p", "room": "r", "source_file": "",
+                "node_id": ni.node_id, "seq": 1,
+                "updated_at": "2020-01-01T00:00:00+00:00",
+            }],
+            _raw=True,
+        )
+
+        cs = ChangeSet(
+            source_node="remote",
+            records=[SyncRecord(
+                id="doc1",
+                document="remote WINS",
+                metadata={
+                    "wing": "p", "room": "r", "source_file": "",
+                    "node_id": "remote", "seq": 9,
+                    "updated_at": "2099-01-01T00:00:00+00:00",
+                },
+            )],
+        )
+
+        result = engine.apply_changes(cs)
+
+        assert result.accepted == 1
+        assert result.winning_records == []
+
+    def test_apply_changes_no_winning_records_for_new_records(self, tmp_path):
+        """New (non-conflicting) records produce no winning_records entries."""
+        engine, col, ni = _make_engine(tmp_path)
+        cs = ChangeSet(
+            source_node="remote",
+            records=[SyncRecord(
+                id="brand_new",
+                document="never seen before",
+                metadata={
+                    "wing": "p", "room": "r", "source_file": "",
+                    "node_id": "remote", "seq": 1,
+                    "updated_at": "2026-01-01T00:00:00+00:00",
+                },
+            )],
+        )
+
+        result = engine.apply_changes(cs)
+
+        assert result.accepted == 1
+        assert result.winning_records == []
+
+
         engine, col, ni = _make_engine(tmp_path)
 
         cs = ChangeSet(
@@ -846,6 +980,73 @@ class TestTwoNodeSync:
             f"Second sync pushed {len(cs_push.records)} records back to server — "
             "should be 0 since client only has records it pulled"
         )
+
+    def test_push_loser_corrected_by_winning_records(self, tmp_path):
+        """Regression for the clock-skew divergence bug.
+
+        Scenario:
+          1. Client previously synced and has {id: X, node_id: server, seq: 3} (T2)
+             -> client VV has server_node: S (S >= 3)
+          2. Client re-mines X with T1 < T2 (clock skew)
+          3. On next sync: client pushes X (T1), server rejects it (T2 wins)
+          4. Pull filter 'server_node seq > S' skips X (seq 3 <= S)
+          5. Without the fix: client keeps losing T1 version — diverged
+          6. With the fix: server returns winning record in push response;
+             client applies it and ends up with T2
+        """
+        engine_server, col_server, ni_server = _make_engine(tmp_path, "server")
+        engine_client, col_client, ni_client = _make_engine(tmp_path, "client")
+
+        # Server mines X with T2 (the authoritative newer version)
+        col_server.upsert(
+            documents=["server version (T2, wins)"],
+            ids=["doc_x"],
+            metadatas=[{
+                "wing": "p", "room": "r", "source_file": "x.txt",
+                "node_id": ni_server.node_id, "seq": 3,
+                "updated_at": "2099-01-01T00:00:00+00:00",
+            }],
+            _raw=True,
+        )
+
+        # Simulate a previous sync: client already has X from server
+        cs_prior = engine_server.get_changes_since(engine_client.version_vector)
+        engine_client.apply_changes(cs_prior)
+        assert col_client.count() == 1
+        prior_client_vv = engine_client.version_vector
+        assert prior_client_vv.get(ni_server.node_id, 0) >= 3
+
+        # Client re-mines X with T1 < T2 (backdated / clock-skewed)
+        col_client.upsert(
+            documents=["client re-mine (T1, loses)"],
+            ids=["doc_x"],
+            metadatas=[{
+                "wing": "p", "room": "r", "source_file": "x.txt",
+                "node_id": ni_client.node_id, "seq": 1,
+                "updated_at": "2020-01-01T00:00:00+00:00",
+            }],
+            _raw=True,
+        )
+        engine_client._vv.update(ni_client.node_id, 1)
+
+        # Sync: client pushes its (losing) version, server rejects it
+        server_vv = engine_server.version_vector
+        changeset = engine_client.get_changes_since(server_vv)
+        merge = engine_server.apply_changes(changeset)
+        assert merge.rejected_conflicts == 1
+        assert len(merge.winning_records) == 1  # server tracked the winner
+
+        # Client applies winning_records from push response — this is the fix
+        winning_cs = ChangeSet(
+            source_node=ni_server.node_id,
+            records=merge.winning_records,
+        )
+        client_merge = engine_client.apply_changes(winning_cs)
+        assert client_merge.accepted == 1
+
+        # Client must now have server's winning version
+        r = col_client.get(ids=["doc_x"], include=["documents"])
+        assert r["documents"][0] == "server version (T2, wins)"
 
     def test_hub_relays_between_clients(self, tmp_path):
         """Hub-and-spoke: client A pushes to hub, client B pulls from hub.

@@ -426,3 +426,68 @@ def test_sync_pushes_and_pulls_changes(monkeypatch):
     assert result["server"] == "server"
     assert result["push"] == {"sent": 1, "accepted": 1, "rejected": 0}
     assert result["pull"] == {"received": 1, "accepted": 1, "rejected": 0}
+
+
+def test_sync_applies_winning_records_from_push_response(monkeypatch):
+    """When the server returns winning_records in the push response,
+    sync() must apply them to the local engine before pulling.
+    This is the fix for the clock-skew divergence bug.
+    """
+    winning = SyncRecord(
+        id="doc_x",
+        document="server wins",
+        metadata={
+            "wing": "p", "room": "r", "source_file": "",
+            "node_id": "server", "seq": 3,
+            "updated_at": "2099-01-01T00:00:00+00:00",
+        },
+    )
+    outgoing = ChangeSet(
+        source_node="local",
+        records=[SyncRecord(
+            id="doc_x",
+            document="client loses",
+            metadata={
+                "wing": "p", "room": "r", "source_file": "",
+                "node_id": "local", "seq": 1,
+                "updated_at": "2020-01-01T00:00:00+00:00",
+            },
+        )],
+    )
+
+    client = SyncClient("http://server")
+    apply_calls = []
+
+    monkeypatch.setattr(
+        client,
+        "get_status",
+        lambda: {
+            "node_id": "server",
+            "version_vector": {"server": 3},
+            "total_drawers": 1,
+            "protocol_version": "2024-11-05",
+        },
+    )
+    monkeypatch.setattr(client, "push", lambda cs: {
+        "accepted": 0,
+        "rejected_conflicts": 1,
+        "winning_records": [winning.to_dict()],
+        "errors": [],
+    })
+    monkeypatch.setattr(client, "pull_paged", lambda vv, **kw: ChangeSet(source_node="server", records=[]))
+
+    engine = SimpleNamespace(
+        get_changes_since=lambda vv: outgoing,
+        version_vector={"local": 1},
+        apply_changes=lambda cs: (apply_calls.append(cs), MergeResult(accepted=len(cs.records)))[1],
+    )
+
+    result = client.sync(engine)
+
+    # apply_changes must have been called for winning_records, then for pull
+    assert len(apply_calls) >= 1
+    winning_call = apply_calls[0]
+    assert len(winning_call.records) == 1
+    assert winning_call.records[0].id == "doc_x"
+    assert winning_call.records[0].document == "server wins"
+    assert result["push"]["rejected"] == 1

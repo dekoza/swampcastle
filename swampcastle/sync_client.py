@@ -172,6 +172,17 @@ class SyncClient:
                 push_result["accepted"],
                 push_result["rejected"],
             )
+            # Apply any records the server kept over ours (conflict losers).
+            # The pull filter is seq-based and won't re-deliver records the
+            # client has already seen by seq — so the server must hand back
+            # the winning versions directly in the push response.
+            winning = resp.get("winning_records") or []
+            if winning:
+                winning_cs = ChangeSet.from_dict(
+                    {"source_node": server_node, "records": winning}
+                )
+                engine.apply_changes(winning_cs)
+                logger.info("Applied %d winning records from server", len(winning))
 
         # 3. Pull: get records we haven't seen
         local_vv = engine.version_vector

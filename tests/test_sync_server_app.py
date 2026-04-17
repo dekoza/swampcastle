@@ -164,7 +164,7 @@ def test_create_app_routes_use_engine(monkeypatch):
     push_resp = _response_payload(asyncio.run(app.routes["POST"]["/sync/push"](push_req)))
     pull_resp = _response_payload(asyncio.run(app.routes["POST"]["/sync/pull"](pull_req)))
 
-    assert push_resp == {"accepted": 1, "rejected_conflicts": 0, "errors": []}
+    assert push_resp == {"accepted": 1, "rejected_conflicts": 0, "errors": [], "winning_records": []}
     assert pull_resp["source_node"] == "remote"
     assert pull_resp["records"][0]["id"] == "r1"
     assert pull_resp["total"] == 1  # first page includes total count

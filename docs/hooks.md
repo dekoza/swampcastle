@@ -39,10 +39,12 @@ echo '{"session_id":"abc","stop_hook_active":false,"transcript_path":"/tmp/sessi
 
 - counts human messages in the transcript
 - blocks every `SAVE_INTERVAL` messages
+- starts a background conversation ingest for the active `transcript_path` when it exists
 - returns a reason instructing the assistant to save key context
 
 ### precompact
 
+- runs synchronous conversation ingest for the active `transcript_path` when it exists
 - always blocks
 - tells the assistant to save everything before context is compacted
 
@@ -65,13 +67,25 @@ That directory keeps:
 
 ## Auto-ingest
 
+The hooks now use two optional ingest inputs.
+
+### Active transcript
+If the harness passes a readable `transcript_path`, the hooks ingest that exact transcript in conversation mode:
+
+```bash
+python -m swampcastle mine /path/to/session.jsonl --mode convos
+```
+
+### Legacy project source directory
 The hook code still honors the legacy environment variable:
 
 ```text
 MEMPAL_DIR
 ```
 
-If set to a directory, the hooks try to run a background or synchronous ingest against that path. The name is legacy, but it is still what the current code reads.
+If set to a directory, the hooks also ingest that directory. The name is legacy, but it is still what the current code reads.
+
+Important: `transcript_path` and `MEMPAL_DIR` are **additive**. If both are present, both ingest paths run.
 
 ## Python API
 

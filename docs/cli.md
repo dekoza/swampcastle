@@ -59,9 +59,11 @@ Then it writes the best measured settings back to `~/.swampcastle/config.json`.
 Ingest files into the configured collection backend.
 
 ```bash
-swampcastle gather <dir> [options]
-swampcastle mine <dir> [options]
+swampcastle gather <path> [options]
+swampcastle mine <path> [options]
 ```
+
+`<path>` is usually a directory. In conversation mode it can also be a single transcript file.
 
 Options:
 - `--mode {projects,convos}`
@@ -89,9 +91,17 @@ swampcastle gather ~/projects/myapp --extract-kg-proposals
 Semantic search.
 
 ```bash
-swampcastle seek <query> [--wing NAME] [--room NAME] [--contributor NAME] [--results N]
-swampcastle search <query> [--wing NAME] [--room NAME] [--contributor NAME] [--results N]
+swampcastle seek <query> [--wing NAME] [--room NAME] [--contributor NAME] [--results N] \
+  [--lexical-rerank] [--hybrid] [--explain]
+swampcastle search <query> [--wing NAME] [--room NAME] [--contributor NAME] [--results N] \
+  [--lexical-rerank] [--hybrid] [--explain]
 ```
+
+`--lexical-rerank` widens dense retrieval and reranks the dense candidates lexically.
+
+`--hybrid` combines dense candidates with a backend-agnostic lexical scan before reranking.
+
+`--explain` prints per-hit explanation metadata such as retrieval mode, lexical score, boosts, and origin metadata when available.
 
 ## survey / status
 

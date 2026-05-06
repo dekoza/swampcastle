@@ -101,6 +101,16 @@ At startup the server:
 | `context` | string | no |
 | `lexical_rerank` | boolean | no |
 | `hybrid` | boolean | no |
+| `explain` | boolean | no |
+
+When `explain=true`, returned search hits may also include:
+- `matched_via`
+- `dense_similarity`
+- `lexical_score`
+- `boosts`
+- `origin_id`
+- `source_kind`
+- `source_platform`
 
 ### add drawer
 

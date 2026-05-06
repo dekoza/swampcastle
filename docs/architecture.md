@@ -75,6 +75,21 @@ The graph layer builds on top of that metadata to find:
 - cross-domain tunnels
 - graph traversal paths
 
+## Audit overlay boundary
+
+SwampCastle now has a small audit overlay on top of the canonical storage model.
+
+Current shipped overlay pieces are:
+- source-origin manifests under `<castle_path>/.swampcastle/origin/`
+- hook logs under `~/.swampcastle/hook_state/`
+- explainable search metadata returned inline when callers request `explain=true`
+
+Important constraint:
+- drawers and accepted KG facts are still canonical
+- origin sidecars and search explanations are additive audit surfaces, not a second database
+
+See [Audit overlay](audit-overlay.md).
+
 ## Write-ahead log
 
 Mutating service operations write to a WAL before they touch storage.

@@ -61,6 +61,7 @@ swampcastle gather ~/projects/myapp --include-ignored docs/generated
 swampcastle seek "auth migration"
 swampcastle seek "billing retry policy" --wing myapp --room billing
 swampcastle seek "auth migration" --contributor dekoza
+swampcastle seek "auth migration clerk" --hybrid --explain
 ```
 
 ### 4. Inspect the current shape
@@ -78,9 +79,18 @@ Conversation mining uses the same command with `--mode convos`:
 
 ```bash
 swampcastle gather ~/chat-exports --mode convos --wing myapp
+swampcastle gather ~/chat-exports/session.jsonl --mode convos --wing myapp
 ```
 
 If the source directory also contains `.swampcastle.yaml` with a `team` list, conversation ingest uses the same best-effort contributor tagging as project-file ingest.
+
+Conversation ingest now also writes a source-origin manifest under:
+
+```text
+<castle_path>/.swampcastle/origin/
+```
+
+and copies the key origin fields into drawer metadata for search / sync use.
 
 If you want broader extraction instead of exchange-pair chunking:
 
@@ -93,6 +103,8 @@ If your exports contain multiple sessions per file:
 ```bash
 swampcastle cleave ~/chat-exports
 ```
+
+If you use hooks with a tool that passes `transcript_path`, SwampCastle can also auto-ingest the active transcript during stop / precompact checkpoints. See [Hooks](hooks.md) and [Audit overlay](audit-overlay.md).
 
 ## Connect an AI client over MCP
 
@@ -159,3 +171,4 @@ Then the same high-level commands (`survey`, `seek`, MCP, sync server) use Postg
 - [MCP server](mcp.md)
 - [Sync](sync.md)
 - [Python API](python-api.md)
+- [Audit overlay](audit-overlay.md)

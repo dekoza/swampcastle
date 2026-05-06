@@ -89,6 +89,7 @@ swampcastle kg reject <candidate-id>
 
 ```bash
 swampcastle gather ~/exports --mode convos --wing myapp
+swampcastle gather ~/exports/session.jsonl --mode convos --wing myapp
 ```
 
 ### Supported sources
@@ -119,6 +120,11 @@ swampcastle gather ~/exports --mode convos --extract general
 
 Conversation ingest also performs contributor tagging when the source directory has `.swampcastle.yaml` with a `team` list and the files live inside a git repository.
 
+For each ingested conversation source, SwampCastle now also:
+- writes `source_mtime` into drawer metadata
+- writes source-origin metadata into drawer metadata (`origin_id`, `source_kind`, `source_platform`, `origin_confidence`)
+- persists a source-origin manifest under `<castle_path>/.swampcastle/origin/`
+
 ## Project setup
 
 `swampcastle project` prepares a directory for mining by writing `.swampcastle.yaml`:
@@ -130,6 +136,13 @@ swampcastle project ~/projects/myapp --team dekoza sarah
 That command helps you inspect and save the inferred structure before you ingest anything. New setups use `.swampcastle.yaml`; if a legacy `swampcastle.yaml` exists, SwampCastle migrates it automatically.
 
 The optional `team` list is shared project metadata. During ingest, SwampCastle checks git history for each file, matches the author against the configured team, and stores the matched identifier in drawer metadata as `contributor`.
+
+### Re-ingesting growing transcripts
+
+Conversation ingest treats a changed transcript file as a refresh signal.
+If `source_file` already exists but `source_mtime` changed, SwampCastle removes the old drawers for that transcript and re-files the current content. Unchanged transcripts are still skipped.
+
+This behavior exists mainly to support hook-driven ingest of active local transcripts.
 
 ## Splitting mega-files
 

@@ -14,16 +14,18 @@ Alias:
 swampcastle search "auth migration"
 ```
 
-Filters:
+Filters and retrieval modes:
 
 ```bash
 swampcastle seek "billing retries" --wing myapp
 swampcastle seek "token rotation" --wing myapp --room auth
 swampcastle seek "recent auth work" --contributor dekoza
 swampcastle seek "postgres" --results 10
+swampcastle seek "auth migration clerk" --lexical-rerank --explain
+swampcastle seek "auth migration clerk" --hybrid --explain
 ```
 
-The CLI prints verbatim text plus wing / room / similarity, and includes contributor when present.
+The CLI prints verbatim text plus wing / room / similarity, and includes contributor when present. When `--explain` is set, it also prints explanation metadata for each hit.
 
 ## Python API
 
@@ -81,6 +83,7 @@ MCP exposes the same flow through `swampcastle_check_duplicate`.
 | `context` | `str \| None` | `None` |
 | `lexical_rerank` | `bool` | `False` |
 | `hybrid` | `bool` | `False` |
+| `explain` | `bool` | `False` |
 
 `context` is background context for callers. The search embedding is built from
 `query`, not from the extra context. When `lexical_rerank=true` or `hybrid=true`,
@@ -93,6 +96,16 @@ candidates by lexical overlap.
 backend-agnostic lexical scan over documents, then reranks the merged set.
 This is a lightweight hybrid mode — not a dedicated sparse index — but it can
 surface strong lexical matches that dense retrieval failed to return.
+
+`explain=true` asks the service to include explanation metadata on each hit.
+Current explanation fields may include:
+- `matched_via`
+- `dense_similarity`
+- `lexical_score`
+- `boosts`
+- `origin_id`
+- `source_kind`
+- `source_platform`
 
 ## Sanitization
 

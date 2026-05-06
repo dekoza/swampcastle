@@ -122,6 +122,21 @@ The same runtime directory may also contain:
 
 Project-local mining config lives separately in `.swampcastle.yaml`. That file can include a shared `team` list used for contributor tagging during ingest.
 
+## Castle-scoped sidecars under `<castle_path>/.swampcastle/`
+
+The castle directory may also contain audit sidecars and helper metadata.
+
+Current shipped paths include:
+- `.swampcastle/*.embedder.json` — embedder contract metadata
+- `.swampcastle/origin/<origin-id>.json` — conversation source-origin manifests
+
+Important caveat:
+- origin manifests are an audit surface
+- query-relevant origin fields are also copied into drawer metadata
+- the origin sidecars themselves are currently local-only and are **not** first-class sync objects
+
+See [Audit overlay](audit-overlay.md).
+
 Global and project-level mining ignore files
 
 - Per-project: create `.swampcastleignore` in project directory (or subdirectories) to exclude files from AI indexing while keeping them in version control. Syntax mirrors `.gitignore`: supports `!` negation, anchored paths, and trailing `/` for directories.

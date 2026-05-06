@@ -95,20 +95,60 @@ def _output(data: dict):
     print(json.dumps(data, indent=2, ensure_ascii=False))
 
 
-def _maybe_auto_ingest():
-    """If MEMPAL_DIR is set and exists, run swampcastle gather in background."""
+def _auto_ingest_commands(transcript_path: str = "") -> list[list[str]]:
+    commands: list[list[str]] = []
+
+    transcript = Path(transcript_path).expanduser()
+    if transcript.is_file():
+        commands.append(
+            [
+                sys.executable,
+                "-m",
+                "swampcastle",
+                "mine",
+                str(transcript),
+                "--mode",
+                "convos",
+            ]
+        )
+
     mempal_dir = os.environ.get("MEMPAL_DIR", "")
     if mempal_dir and os.path.isdir(mempal_dir):
-        try:
-            log_path = STATE_DIR / "hook.log"
-            with open(log_path, "a") as log_f:
-                subprocess.Popen(
-                    [sys.executable, "-m", "swampcastle", "mine", mempal_dir],
-                    stdout=log_f,
-                    stderr=log_f,
-                )
-        except OSError:
-            pass
+        commands.append([sys.executable, "-m", "swampcastle", "mine", mempal_dir])
+
+    return commands
+
+
+def _maybe_auto_ingest(transcript_path: str = ""):
+    """Run optional background ingest for the active transcript and legacy source dir."""
+    commands = _auto_ingest_commands(transcript_path)
+    if not commands:
+        return
+
+    try:
+        STATE_DIR.mkdir(parents=True, exist_ok=True)
+        log_path = STATE_DIR / "hook.log"
+        with open(log_path, "a") as log_f:
+            for command in commands:
+                subprocess.Popen(command, stdout=log_f, stderr=log_f)
+    except OSError:
+        pass
+
+
+def _run_auto_ingest_sync(transcript_path: str = ""):
+    """Run optional synchronous ingest before compaction."""
+    commands = _auto_ingest_commands(transcript_path)
+    if not commands:
+        return
+
+    try:
+        STATE_DIR.mkdir(parents=True, exist_ok=True)
+        log_path = STATE_DIR / "hook.log"
+        with open(log_path, "a") as log_f:
+            for command in commands:
+                subprocess.run(command, stdout=log_f, stderr=log_f, timeout=60)
+    except OSError:
+        pass
 
 
 SUPPORTED_HARNESSES = {"claude-code", "codex"}
@@ -164,8 +204,8 @@ def hook_stop(data: dict, harness: str):
 
         _log(f"TRIGGERING SAVE at exchange {exchange_count}")
 
-        # Optional: auto-ingest if MEMPAL_DIR is set
-        _maybe_auto_ingest()
+        # Optional: auto-ingest the active transcript and any legacy source dir.
+        _maybe_auto_ingest(transcript_path)
 
         _output({"decision": "block", "reason": STOP_BLOCK_REASON})
     else:
@@ -190,23 +230,12 @@ def hook_precompact(data: dict, harness: str):
     """Precompact hook: always block with comprehensive save instruction."""
     parsed = _parse_harness_input(data, harness)
     session_id = parsed["session_id"]
+    transcript_path = parsed["transcript_path"]
 
     _log(f"PRE-COMPACT triggered for session {session_id}")
 
     # Optional: auto-ingest synchronously before compaction (so memories land first)
-    mempal_dir = os.environ.get("MEMPAL_DIR", "")
-    if mempal_dir and os.path.isdir(mempal_dir):
-        try:
-            log_path = STATE_DIR / "hook.log"
-            with open(log_path, "a") as log_f:
-                subprocess.run(
-                    [sys.executable, "-m", "swampcastle", "mine", mempal_dir],
-                    stdout=log_f,
-                    stderr=log_f,
-                    timeout=60,
-                )
-        except OSError:
-            pass
+    _run_auto_ingest_sync(transcript_path)
 
     # Always block -- compaction = save everything
     _output({"decision": "block", "reason": PRECOMPACT_BLOCK_REASON})

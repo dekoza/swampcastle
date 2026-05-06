@@ -1,6 +1,7 @@
 import contextlib
 import io
 import json
+import sys
 from pathlib import Path
 from unittest.mock import patch
 
@@ -165,13 +166,15 @@ def test_stop_hook_blocks_at_interval(tmp_path):
         transcript,
         [{"message": {"role": "user", "content": f"msg {i}"}} for i in range(SAVE_INTERVAL)],
     )
-    result = _capture_hook_output(
-        hook_stop,
-        {"session_id": "test", "stop_hook_active": False, "transcript_path": str(transcript)},
-        state_dir=tmp_path,
-    )
+    with patch("swampcastle.hooks_cli._maybe_auto_ingest") as mock_auto_ingest:
+        result = _capture_hook_output(
+            hook_stop,
+            {"session_id": "test", "stop_hook_active": False, "transcript_path": str(transcript)},
+            state_dir=tmp_path,
+        )
     assert result["decision"] == "block"
     assert result["reason"] == STOP_BLOCK_REASON
+    mock_auto_ingest.assert_called_once_with(str(transcript))
 
 
 def test_stop_hook_tracks_save_point(tmp_path):
@@ -239,10 +242,34 @@ def test_log_oserror_is_silenced(tmp_path):
 
 
 def test_maybe_auto_ingest_no_env(tmp_path):
-    """Without MEMPAL_DIR set, does nothing."""
+    """Without transcript path or MEMPAL_DIR set, does nothing."""
     with patch.dict("os.environ", {}, clear=True):
         with patch("swampcastle.hooks_cli.STATE_DIR", tmp_path):
-            _maybe_auto_ingest()  # should not raise
+            with patch("swampcastle.hooks_cli.subprocess.Popen") as mock_popen:
+                _maybe_auto_ingest()
+    mock_popen.assert_not_called()
+
+
+def test_maybe_auto_ingest_with_transcript_path(tmp_path):
+    transcript = tmp_path / "session.jsonl"
+    transcript.write_text('{"message": {"role": "user", "content": "hello"}}\n')
+
+    with patch.dict("os.environ", {}, clear=True):
+        with patch("swampcastle.hooks_cli.STATE_DIR", tmp_path):
+            with patch("swampcastle.hooks_cli.subprocess.Popen") as mock_popen:
+                _maybe_auto_ingest(str(transcript))
+
+    mock_popen.assert_called_once()
+    command = mock_popen.call_args.args[0]
+    assert command == [
+        sys.executable,
+        "-m",
+        "swampcastle",
+        "mine",
+        str(transcript),
+        "--mode",
+        "convos",
+    ]
 
 
 def test_maybe_auto_ingest_with_env(tmp_path):
@@ -254,6 +281,31 @@ def test_maybe_auto_ingest_with_env(tmp_path):
             with patch("swampcastle.hooks_cli.subprocess.Popen") as mock_popen:
                 _maybe_auto_ingest()
                 mock_popen.assert_called_once()
+
+
+def test_maybe_auto_ingest_transcript_and_mempal_dir_are_additive(tmp_path):
+    transcript = tmp_path / "session.jsonl"
+    transcript.write_text('{"message": {"role": "user", "content": "hello"}}\n')
+    mempal_dir = tmp_path / "project"
+    mempal_dir.mkdir()
+
+    with patch.dict("os.environ", {"MEMPAL_DIR": str(mempal_dir)}):
+        with patch("swampcastle.hooks_cli.STATE_DIR", tmp_path):
+            with patch("swampcastle.hooks_cli.subprocess.Popen") as mock_popen:
+                _maybe_auto_ingest(str(transcript))
+
+    assert mock_popen.call_count == 2
+    commands = [call.args[0] for call in mock_popen.call_args_list]
+    assert [
+        sys.executable,
+        "-m",
+        "swampcastle",
+        "mine",
+        str(transcript),
+        "--mode",
+        "convos",
+    ] in commands
+    assert [sys.executable, "-m", "swampcastle", "mine", str(mempal_dir)] in commands
 
 
 def test_maybe_auto_ingest_oserror(tmp_path):
@@ -333,6 +385,31 @@ def test_stop_hook_oserror_on_write(tmp_path):
 # --- hook_precompact with MEMPAL_DIR ---
 
 
+def test_precompact_with_transcript_path_runs_sync_convo_ingest(tmp_path):
+    transcript = tmp_path / "session.jsonl"
+    transcript.write_text('{"message": {"role": "user", "content": "hello"}}\n')
+
+    with patch.dict("os.environ", {}, clear=True):
+        with patch("swampcastle.hooks_cli.subprocess.run") as mock_run:
+            result = _capture_hook_output(
+                hook_precompact,
+                {"session_id": "test", "transcript_path": str(transcript)},
+                state_dir=tmp_path,
+            )
+    assert result["decision"] == "block"
+    mock_run.assert_called_once()
+    command = mock_run.call_args.args[0]
+    assert command == [
+        sys.executable,
+        "-m",
+        "swampcastle",
+        "mine",
+        str(transcript),
+        "--mode",
+        "convos",
+    ]
+
+
 def test_precompact_with_mempal_dir(tmp_path):
     """Precompact runs subprocess.run when MEMPAL_DIR is set."""
     mempal_dir = tmp_path / "project"
@@ -346,6 +423,34 @@ def test_precompact_with_mempal_dir(tmp_path):
             )
     assert result["decision"] == "block"
     mock_run.assert_called_once()
+
+
+def test_precompact_transcript_and_mempal_dir_are_additive(tmp_path):
+    transcript = tmp_path / "session.jsonl"
+    transcript.write_text('{"message": {"role": "user", "content": "hello"}}\n')
+    mempal_dir = tmp_path / "project"
+    mempal_dir.mkdir()
+
+    with patch.dict("os.environ", {"MEMPAL_DIR": str(mempal_dir)}):
+        with patch("swampcastle.hooks_cli.subprocess.run") as mock_run:
+            result = _capture_hook_output(
+                hook_precompact,
+                {"session_id": "test", "transcript_path": str(transcript)},
+                state_dir=tmp_path,
+            )
+    assert result["decision"] == "block"
+    assert mock_run.call_count == 2
+    commands = [call.args[0] for call in mock_run.call_args_list]
+    assert [
+        sys.executable,
+        "-m",
+        "swampcastle",
+        "mine",
+        str(transcript),
+        "--mode",
+        "convos",
+    ] in commands
+    assert [sys.executable, "-m", "swampcastle", "mine", str(mempal_dir)] in commands
 
 
 def test_precompact_with_mempal_dir_oserror(tmp_path):

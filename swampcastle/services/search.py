@@ -23,6 +23,11 @@ class SearchService:
 
     def search(self, query: SearchQuery) -> SearchResponse:
         sanitized = self._sanitizer(query.query)
+        retrieval_mode = "dense"
+        if query.hybrid:
+            retrieval_mode = "hybrid"
+        elif query.lexical_rerank:
+            retrieval_mode = "lexical"
 
         filters = []
         if query.wing:
@@ -62,6 +67,7 @@ class SearchService:
                         "document": doc,
                         "metadata": meta,
                         "dense_similarity": dense_similarity,
+                        "lexical_score": None,
                     }
                 )
 
@@ -86,6 +92,27 @@ class SearchService:
         for candidate in candidates[: query.limit]:
             doc = candidate["document"]
             meta = candidate["metadata"]
+            hit_kwargs = {}
+            if query.explain:
+                boosts = []
+                lexical_score = candidate.get("lexical_score")
+                if retrieval_mode == "lexical" and lexical_score:
+                    boosts.append("lexical_rerank")
+                elif retrieval_mode == "hybrid":
+                    boosts.append("hybrid_candidate_merge")
+                    if lexical_score:
+                        boosts.append("lexical_rerank")
+
+                hit_kwargs = {
+                    "matched_via": retrieval_mode,
+                    "dense_similarity": candidate.get("dense_similarity"),
+                    "lexical_score": lexical_score,
+                    "boosts": boosts,
+                    "origin_id": meta.get("origin_id"),
+                    "source_kind": meta.get("source_kind"),
+                    "source_platform": meta.get("source_platform"),
+                }
+
             hits.append(
                 SearchHit(
                     text=doc,
@@ -94,6 +121,7 @@ class SearchService:
                     similarity=candidate["dense_similarity"],
                     source_file=meta.get("source_file"),
                     contributor=meta.get("contributor"),
+                    **hit_kwargs,
                 )
             )
 

@@ -964,7 +964,9 @@ def test_cmd_parley_live_prints_summary(capsys):
             self.search = None
             self.vault = None
 
-    client = SimpleNamespace(sync=lambda engine, **kw: {"push": {"sent": 2}, "pull": {"received": 3}})
+    client = SimpleNamespace(
+        sync=lambda engine, **kw: {"push": {"sent": 2}, "pull": {"received": 3}}
+    )
     with patch("swampcastle.castle.Castle", lambda s, f: ParleyCastle(s, f)):
         with patch("swampcastle.cli.commands.factory_from_settings", return_value=object()):
             with patch("swampcastle.sync.SyncEngine"):
@@ -1035,6 +1037,91 @@ def test_cmd_seek_prints_contributor_filter_and_hit(capsys):
     out = capsys.readouterr().out
     assert "Contributor: dekoza" in out
     assert "by dekoza" in out
+
+
+def test_cmd_seek_passes_rerank_and_explain_flags_to_search_query():
+    captured = {}
+    result = SimpleNamespace(results=[])
+
+    def capture_query(query):
+        captured["query"] = query
+        return result
+
+    class QueryCaptureCastle(DummyCastle):
+        def __init__(self, settings, factory):
+            self.catalog = SimpleNamespace(status=lambda: None)
+            self.search = SimpleNamespace(search=capture_query)
+            self.vault = SimpleNamespace()
+            self._collection = object()
+
+    args = SimpleNamespace(
+        query="auth migration clerk",
+        wing="proj",
+        room="auth",
+        contributor="dekoza",
+        results=3,
+        lexical_rerank=True,
+        hybrid=True,
+        explain=True,
+        palace=None,
+        backend=None,
+    )
+
+    with patch("swampcastle.castle.Castle", lambda s, f: QueryCaptureCastle(s, f)):
+        with patch("swampcastle.cli.commands.factory_from_settings", return_value=object()):
+            commands.cmd_seek(args)
+
+    query = captured["query"]
+    assert query.query == "auth migration clerk"
+    assert query.wing == "proj"
+    assert query.room == "auth"
+    assert query.contributor == "dekoza"
+    assert query.limit == 3
+    assert query.lexical_rerank is True
+    assert query.hybrid is True
+    assert query.explain is True
+
+
+def test_cmd_seek_prints_explanation_details_when_requested(capsys):
+    hit = SimpleNamespace(
+        wing="proj",
+        room="auth",
+        similarity=0.9,
+        text="hello world",
+        contributor="dekoza",
+        matched_via="hybrid",
+        dense_similarity=0.89,
+        lexical_score=1.0,
+        boosts=["hybrid_candidate_merge", "lexical_rerank"],
+        origin_id="origin_123",
+        source_kind="conversation_export",
+        source_platform="claude-code",
+    )
+    result = SimpleNamespace(results=[hit])
+    args = SimpleNamespace(
+        query="hello",
+        wing=None,
+        room=None,
+        contributor=None,
+        results=5,
+        explain=True,
+        lexical_rerank=False,
+        hybrid=True,
+        palace=None,
+        backend=None,
+    )
+
+    with patch("swampcastle.castle.Castle", lambda s, f: DummyCastle(s, f, search=result)):
+        with patch("swampcastle.cli.commands.factory_from_settings", return_value=object()):
+            commands.cmd_seek(args)
+
+    out = capsys.readouterr().out
+    assert "matched via: hybrid" in out
+    assert "dense: 0.89" in out
+    assert "lexical: 1.0" in out
+    assert "boosts: hybrid_candidate_merge, lexical_rerank" in out
+    assert "origin: origin_123" in out
+    assert "source: conversation_export / claude-code" in out
 
 
 def test_cmd_deskeleton_pages_drawers_in_batches(capsys):

@@ -96,6 +96,9 @@ def main():
     p.add_argument("--room", default=None)
     p.add_argument("--contributor", default=None)
     p.add_argument("--results", type=int, default=5)
+    p.add_argument("--lexical-rerank", action="store_true")
+    p.add_argument("--hybrid", action="store_true")
+    p.add_argument("--explain", action="store_true")
 
     p = sub.add_parser("survey", aliases=["status"], help="Survey the castle")
 

@@ -2,7 +2,7 @@
 
 import hashlib
 import re
-from typing import Optional
+from typing import Literal, Optional
 
 from pydantic import BaseModel, Field, field_validator
 
@@ -42,6 +42,10 @@ class SearchQuery(BaseModel):
         default=False,
         description="Combine dense candidates with lexical candidates before reranking",
     )
+    explain: bool = Field(
+        default=False,
+        description="Include explanation metadata about how each hit was ranked",
+    )
 
 
 class SearchHit(BaseModel):
@@ -51,6 +55,13 @@ class SearchHit(BaseModel):
     similarity: float
     source_file: Optional[str] = None
     contributor: Optional[str] = None
+    matched_via: Literal["dense", "lexical", "hybrid"] | None = None
+    dense_similarity: float | None = None
+    lexical_score: float | None = None
+    boosts: list[str] = Field(default_factory=list)
+    origin_id: str | None = None
+    source_kind: str | None = None
+    source_platform: str | None = None
 
 
 class SearchResponse(BaseModel):

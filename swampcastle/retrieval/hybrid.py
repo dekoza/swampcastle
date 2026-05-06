@@ -94,7 +94,9 @@ def rerank_dense_candidates(
     scored = []
     for idx, candidate in enumerate(candidates):
         score = lexical_score(query, candidate.get("document", ""), context=context)
-        scored.append((score, candidate.get("dense_similarity", 0.0), -idx, candidate))
+        enriched = dict(candidate)
+        enriched["lexical_score"] = round(score, 3)
+        scored.append((score, enriched.get("dense_similarity", 0.0), -idx, enriched))
 
     scored.sort(reverse=True)
     return [candidate for _, _, _, candidate in scored]
@@ -145,6 +147,7 @@ def sparse_candidates(
                 "document": doc,
                 "metadata": meta,
                 "dense_similarity": 0.0,
+                "lexical_score": round(score, 3),
             }
             heapq.heappush(heap, (score, counter, candidate))
             counter += 1
@@ -171,6 +174,10 @@ def merge_candidates(*candidate_lists: list[dict]) -> list[dict]:
             existing["dense_similarity"] = max(
                 existing.get("dense_similarity", 0.0),
                 candidate.get("dense_similarity", 0.0),
+            )
+            existing["lexical_score"] = max(
+                existing.get("lexical_score", 0.0),
+                candidate.get("lexical_score", 0.0),
             )
             if not existing.get("metadata") and candidate.get("metadata"):
                 existing["metadata"] = candidate["metadata"]

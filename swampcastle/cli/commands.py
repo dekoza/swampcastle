@@ -120,6 +120,9 @@ def cmd_seek(args):
                 room=args.room,
                 contributor=getattr(args, "contributor", None),
                 limit=args.results,
+                lexical_rerank=getattr(args, "lexical_rerank", False),
+                hybrid=getattr(args, "hybrid", False),
+                explain=getattr(args, "explain", False),
             )
         )
         _print_section("Seek")
@@ -130,6 +133,12 @@ def cmd_seek(args):
             _print_kv("Room", args.room)
         if getattr(args, "contributor", None):
             _print_kv("Contributor", args.contributor)
+        if getattr(args, "lexical_rerank", False):
+            _print_kv("Lexical rerank", "yes")
+        if getattr(args, "hybrid", False):
+            _print_kv("Hybrid", "yes")
+        if getattr(args, "explain", False):
+            _print_kv("Explain", "yes")
         if not result.results:
             print("  No results found.")
             return
@@ -141,6 +150,27 @@ def cmd_seek(args):
             label += f"  (match: {hit.similarity})"
             print(label)
             print(f"      {hit.text[:200]}")
+            if getattr(args, "explain", False):
+                matched_via = getattr(hit, "matched_via", None)
+                if matched_via:
+                    print(f"      matched via: {matched_via}")
+                dense_similarity = getattr(hit, "dense_similarity", None)
+                if dense_similarity is not None:
+                    print(f"      dense: {dense_similarity}")
+                lexical_score = getattr(hit, "lexical_score", None)
+                if lexical_score is not None:
+                    print(f"      lexical: {lexical_score}")
+                boosts = getattr(hit, "boosts", None) or []
+                if boosts:
+                    print(f"      boosts: {', '.join(boosts)}")
+                origin_id = getattr(hit, "origin_id", None)
+                if origin_id:
+                    print(f"      origin: {origin_id}")
+                source_kind = getattr(hit, "source_kind", None)
+                source_platform = getattr(hit, "source_platform", None)
+                if source_kind or source_platform:
+                    source_bits = [bit for bit in (source_kind, source_platform) if bit]
+                    print(f"      source: {' / '.join(source_bits)}")
 
 
 def cmd_project(args):

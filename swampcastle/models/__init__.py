@@ -37,6 +37,7 @@ from .kg_candidates import (
     CandidateTriple,
     CandidateTripleFilter,
 )
+from .origin import SourceOrigin
 from .sync import ChangeSet, MergeResult, SyncRecord, SyncStatus, VersionVector
 
 __all__ = [
@@ -64,6 +65,7 @@ __all__ = [
     "CandidateTripleFilter",
     "MergeResult",
     "RoomsResponse",
+    "SourceOrigin",
     "SearchHit",
     "SearchQuery",
     "SearchResponse",

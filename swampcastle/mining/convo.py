@@ -15,6 +15,7 @@ from pathlib import Path
 from datetime import datetime
 from collections import defaultdict
 
+from ..audit.origin import detect_source_origin, origin_metadata, write_origin_manifest
 from .normalize import normalize
 from .contributor import detect_contributor
 from .kg_extract import persist_kg_proposals_for_wing
@@ -37,12 +38,32 @@ SKIP_DIRS = {
 }
 
 
-def _file_already_mined(collection, source_file: str) -> bool:
+def _file_already_mined(collection, source_file: str, *, check_mtime: bool = False) -> bool:
     try:
         results = collection.get(where={"source_file": source_file}, limit=1)
-        return bool(results.get("ids"))
+        if not results.get("ids"):
+            return False
+        if not check_mtime:
+            return True
+
+        stored_meta = results.get("metadatas", [{}])[0]
+        stored_mtime = stored_meta.get("source_mtime")
+        if stored_mtime is None:
+            return False
+
+        current_mtime = os.stat(source_file).st_mtime_ns
+        return int(stored_mtime) == int(current_mtime)
     except Exception:
         return False
+
+
+def _purge_source_file(collection, source_file: str, *, batch_size: int = 500) -> None:
+    while True:
+        rows = collection.get(where={"source_file": source_file}, limit=batch_size)
+        ids = rows.get("ids", [])
+        if not ids:
+            return
+        collection.delete(ids=ids)
 
 
 # File types that might contain conversations
@@ -230,6 +251,20 @@ def detect_convo_room(content: str) -> str:
 def scan_convos(convo_dir: str) -> list:
     """Find all potential conversation files."""
     convo_path = Path(convo_dir).expanduser().resolve()
+    if convo_path.is_file():
+        if convo_path.name.endswith(".meta.json"):
+            return []
+        if convo_path.suffix.lower() not in CONVO_EXTENSIONS:
+            return []
+        if convo_path.is_symlink():
+            return []
+        try:
+            if convo_path.stat().st_size > MAX_FILE_SIZE:
+                return []
+        except OSError:
+            return []
+        return [convo_path]
+
     files = []
     for root, dirs, filenames in os.walk(convo_path):
         dirs[:] = [d for d in dirs if d not in SKIP_DIRS]
@@ -258,7 +293,8 @@ def scan_convos(convo_dir: str) -> list:
 def _load_contributor_context(convo_path: Path):
     team = None
     registry = None
-    config_path = resolve_project_config(convo_path)
+    config_root = convo_path.parent if convo_path.is_file() else convo_path
+    config_path = resolve_project_config(config_root)
     if config_path is None:
         return team, registry
 
@@ -285,6 +321,61 @@ def _extract_chunks(content: str, extract_mode: str):
 
         return extract_memories(content)
     return chunk_exchanges(content)
+
+
+def _source_mtime(source_file: str) -> int | None:
+    try:
+        return os.stat(source_file).st_mtime_ns
+    except OSError:
+        return None
+
+
+def _analyze_convo_file(
+    filepath: Path,
+    *,
+    convo_path: Path,
+    team,
+    registry,
+    extract_mode: str,
+):
+    content = normalize(str(filepath))
+    if not content or len(content.strip()) < MIN_CHUNK_SIZE:
+        return None
+
+    chunks = _extract_chunks(content, extract_mode)
+    if not chunks:
+        return None
+
+    room = detect_convo_room(content) if extract_mode != "general" else None
+    contributor = detect_contributor(filepath, convo_path, team=team, registry=registry)
+    origin = detect_source_origin(str(filepath))
+
+    return {
+        "content": content,
+        "chunks": chunks,
+        "room": room,
+        "contributor": contributor,
+        "origin": origin,
+    }
+
+
+def _record_dry_run(filepath: Path, analysis: dict, extract_mode: str, room_counts: dict) -> int:
+    chunks = analysis["chunks"]
+    room = analysis["room"]
+
+    if extract_mode == "general":
+        from collections import Counter
+
+        type_counts = Counter(c.get("memory_type", "general") for c in chunks)
+        types_str = ", ".join(f"{t}:{n}" for t, n in type_counts.most_common())
+        print(f"    [DRY RUN] {filepath.name} → {len(chunks)} memories ({types_str})")
+        for chunk in chunks:
+            room_counts[chunk.get("memory_type", "general")] += 1
+        return len(chunks)
+
+    print(f"    [DRY RUN] {filepath.name} → room:{room} ({len(chunks)} drawers)")
+    room_counts[room] += 1
+    return len(chunks)
 
 
 def _extract_kg_proposals_if_enabled(
@@ -317,7 +408,7 @@ def mine_convos(
     storage_factory: StorageFactory | None = None,
     extract_kg_proposals: bool = False,
 ):
-    """Mine a directory of conversation files into the palace.
+    """Mine a conversation file or directory into the palace.
 
     extract_mode:
         "exchange" — default exchange-pair chunking (Q+A = one unit)
@@ -326,7 +417,8 @@ def mine_convos(
 
     convo_path = Path(convo_dir).expanduser().resolve()
     if not wing:
-        wing = convo_path.name.lower().replace(" ", "_").replace("-", "_")
+        wing_root = convo_path.parent if convo_path.is_file() else convo_path
+        wing = wing_root.name.lower().replace(" ", "_").replace("-", "_")
 
     files = scan_convos(convo_dir)
     if limit > 0:
@@ -350,7 +442,8 @@ def mine_convos(
             storage_factory = factory_from_settings(settings)
         collection = storage_factory.open_collection("swampcastle_chests")
 
-    team, registry = _load_contributor_context(convo_path)
+    contributor_root = convo_path.parent if convo_path.is_file() else convo_path
+    team, registry = _load_contributor_context(contributor_root)
 
     total_drawers = 0
     files_skipped = 0
@@ -358,51 +451,40 @@ def mine_convos(
 
     for i, filepath in enumerate(files, 1):
         source_file = str(filepath)
+        source_mtime = _source_mtime(source_file)
 
         # Skip if already filed
-        if not dry_run and _file_already_mined(collection, source_file):
-            files_skipped += 1
-            continue
+        if not dry_run:
+            if _file_already_mined(collection, source_file, check_mtime=True):
+                files_skipped += 1
+                continue
+            if _file_already_mined(collection, source_file):
+                _purge_source_file(collection, source_file)
 
-        # Normalize format
         try:
-            content = normalize(str(filepath))
+            analysis = _analyze_convo_file(
+                filepath,
+                convo_path=contributor_root,
+                team=team,
+                registry=registry,
+                extract_mode=extract_mode,
+            )
         except (OSError, ValueError):
             continue
 
-        if not content or len(content.strip()) < MIN_CHUNK_SIZE:
+        if analysis is None:
             continue
 
-        chunks = _extract_chunks(content, extract_mode)
-
-        if not chunks:
-            continue
-
-        # Detect room from content (general mode uses memory_type instead)
-        if extract_mode != "general":
-            room = detect_convo_room(content)
-        else:
-            room = None  # set per-chunk below
-
-        contributor = detect_contributor(filepath, convo_path, team=team, registry=registry)
+        chunks = analysis["chunks"]
+        room = analysis["room"]
+        contributor = analysis["contributor"]
+        origin = analysis["origin"]
 
         if dry_run:
-            if extract_mode == "general":
-                from collections import Counter
-
-                type_counts = Counter(c.get("memory_type", "general") for c in chunks)
-                types_str = ", ".join(f"{t}:{n}" for t, n in type_counts.most_common())
-                print(f"    [DRY RUN] {filepath.name} → {len(chunks)} memories ({types_str})")
-            else:
-                print(f"    [DRY RUN] {filepath.name} → room:{room} ({len(chunks)} drawers)")
-            total_drawers += len(chunks)
-            # Track room counts
-            if extract_mode == "general":
-                for c in chunks:
-                    room_counts[c.get("memory_type", "general")] += 1
-            else:
-                room_counts[room] += 1
+            total_drawers += _record_dry_run(filepath, analysis, extract_mode, room_counts)
             continue
+
+        write_origin_manifest(palace_path, origin)
 
         if extract_mode != "general":
             room_counts[room] += 1
@@ -428,6 +510,8 @@ def mine_convos(
                             "filed_at": datetime.now().isoformat(),
                             "ingest_mode": "convos",
                             "extract_mode": extract_mode,
+                            **({"source_mtime": source_mtime} if source_mtime is not None else {}),
+                            **origin_metadata(origin),
                             **({"contributor": contributor} if contributor else {}),
                         }
                     ],

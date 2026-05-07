@@ -62,6 +62,7 @@ swampcastle seek "auth migration"
 swampcastle seek "billing retry policy" --wing myapp --room billing
 swampcastle seek "auth migration" --contributor dekoza
 swampcastle seek "auth migration clerk" --hybrid --explain
+swampcastle seek "auth migration clerk" --hybrid --write-trace
 ```
 
 ### 4. Inspect the current shape
@@ -70,11 +71,14 @@ swampcastle seek "auth migration clerk" --hybrid --explain
 swampcastle survey
 swampcastle brief --wing myapp
 swampcastle curation check
+swampcastle derived rebuild
 ```
 
 Use `brief` when you want a human-readable wing summary. Use `herald` when you want the strict memory-use protocol itself.
 
 Use `curation check` when you want to validate and inspect the local audit-overlay curation files.
+
+Use `derived rebuild` when you want to regenerate the local catalog-card files from the stored drawers.
 
 ## Conversation ingest
 

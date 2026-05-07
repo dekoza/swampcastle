@@ -132,6 +132,8 @@ Current shipped paths include:
 - `.swampcastle/curation/aliases.yaml` — local alias / persona / wing-hint overrides
 - `.swampcastle/curation/tunnels.yaml` — local tunnel allow / deny / boost rules
 - `.swampcastle/curation/wings/<wing>.md` — local per-wing notes
+- `.swampcastle/derived/catalog/<wing>.jsonl` — rebuildable derived catalog cards
+- `.swampcastle/derived/traces/<trace-id>.json` — optional saved search traces
 
 Important caveat:
 - origin manifests are an audit surface

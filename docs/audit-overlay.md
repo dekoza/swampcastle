@@ -13,11 +13,15 @@ Current shipped scope:
 - hook-driven transcript auto-ingest
 - explainable search output
 - human-editable local curation files for aliases, tunnel policy, and wing notes
-- a read-only CLI inspection entry point: `swampcastle curation check`
+- rebuildable derived catalog cards under `<castle_path>/.swampcastle/derived/catalog/`
+- optional saved search traces under `<castle_path>/.swampcastle/derived/traces/`
+- read-only CLI inspection / rebuild entry points:
+  - `swampcastle curation check`
+  - `swampcastle derived rebuild`
 
 Not shipped yet:
-- rebuildable derived catalogs or trace files beyond inline search explanation
 - sync of overlay sidecars across devices
+- MCP read surfaces for curation / derived artifact inspection
 
 ## 1. Source-origin manifests
 
@@ -238,7 +242,61 @@ swampcastle curation check --wing swampcastle
 This command validates the local curation files and prints a compact summary.
 Malformed YAML or malformed wing-note structure fails clearly instead of being ignored.
 
-## 8. Canonical vs overlay data
+## 8. Derived artifacts
+
+Derived artifacts live under:
+
+```text
+<castle_path>/.swampcastle/derived/
+```
+
+Current shipped paths:
+- `catalog/<wing>.jsonl`
+- `traces/<trace-id>.json`
+
+### Catalog cards
+
+Catalog cards are rebuildable JSONL records grouped per wing.
+Each card currently contains:
+- `wing`
+- `room`
+- `topic`
+- `entities`
+- `drawer_ids`
+- `source_files`
+
+Use:
+
+```bash
+swampcastle derived rebuild
+swampcastle derived rebuild --wing swampcastle
+```
+
+Current behavior:
+- rebuilds one catalog file per wing
+- removes stale catalog files on full rebuild
+- keeps card ordering stable across drawer reorderings
+- does **not** currently change live search ranking by itself
+
+### Search traces
+
+You can persist a local search trace from the CLI with:
+
+```bash
+swampcastle seek "auth migration clerk" --hybrid --write-trace
+```
+
+`--write-trace` implies explain-mode data in the saved trace even if you did not also ask the CLI to print explanation lines inline.
+
+Current trace payload includes:
+- `request`
+- `response`
+- `trace_id`
+- `created_at`
+
+These traces are for debugging and benchmarking snapshots. They are not canonical memory.
+
+## 9. Canonical vs overlay data
 
 This distinction matters.
 
@@ -256,7 +314,7 @@ This distinction matters.
 If you delete the origin sidecar directory, you lose an audit surface, not the verbatim memory itself.
 The stored drawers remain the evidence source of truth.
 
-## 9. Sync caveat
+## 10. Sync caveat
 
 Current sync is still collection-centered.
 
@@ -266,12 +324,12 @@ That means:
 
 If two machines need the same sidecar manifests, rebuild them locally from the synced drawer metadata or re-run ingest on that machine.
 
-## 10. Future overlay work
+## 11. Future overlay work
 
 Planned but not yet shipped:
-- rebuildable derived catalog cards / trace files
 - explicit overlay sync semantics
 - MCP read surfaces for curation and overlay inspection
 - richer curation influence over retrieval beyond current origin / tunnel hooks
+- transcript sweeper / message-level incremental capture if full-file refresh proves insufficient
 
-This document describes the currently shipped Wave 1 + Wave 2 behavior only.
+This document describes the currently shipped Wave 1 + Wave 2 + Wave 3 behavior.

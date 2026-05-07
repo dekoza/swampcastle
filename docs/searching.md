@@ -23,9 +23,10 @@ swampcastle seek "recent auth work" --contributor dekoza
 swampcastle seek "postgres" --results 10
 swampcastle seek "auth migration clerk" --lexical-rerank --explain
 swampcastle seek "auth migration clerk" --hybrid --explain
+swampcastle seek "auth migration clerk" --hybrid --write-trace
 ```
 
-The CLI prints verbatim text plus wing / room / similarity, and includes contributor when present. When `--explain` is set, it also prints explanation metadata for each hit.
+The CLI prints verbatim text plus wing / room / similarity, and includes contributor when present. When `--explain` is set, it also prints explanation metadata for each hit. `--write-trace` saves the full request/response pair as a local JSON trace.
 
 ## Python API
 
@@ -106,6 +107,22 @@ Current explanation fields may include:
 - `origin_id`
 - `source_kind`
 - `source_platform`
+
+## Derived catalog cards and traces
+
+You can rebuild local derived catalog cards with:
+
+```bash
+swampcastle derived rebuild
+```
+
+You can save a local search trace with:
+
+```bash
+swampcastle seek "auth migration clerk" --hybrid --write-trace
+```
+
+Current trace payload stores the final search request and response. It is intended for debugging and benchmark snapshots, not as canonical memory.
 
 ## Sanitization
 

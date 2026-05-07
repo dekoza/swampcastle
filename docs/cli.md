@@ -92,9 +92,9 @@ Semantic search.
 
 ```bash
 swampcastle seek <query> [--wing NAME] [--room NAME] [--contributor NAME] [--results N] \
-  [--lexical-rerank] [--hybrid] [--explain]
+  [--lexical-rerank] [--hybrid] [--explain] [--write-trace]
 swampcastle search <query> [--wing NAME] [--room NAME] [--contributor NAME] [--results N] \
-  [--lexical-rerank] [--hybrid] [--explain]
+  [--lexical-rerank] [--hybrid] [--explain] [--write-trace]
 ```
 
 `--lexical-rerank` widens dense retrieval and reranks the dense candidates lexically.
@@ -102,6 +102,9 @@ swampcastle search <query> [--wing NAME] [--room NAME] [--contributor NAME] [--r
 `--hybrid` combines dense candidates with a backend-agnostic lexical scan before reranking.
 
 `--explain` prints per-hit explanation metadata such as retrieval mode, lexical score, boosts, and origin metadata when available.
+
+`--write-trace` saves a local JSON trace under `<castle_path>/.swampcastle/derived/traces/`.
+It implies explain-mode data in the saved trace even if you do not also print explanation lines inline.
 
 ## survey / status
 
@@ -129,6 +132,22 @@ This validates and summarizes:
 
 If `--wing` is provided, the command focuses on that wing note when present.
 Malformed YAML or malformed wing-note structure fails clearly with an error.
+
+## derived rebuild
+
+Rebuild local derived catalog cards from stored drawers.
+
+```bash
+swampcastle derived rebuild [--wing NAME]
+```
+
+This writes JSONL catalog files under:
+
+```text
+<castle_path>/.swampcastle/derived/catalog/
+```
+
+If `--wing` is provided, only that wing's catalog file is rebuilt.
 
 ## drawbridge / mcp
 

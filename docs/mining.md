@@ -7,6 +7,8 @@ SwampCastle ingests two kinds of material:
 
 In both cases the output is verbatim drawer content stored through the active `CollectionStore` backend.
 
+Internally, both ingest paths now route through adapter objects under `swampcastle/mining/adapters/`. That seam is internal only for now; the public entry points remain `gather` / `mine`.
+
 ## Project files
 
 ```bash
@@ -194,6 +196,20 @@ python -m swampcastle.dedup --threshold 0.10
 ```
 
 There is no dedicated top-level `swampcastle dedup` CLI subcommand yet.
+
+## Internal adapter seam
+
+Current internal adapters:
+- `ProjectFilesAdapter`
+- `ConversationExportsAdapter`
+
+Current declared transformations:
+- project files: none declared (`()`)
+- conversation exports: `jsonl_normalize`, `json_normalize`
+
+That distinction is deliberate. Project-file ingest is the baseline verbatim path. Conversation ingest normalizes several export shapes into a shared transcript form before chunking.
+
+This is not yet a public adapter/plugin API. See [Mining adapters](mining-adapters.md).
 
 ## Backend behavior
 

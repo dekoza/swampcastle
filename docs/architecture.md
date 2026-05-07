@@ -45,6 +45,23 @@ Two abstract contracts define the storage boundary:
 - `CollectionStore` — document + vector storage
 - `GraphStore` — entity / relationship storage
 
+### Internal source adapters
+
+SwampCastle now also has a small **read-side ingest seam** under `swampcastle/mining/adapters/`.
+
+Current internal adapters:
+- `ProjectFilesAdapter`
+- `ConversationExportsAdapter`
+
+They are internal only. They are not yet a public plugin contract.
+
+Their job is narrower:
+- unify source discovery for project and conversation ingest
+- make declared ingest transformations visible in code
+- give future source types one obvious internal landing zone
+
+See [Mining adapters](mining-adapters.md).
+
 Factory implementations:
 
 | Factory | Collection | Graph | Typical use |

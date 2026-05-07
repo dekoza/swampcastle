@@ -245,6 +245,7 @@ The docs call that out explicitly where relevant instead of pretending those flo
 | [CLI reference](docs/cli.md) | Real command surface and aliases |
 | [Configuration](docs/configuration.md) | `CastleSettings`, env vars, backend selection |
 | [Mining](docs/mining.md) | Project + conversation ingest |
+| [Mining adapters](docs/mining-adapters.md) | Internal ingest adapter seam and declared transformations |
 | [Searching](docs/searching.md) | CLI and Python search flows |
 | [Audit overlay](docs/audit-overlay.md) | Source-origin manifests, local curation files, derived catalogs/traces, transcript auto-ingest, explainable search |
 | [Knowledge graph](docs/kg.md) | Graph service and direct stores |

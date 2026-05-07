@@ -12,6 +12,18 @@ Today that means:
 
 ChromaDB is still not a supported runtime sync backend.
 
+## What sync does **not** currently operate on
+
+Overlay sidecar files are still local-only today.
+That includes:
+- origin manifests under `<castle_path>/.swampcastle/origin/`
+- curation files under `<castle_path>/.swampcastle/curation/`
+- derived catalog cards and traces under `<castle_path>/.swampcastle/derived/`
+
+Important nuance:
+- query-relevant origin fields copied into drawer metadata **do** sync because they ride on canonical drawer records
+- the sidecar files themselves do **not** sync as first-class objects
+
 ## Data carried with each record
 
 Each synced record carries:
@@ -157,3 +169,6 @@ the drawer collection is transferred between nodes.
 ## Notes on backend routing
 
 The sync server now routes through `factory_from_settings()` instead of hardcoding LanceDB. That keeps sync aligned with the same backend configuration used by Castle, MCP, and the main CLI.
+
+For a design note on future overlay-sidecar sync semantics, see:
+- `docs/reviews/overlay_sync_semantics.md`

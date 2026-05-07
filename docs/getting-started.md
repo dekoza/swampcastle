@@ -69,9 +69,12 @@ swampcastle seek "auth migration clerk" --hybrid --explain
 ```bash
 swampcastle survey
 swampcastle brief --wing myapp
+swampcastle curation check
 ```
 
 Use `brief` when you want a human-readable wing summary. Use `herald` when you want the strict memory-use protocol itself.
+
+Use `curation check` when you want to validate and inspect the local audit-overlay curation files.
 
 ## Conversation ingest
 
@@ -91,6 +94,8 @@ Conversation ingest now also writes a source-origin manifest under:
 ```
 
 and copies the key origin fields into drawer metadata for search / sync use.
+
+If you omit `--wing`, local curation `wing_hints` from `aliases.yaml` can override the default inferred wing.
 
 If you want broader extraction instead of exchange-pair chunking:
 

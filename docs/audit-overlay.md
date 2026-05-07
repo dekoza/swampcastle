@@ -12,9 +12,10 @@ Current shipped scope:
 - source-origin manifests for conversation ingest
 - hook-driven transcript auto-ingest
 - explainable search output
+- human-editable local curation files for aliases, tunnel policy, and wing notes
+- a read-only CLI inspection entry point: `swampcastle curation check`
 
 Not shipped yet:
-- human-editable alias / tunnel / wing-note curation files
 - rebuildable derived catalogs or trace files beyond inline search explanation
 - sync of overlay sidecars across devices
 
@@ -120,7 +121,124 @@ When `explain=true`, search hits may include:
 
 The CLI prints those explanation fields only when `--explain` is requested.
 
-## 6. Canonical vs overlay data
+## 6. Local curation files
+
+The audit overlay now includes human-editable curation files under:
+
+```text
+<castle_path>/.swampcastle/curation/
+```
+
+Current files:
+- `aliases.yaml`
+- `tunnels.yaml`
+- `wings/<wing>.md`
+
+### `aliases.yaml`
+
+Current supported sections:
+- `personas`
+- `people`
+- `projects`
+- `wing_hints`
+
+Example:
+
+```yaml
+personas:
+  Aurora:
+    canonical: Echo
+
+people:
+  dek:
+    canonical: Dominik
+
+projects:
+  swamp:
+    canonical: swampcastle
+
+wing_hints:
+  claude-session: swampcastle
+```
+
+Current shipped behavior:
+- persona aliases can override heuristic `agent_personas` detection in source-origin manifests
+- `wing_hints` can override the default wing chosen by conversation ingest when `--wing` is omitted
+
+### `tunnels.yaml`
+
+Current supported sections:
+- `allow`
+- `deny`
+- `boost`
+
+Example:
+
+```yaml
+allow:
+  - wing_a: swampcastle
+    wing_b: cognitive_ai
+    room: embeddings
+
+deny:
+  - wing_a: swampcastle
+    wing_b: general
+    room: python
+
+boost:
+  - wing_a: swampcastle
+    wing_b: cognitive_ai
+    room: sync
+    weight: 0.15
+```
+
+Current shipped behavior:
+- denied tunnel pairs are hidden from `find_tunnels()`
+- allowed tunnel pairs can appear even when the raw overlap graph would not infer them
+- boost rules are attached as ordering hints for tunnel listings
+
+### `wings/<wing>.md`
+
+Wing notes are small local curation documents.
+
+Required sections:
+- `Pinned context`
+- `Open threads`
+- `Stale assumptions`
+
+Example:
+
+```md
+# swampcastle
+
+## Pinned context
+- v4 uses Castle + services.
+
+## Open threads
+- refine tunnel policy.
+
+## Stale assumptions
+- files alone are enough.
+```
+
+Wing notes are currently:
+- validated by the loader
+- discoverable through `swampcastle curation check`
+- **not** used for ranking or automatic retrieval
+
+## 7. Inspecting local curation
+
+Use:
+
+```bash
+swampcastle curation check
+swampcastle curation check --wing swampcastle
+```
+
+This command validates the local curation files and prints a compact summary.
+Malformed YAML or malformed wing-note structure fails clearly instead of being ignored.
+
+## 8. Canonical vs overlay data
 
 This distinction matters.
 
@@ -131,13 +249,14 @@ This distinction matters.
 
 ### Overlay / audit
 - source-origin manifest sidecars
+- local curation files (`aliases.yaml`, `tunnels.yaml`, wing notes)
 - inline explanation metadata derived at query time
 - hook log files
 
 If you delete the origin sidecar directory, you lose an audit surface, not the verbatim memory itself.
 The stored drawers remain the evidence source of truth.
 
-## 7. Sync caveat
+## 9. Sync caveat
 
 Current sync is still collection-centered.
 
@@ -147,13 +266,12 @@ That means:
 
 If two machines need the same sidecar manifests, rebuild them locally from the synced drawer metadata or re-run ingest on that machine.
 
-## 8. Future overlay work
+## 10. Future overlay work
 
 Planned but not yet shipped:
-- human-editable `aliases.yaml`
-- human-editable `tunnels.yaml`
-- per-wing curated notes
-- derived catalog cards / trace files
+- rebuildable derived catalog cards / trace files
 - explicit overlay sync semantics
+- MCP read surfaces for curation and overlay inspection
+- richer curation influence over retrieval beyond current origin / tunnel hooks
 
-Until those exist, this document only describes the currently shipped Wave 1 behavior.
+This document describes the currently shipped Wave 1 + Wave 2 behavior only.

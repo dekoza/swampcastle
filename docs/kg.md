@@ -36,6 +36,8 @@ with Castle(settings, factory) as castle:
 - `find_tunnels(wing_a=None, wing_b=None)`
 - `graph_stats()`
 
+`find_tunnels()` now honors local tunnel curation rules from `<castle_path>/.swampcastle/curation/tunnels.yaml` when that file exists.
+
 ## Direct low-level stores
 
 ### SQLiteGraph
@@ -134,6 +136,21 @@ normal KG queries.
 - **InMemoryGraphStore:** candidate proposal storage implemented
 - **PostgresGraphStore:** candidate proposal storage not implemented yet
   (raises `NotImplementedError` for the MVP)
+
+## Tunnel curation
+
+Local tunnel policy lives under:
+
+```text
+<castle_path>/.swampcastle/curation/tunnels.yaml
+```
+
+Current behavior:
+- `deny` suppresses matching wing-pair / room tunnels from `find_tunnels()`
+- `allow` can add a synthetic tunnel entry even when the raw overlap graph would not infer it
+- `boost` adds a local ordering hint to tunnel listings
+
+This policy is local-only for now. It does not currently create first-class synced objects.
 
 ## MCP tools
 

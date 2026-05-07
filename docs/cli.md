@@ -114,6 +114,22 @@ swampcastle status
 
 Prints total drawers plus per-wing and per-room counts.
 
+## curation check
+
+Inspect local audit-overlay curation files.
+
+```bash
+swampcastle curation check [--wing NAME]
+```
+
+This validates and summarizes:
+- `aliases.yaml`
+- `tunnels.yaml`
+- `wings/<wing>.md`
+
+If `--wing` is provided, the command focuses on that wing note when present.
+Malformed YAML or malformed wing-note structure fails clearly with an error.
+
 ## drawbridge / mcp
 
 MCP entry point.

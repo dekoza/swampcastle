@@ -81,6 +81,7 @@ SwampCastle now has a small audit overlay on top of the canonical storage model.
 
 Current shipped overlay pieces are:
 - source-origin manifests under `<castle_path>/.swampcastle/origin/`
+- local curation files under `<castle_path>/.swampcastle/curation/`
 - hook logs under `~/.swampcastle/hook_state/`
 - explainable search metadata returned inline when callers request `explain=true`
 

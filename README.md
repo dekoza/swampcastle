@@ -246,7 +246,7 @@ The docs call that out explicitly where relevant instead of pretending those flo
 | [Configuration](docs/configuration.md) | `CastleSettings`, env vars, backend selection |
 | [Mining](docs/mining.md) | Project + conversation ingest |
 | [Searching](docs/searching.md) | CLI and Python search flows |
-| [Audit overlay](docs/audit-overlay.md) | Source-origin manifests, transcript auto-ingest, explainable search |
+| [Audit overlay](docs/audit-overlay.md) | Source-origin manifests, local curation files, transcript auto-ingest, explainable search |
 | [Knowledge graph](docs/kg.md) | Graph service and direct stores |
 | [MCP server](docs/mcp.md) | Setup and tool catalog |
 | [Sync](docs/sync.md) | Hub / spoke sync model |

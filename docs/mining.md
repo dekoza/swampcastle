@@ -124,6 +124,7 @@ For each ingested conversation source, SwampCastle now also:
 - writes `source_mtime` into drawer metadata
 - writes source-origin metadata into drawer metadata (`origin_id`, `source_kind`, `source_platform`, `origin_confidence`)
 - persists a source-origin manifest under `<castle_path>/.swampcastle/origin/`
+- applies local persona alias overrides from `<castle_path>/.swampcastle/curation/aliases.yaml` when present
 
 ## Project setup
 
@@ -136,6 +137,27 @@ swampcastle project ~/projects/myapp --team dekoza sarah
 That command helps you inspect and save the inferred structure before you ingest anything. New setups use `.swampcastle.yaml`; if a legacy `swampcastle.yaml` exists, SwampCastle migrates it automatically.
 
 The optional `team` list is shared project metadata. During ingest, SwampCastle checks git history for each file, matches the author against the configured team, and stores the matched identifier in drawer metadata as `contributor`.
+
+### Wing hints for conversation ingest
+
+If you omit `--wing`, SwampCastle normally derives the wing from the source path.
+
+You can override that locally with:
+
+```text
+<castle_path>/.swampcastle/curation/aliases.yaml
+```
+
+using the `wing_hints` mapping.
+
+Example:
+
+```yaml
+wing_hints:
+  claude-session: swampcastle
+```
+
+The longest matching hint wins.
 
 ### Re-ingesting growing transcripts
 

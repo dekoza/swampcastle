@@ -1,6 +1,6 @@
 # MCP server
 
-SwampCastle exposes 19 tools over JSON-RPC stdin/stdout.
+SwampCastle exposes 25 tools over JSON-RPC stdin/stdout.
 
 Raw MCP discovery now advertises short tool names such as `status`, `search`, and `kg_query`.
 Many MCP clients add their own server namespace on top, so you may still see rendered names
@@ -61,6 +61,11 @@ At startup the server:
 - `get_taxonomy`
 - `get_aaak_spec`
 
+### Audit overlay reads
+- `get_origin`
+- `get_curation`
+- `list_catalog_cards`
+
 ### Search
 - `search`
 - `check_duplicate`
@@ -86,6 +91,41 @@ At startup the server:
 - `diary_read`
 
 ## Important request shapes
+
+### get origin
+
+`get_origin` uses the `OriginLookupQuery` model:
+
+| Field | Type | Required |
+|---|---|---|
+| `origin_id` | string | exactly one of `origin_id` / `source_file` |
+| `source_file` | string | exactly one of `origin_id` / `source_file` |
+
+It returns the stored source-origin manifest when found.
+
+### get curation
+
+`get_curation` uses the `CurationQuery` model:
+
+| Field | Type | Required |
+|---|---|---|
+| `wing` | string | no |
+
+It returns local curation data:
+- aliases
+- tunnel policy
+- available wing notes
+- the requested wing note when `wing` is supplied and present
+
+### list catalog cards
+
+`list_catalog_cards` uses the `CatalogCardsQuery` model:
+
+| Field | Type | Required |
+|---|---|---|
+| `wing` | string | yes |
+
+It returns the rebuildable derived catalog cards currently stored for that wing.
 
 ### search
 

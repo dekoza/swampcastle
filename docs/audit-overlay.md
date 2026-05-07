@@ -18,10 +18,13 @@ Current shipped scope:
 - read-only CLI inspection / rebuild entry points:
   - `swampcastle curation check`
   - `swampcastle derived rebuild`
+- read-only MCP audit tools:
+  - `get_origin`
+  - `get_curation`
+  - `list_catalog_cards`
 
 Not shipped yet:
 - sync of overlay sidecars across devices
-- MCP read surfaces for curation / derived artifact inspection
 
 ## 1. Source-origin manifests
 
@@ -242,6 +245,8 @@ swampcastle curation check --wing swampcastle
 This command validates the local curation files and prints a compact summary.
 Malformed YAML or malformed wing-note structure fails clearly instead of being ignored.
 
+The same local state is also readable through MCP via `get_curation`.
+
 ## 8. Derived artifacts
 
 Derived artifacts live under:
@@ -295,6 +300,8 @@ Current trace payload includes:
 - `created_at`
 
 These traces are for debugging and benchmarking snapshots. They are not canonical memory.
+
+Current MCP support for derived artifacts is limited to catalog-card inspection via `list_catalog_cards`. Search traces remain a local CLI/debug surface for now.
 
 ## 9. Canonical vs overlay data
 

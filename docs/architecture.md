@@ -34,6 +34,7 @@ with Castle(settings, factory) as castle:
 | Service | Responsibility | Dependencies |
 |---|---|---|
 | `CatalogService` | Status, wings, rooms, taxonomy, AAAK spec | `CollectionStore` |
+| `AuditService` | Read-only origin / curation / derived artifact inspection | `CollectionStore` |
 | `SearchService` | Semantic search and duplicate detection | `CollectionStore` |
 | `VaultService` | Drawer writes, deletes, diary writes | `CollectionStore`, `WalWriter` |
 | `GraphService` | Knowledge-graph ops and castle graph traversal | `GraphStore`, `CollectionStore`, `WalWriter` |
@@ -102,6 +103,7 @@ Current shipped overlay pieces are:
 - derived catalog cards / search traces under `<castle_path>/.swampcastle/derived/`
 - hook logs under `~/.swampcastle/hook_state/`
 - explainable search metadata returned inline when callers request `explain=true`
+- read-only MCP inspection tools for origin / curation / derived catalog data
 
 Important constraint:
 - drawers and accepted KG facts are still canonical

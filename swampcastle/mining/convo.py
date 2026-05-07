@@ -17,6 +17,7 @@ from collections import defaultdict
 
 from ..audit.curation import resolve_wing_hint
 from ..audit.origin import detect_source_origin, origin_metadata, write_origin_manifest
+from .adapters import ConversationExportsAdapter
 from .normalize import normalize
 from .contributor import detect_contributor
 from .kg_extract import persist_kg_proposals_for_wing
@@ -361,9 +362,10 @@ def _analyze_convo_file(
     }
 
 
-def _record_dry_run(filepath: Path, analysis: dict, extract_mode: str, room_counts: dict) -> int:
-    chunks = analysis["chunks"]
-    room = analysis["room"]
+def _record_dry_run(result, extract_mode: str, room_counts: dict) -> int:
+    filepath = result.filepath
+    chunks = result.chunks
+    room = result.room
 
     if extract_mode == "general":
         from collections import Counter
@@ -424,9 +426,9 @@ def mine_convos(
         if not wing:
             wing = wing_root.name.lower().replace(" ", "_").replace("-", "_")
 
-    files = scan_convos(convo_dir)
-    if limit > 0:
-        files = files[:limit]
+    adapter = ConversationExportsAdapter(convo_path)
+    items = adapter.scan(limit=limit)
+    files = [item.path for item in items]
 
     print(f"\n{'=' * 55}")
     print("  SwampCastle Mine — Conversations")
@@ -453,9 +455,9 @@ def mine_convos(
     files_skipped = 0
     room_counts = defaultdict(int)
 
-    for i, filepath in enumerate(files, 1):
+    for i, item in enumerate(items, 1):
+        filepath = item.path
         source_file = str(filepath)
-        source_mtime = _source_mtime(source_file)
 
         # Skip if already filed
         if not dry_run:
@@ -466,8 +468,8 @@ def mine_convos(
                 _purge_source_file(collection, source_file)
 
         try:
-            analysis = _analyze_convo_file(
-                filepath,
+            result = adapter.ingest(
+                item,
                 palace_path=palace_path,
                 convo_path=contributor_root,
                 team=team,
@@ -477,16 +479,17 @@ def mine_convos(
         except (OSError, ValueError):
             continue
 
-        if analysis is None:
+        if result is None:
             continue
 
-        chunks = analysis["chunks"]
-        room = analysis["room"]
-        contributor = analysis["contributor"]
-        origin = analysis["origin"]
+        chunks = result.chunks
+        room = result.room
+        contributor = result.contributor
+        origin = result.origin
+        source_mtime = result.source_mtime
 
         if dry_run:
-            total_drawers += _record_dry_run(filepath, analysis, extract_mode, room_counts)
+            total_drawers += _record_dry_run(result, extract_mode, room_counts)
             continue
 
         write_origin_manifest(palace_path, origin)

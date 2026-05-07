@@ -26,6 +26,7 @@ from ..project_config import PROJECT_CONFIG_NAME, resolve_project_config
 from ..settings import CastleSettings
 from ..storage import StorageFactory, factory_from_settings
 from ..tuning import suggest_onnx_tuning
+from .adapters import ProjectFilesAdapter
 from .contributor import detect_contributor
 from .kg_extract import persist_kg_proposals_for_wing
 from .skeleton import get_skeleton_extractor
@@ -1121,14 +1122,14 @@ def mine(  # noqa: C901
         except Exception:
             pass
 
-    files = scan_project(
-        project_dir,
+    adapter = ProjectFilesAdapter(
+        project_path,
         respect_gitignore=respect_gitignore,
         include_ignored=include_ignored,
         only_force_included=only_force_included,
     )
-    if limit > 0:
-        files = files[:limit]
+    items = adapter.scan(limit=limit)
+    files = [item.path for item in items]
 
     print(f"\n{'=' * 55}")
     print("  SwampCastle Mine")
@@ -1182,10 +1183,10 @@ def mine(  # noqa: C901
 
     if max_workers is None:
         # Sequential path — original behaviour, unchanged
-        for i, filepath in enumerate(files, 1):
-            drawers, room = process_file(
-                filepath=filepath,
-                project_path=project_path,
+        for i, item in enumerate(items, 1):
+            filepath = item.path
+            result = adapter.ingest(
+                item,
                 collection=collection,
                 wing=wing,
                 rooms=rooms,
@@ -1198,6 +1199,8 @@ def mine(  # noqa: C901
                 force_no_skeleton=force_no_skeleton,
                 _force_remine=_force_remine,
             )
+            drawers = result.drawers
+            room = result.room
             if drawers == 0:
                 if not dry_run:
                     files_skipped += 1

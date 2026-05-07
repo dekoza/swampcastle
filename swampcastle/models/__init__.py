@@ -1,5 +1,13 @@
 """SwampCastle Pydantic I/O models."""
 
+from .audit import (
+    CatalogCardsQuery,
+    CatalogCardsResponse,
+    CurationQuery,
+    CurationResponse,
+    OriginLookupQuery,
+    OriginLookupResponse,
+)
 from .catalog import (
     RoomsResponse,
     StatusResponse,
@@ -44,7 +52,11 @@ from .sync import ChangeSet, MergeResult, SyncRecord, SyncStatus, VersionVector
 __all__ = [
     "AddDrawerCommand",
     "AddTripleCommand",
+    "CatalogCardsQuery",
+    "CatalogCardsResponse",
     "ChangeSet",
+    "CurationQuery",
+    "CurationResponse",
     "DeleteDrawerCommand",
     "DeleteDrawerResult",
     "DiaryEntry",
@@ -66,6 +78,8 @@ __all__ = [
     "CandidateTripleFilter",
     "CatalogCard",
     "MergeResult",
+    "OriginLookupQuery",
+    "OriginLookupResponse",
     "RoomsResponse",
     "SourceOrigin",
     "SearchHit",

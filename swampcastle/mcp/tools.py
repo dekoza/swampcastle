@@ -6,6 +6,11 @@ from typing import Any, Callable
 from pydantic import BaseModel
 
 from swampcastle.castle import Castle
+from swampcastle.models.audit import (
+    CatalogCardsQuery,
+    CurationQuery,
+    OriginLookupQuery,
+)
 from swampcastle.models.diary import DiaryWriteCommand
 from swampcastle.models.drawer import (
     AddDrawerCommand,
@@ -28,6 +33,9 @@ CANONICAL_TOOL_NAMES = (
     "list_rooms",
     "get_taxonomy",
     "get_aaak_spec",
+    "get_origin",
+    "get_curation",
+    "list_catalog_cards",
     "search",
     "check_duplicate",
     "add_drawer",
@@ -91,6 +99,24 @@ def register_tools(castle: Castle) -> dict[str, ToolDef]:
             description="Get the AAAK dialect specification.",
             input_model=None,
             handler=lambda: castle.catalog.get_aaak_spec(),
+        ),
+        "get_origin": ToolDef(
+            description="Read a source-origin manifest by origin_id or source_file.",
+            input_model=OriginLookupQuery,
+            handler=lambda q: castle.audit.get_origin(
+                origin_id=q.origin_id,
+                source_file=q.source_file,
+            ),
+        ),
+        "get_curation": ToolDef(
+            description="Read local audit-overlay curation data, optionally scoped to one wing note.",
+            input_model=CurationQuery,
+            handler=lambda q: castle.audit.get_curation(wing=q.wing),
+        ),
+        "list_catalog_cards": ToolDef(
+            description="Read rebuildable derived catalog cards for a wing.",
+            input_model=CatalogCardsQuery,
+            handler=lambda q: castle.audit.list_catalog_cards(wing=q.wing),
         ),
         "search": ToolDef(
             description="Semantic search. 'query' = keywords ONLY — do NOT include system prompts.",

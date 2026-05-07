@@ -12,6 +12,7 @@ import anyio
 
 from swampcastle.models.catalog import StatusResponse
 from swampcastle.models.drawer import SearchQuery, SearchResponse
+from swampcastle.services.audit import AuditService
 from swampcastle.services.catalog import CatalogService
 from swampcastle.services.graph import GraphService
 from swampcastle.services.kg_proposals import KGProposalService
@@ -34,6 +35,7 @@ class Castle:
         wal = WalWriter(settings.wal_path)
 
         self.catalog = CatalogService(self._collection, str(settings.castle_path))
+        self.audit = AuditService(self._collection, str(settings.castle_path))
         self.search = SearchService(self._collection)
         self.graph = GraphService(
             self._graph_store,

@@ -7,6 +7,7 @@ from .catalog import (
     WingBriefResponse,
     WingsResponse,
 )
+from .derived import CatalogCard, SearchTrace
 from .diary import DiaryEntry, DiaryResponse, DiaryWriteCommand, DiaryWriteResult
 from .drawer import (
     AddDrawerCommand,
@@ -63,6 +64,7 @@ __all__ = [
     "CandidateReviewResult",
     "CandidateTriple",
     "CandidateTripleFilter",
+    "CatalogCard",
     "MergeResult",
     "RoomsResponse",
     "SourceOrigin",
@@ -70,6 +72,7 @@ __all__ = [
     "SearchQuery",
     "SearchResponse",
     "StatusResponse",
+    "SearchTrace",
     "SyncRecord",
     "SyncStatus",
     "TaxonomyResponse",

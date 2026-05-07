@@ -1175,6 +1175,83 @@ def test_cmd_curation_check_reports_clear_error_for_bad_alias_file(tmp_path, cap
     assert "Error" in out
 
 
+def test_cmd_derived_rebuild_writes_catalog_and_reports_counts(tmp_path, capsys):
+    from swampcastle.storage.memory import InMemoryStorageFactory
+
+    castle_path = tmp_path / "castle"
+    factory = InMemoryStorageFactory()
+    collection = factory.open_collection("swampcastle_chests")
+    collection.upsert(
+        documents=[
+            "Auth migration moved from Auth0 to Clerk.",
+            "Sync notes for laptop replication.",
+        ],
+        ids=["d1", "d2"],
+        metadatas=[
+            {"wing": "swampcastle", "room": "auth", "source_file": "/tmp/auth.md"},
+            {"wing": "swampcastle", "room": "sync", "source_file": "/tmp/sync.md"},
+        ],
+    )
+
+    with patch("swampcastle.cli.commands.factory_from_settings", return_value=factory):
+        commands.cmd_derived_rebuild(
+            SimpleNamespace(palace=str(castle_path), backend=None, wing=None)
+        )
+
+    out = capsys.readouterr().out
+    assert "SwampCastle Derived" in out
+    assert "Wings rebuilt: 1" in out
+    assert "Cards written: 2" in out
+    assert (castle_path / ".swampcastle" / "derived" / "catalog" / "swampcastle.jsonl").is_file()
+
+
+def test_cmd_seek_write_trace_persists_trace_file(tmp_path, capsys):
+    hit = SimpleNamespace(
+        wing="proj",
+        room="auth",
+        similarity=0.9,
+        text="hello world",
+        contributor=None,
+        matched_via="hybrid",
+        dense_similarity=0.89,
+        lexical_score=1.0,
+        boosts=["hybrid_candidate_merge", "lexical_rerank"],
+        origin_id="origin_123",
+        source_kind="conversation_export",
+        source_platform="claude-code",
+    )
+    result = SimpleNamespace(
+        query="hello",
+        results=[hit],
+        filters={"wing": None, "room": None, "contributor": None},
+        query_sanitized=False,
+        sanitizer=None,
+    )
+    args = SimpleNamespace(
+        query="hello",
+        wing=None,
+        room=None,
+        contributor=None,
+        results=5,
+        explain=False,
+        lexical_rerank=False,
+        hybrid=True,
+        write_trace=True,
+        palace=str(tmp_path / "castle"),
+        backend=None,
+    )
+
+    with patch("swampcastle.castle.Castle", lambda s, f: DummyCastle(s, f, search=result)):
+        with patch("swampcastle.cli.commands.factory_from_settings", return_value=object()):
+            commands.cmd_seek(args)
+
+    out = capsys.readouterr().out
+    assert "Trace:" in out
+    trace_dir = tmp_path / "castle" / ".swampcastle" / "derived" / "traces"
+    traces = list(trace_dir.glob("*.json"))
+    assert len(traces) == 1
+
+
 def test_cmd_deskeleton_pages_drawers_in_batches(capsys):
     class PaginatedVault:
         def __init__(self):

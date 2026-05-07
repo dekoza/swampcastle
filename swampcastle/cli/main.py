@@ -99,6 +99,7 @@ def main():
     p.add_argument("--lexical-rerank", action="store_true")
     p.add_argument("--hybrid", action="store_true")
     p.add_argument("--explain", action="store_true")
+    p.add_argument("--write-trace", action="store_true")
 
     p = sub.add_parser("survey", aliases=["status"], help="Survey the castle")
 
@@ -106,6 +107,12 @@ def main():
     p_cur = sub.add_parser("curation", help="Inspect local audit-overlay curation files")
     cur_sub = p_cur.add_subparsers(dest="curation_action")
     p = cur_sub.add_parser("check", help="Validate and summarize local curation files")
+    p.add_argument("--wing", default=None)
+
+    # derived
+    p_der = sub.add_parser("derived", help="Rebuild derived local audit artifacts")
+    der_sub = p_der.add_subparsers(dest="derived_action")
+    p = der_sub.add_parser("rebuild", help="Rebuild derived catalog cards from stored drawers")
     p.add_argument("--wing", default=None)
 
     # deskeleton
@@ -292,6 +299,15 @@ def main():
             return
         if action == "check":
             cmd.cmd_curation_check(args)
+        return
+
+    if args.command == "derived":
+        action = getattr(args, "derived_action", None)
+        if not action:
+            p_der.print_help()
+            return
+        if action == "rebuild":
+            cmd.cmd_derived_rebuild(args)
         return
 
     if args.command == "hook":

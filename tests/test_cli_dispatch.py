@@ -137,6 +137,19 @@ class TestGather:
                 mock.assert_called_once()
 
 
+class TestDerived:
+    def test_no_subcommand_shows_help(self, capsys):
+        with patch("sys.argv", ["swampcastle", "derived"]):
+            main()
+        assert "rebuild" in capsys.readouterr().out
+
+    def test_rebuild_dispatches(self):
+        with patch("sys.argv", ["swampcastle", "derived", "rebuild"]):
+            with patch("swampcastle.cli.commands.cmd_derived_rebuild") as mock:
+                main()
+                mock.assert_called_once()
+
+
 class TestWizard:
     def test_dispatches(self):
         with patch("sys.argv", ["swampcastle", "wizard"]):

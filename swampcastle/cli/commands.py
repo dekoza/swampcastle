@@ -107,6 +107,45 @@ def cmd_survey(args):
             _print_kv("Rooms", ", ".join(sorted(s.rooms.keys())))
 
 
+def cmd_curation_check(args):
+    from swampcastle.audit.curation import (
+        list_wing_notes,
+        load_alias_curation,
+        load_tunnel_curation,
+        load_wing_note,
+    )
+
+    settings = _settings(args)
+    castle_path = str(settings.castle_path)
+
+    try:
+        aliases = load_alias_curation(castle_path)
+        tunnels = load_tunnel_curation(castle_path)
+        note = load_wing_note(castle_path, args.wing) if getattr(args, "wing", None) else None
+        notes = [note] if note is not None else list_wing_notes(castle_path)
+    except ValueError as exc:
+        print(f"  Error: {exc}")
+        raise SystemExit(2) from exc
+
+    _print_section("Curation")
+    _print_kv("Castle", castle_path)
+    _print_kv("Persona aliases", len(aliases.personas))
+    _print_kv("People aliases", len(aliases.people))
+    _print_kv("Project aliases", len(aliases.projects))
+    _print_kv("Wing hints", len(aliases.wing_hints))
+    _print_kv("Allowed tunnels", len(tunnels.allow))
+    _print_kv("Denied tunnels", len(tunnels.deny))
+    _print_kv("Boosted tunnels", len(tunnels.boost))
+
+    if not notes:
+        return
+
+    for wing_note in notes:
+        _print_kv("Wing note", wing_note.wing)
+        for section, entries in wing_note.sections.items():
+            _print_kv(section, len(entries))
+
+
 def cmd_seek(args):
     from swampcastle.castle import Castle
     from swampcastle.models import SearchQuery

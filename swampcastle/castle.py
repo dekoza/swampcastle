@@ -35,7 +35,12 @@ class Castle:
 
         self.catalog = CatalogService(self._collection, str(settings.castle_path))
         self.search = SearchService(self._collection)
-        self.graph = GraphService(self._graph_store, self._collection, wal)
+        self.graph = GraphService(
+            self._graph_store,
+            self._collection,
+            wal,
+            castle_path=str(settings.castle_path),
+        )
         self.vault = VaultService(
             self._collection,
             wal,

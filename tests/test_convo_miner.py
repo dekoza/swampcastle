@@ -164,8 +164,20 @@ def test_convo_mining_writes_origin_manifest_and_metadata(tmp_path):
     transcript.write_text(
         "\n".join(
             [
-                json.dumps({"type": "human", "message": {"content": "hello"}}),
-                json.dumps({"type": "assistant", "message": {"content": "hi"}}),
+                json.dumps(
+                    {
+                        "type": "human",
+                        "message": {"content": "hello, can you help with auth migration?"},
+                    }
+                ),
+                json.dumps(
+                    {
+                        "type": "assistant",
+                        "message": {
+                            "content": "Yes, let's keep working through the migration plan."
+                        },
+                    }
+                ),
                 json.dumps({"type": "human", "message": {"content": "why auth"}}),
                 json.dumps({"type": "assistant", "message": {"content": "because local testing"}}),
             ]
@@ -198,3 +210,47 @@ def test_convo_mining_writes_origin_manifest_and_metadata(tmp_path):
     assert payload["source_kind"] == "conversation_export"
     assert payload["platform"] == "claude-code"
     assert payload["declared_transformations"] == ["jsonl_normalize"]
+
+
+def test_convo_mining_uses_curation_wing_hint_when_wing_is_unspecified(tmp_path):
+    transcript = tmp_path / "exports" / "claude-session-001.jsonl"
+    transcript.parent.mkdir()
+    transcript.write_text(
+        "\n".join(
+            [
+                json.dumps(
+                    {
+                        "type": "human",
+                        "message": {"content": "hello, can you help with auth migration?"},
+                    }
+                ),
+                json.dumps(
+                    {
+                        "type": "assistant",
+                        "message": {
+                            "content": "Yes, let's keep working through the migration plan."
+                        },
+                    }
+                ),
+            ]
+        )
+        + "\n",
+        encoding="utf-8",
+    )
+
+    palace_path = Path(tmp_path / "palace")
+    curation_dir = palace_path / ".swampcastle" / "curation"
+    curation_dir.mkdir(parents=True)
+    (curation_dir / "aliases.yaml").write_text(
+        "wing_hints:\n  claude-session: hinted_wing\n",
+        encoding="utf-8",
+    )
+
+    factory = InMemoryStorageFactory()
+
+    mine_convos(str(transcript), str(palace_path), storage_factory=factory)
+
+    col = factory.open_collection("swampcastle_chests")
+    rows = col.get(where={"source_file": str(transcript)}, include=["metadatas"])
+    assert rows["metadatas"]
+    assert all(meta.get("wing") == "hinted_wing" for meta in rows["metadatas"])

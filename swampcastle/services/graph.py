@@ -3,6 +3,7 @@
 from collections import Counter, defaultdict
 from datetime import date
 
+from swampcastle.audit.curation import load_tunnel_curation
 from swampcastle.models.kg import (
     InvalidateResult,
     KGQueryResult,
@@ -15,10 +16,17 @@ from swampcastle.wal import WalWriter
 
 
 class GraphService:
-    def __init__(self, graph: GraphStore, collection: CollectionStore, wal: WalWriter):
+    def __init__(
+        self,
+        graph: GraphStore,
+        collection: CollectionStore,
+        wal: WalWriter,
+        castle_path: str | None = None,
+    ):
         self._graph = graph
         self._col = collection
         self._wal = wal
+        self._castle_path = castle_path
         self._summary_cache: tuple[dict, list[dict]] | None = None
         self._summary_cache_count: int | None = None
 
@@ -217,31 +225,84 @@ class GraphService:
         results.sort(key=lambda x: (x["hop"], -x["count"]))
         return results[:50]
 
-    def find_tunnels(self, wing_a: str | None = None, wing_b: str | None = None) -> list[dict]:
-        nodes, _ = self._get_graph_summary()
+    def _curated_tunnels(self) -> list[dict]:
+        nodes, edges = self._get_graph_summary()
+        grouped: dict[tuple[str, tuple[str, str]], dict] = {}
+
+        for edge in edges:
+            wings = tuple(sorted((edge["wing_a"], edge["wing_b"])))
+            key = (edge["room"], wings)
+            item = grouped.setdefault(
+                key,
+                {
+                    "room": edge["room"],
+                    "wings": list(wings),
+                    "halls": set(),
+                    "count": edge["count"],
+                },
+            )
+            hall = edge.get("hall")
+            if hall:
+                item["halls"].add(hall)
+            item["count"] = max(item["count"], edge["count"])
+
+        if self._castle_path:
+            policy = load_tunnel_curation(self._castle_path)
+            denied = {rule.key() for rule in policy.deny}
+            boosted = {rule.key(): rule.weight for rule in policy.boost}
+
+            grouped = {key: value for key, value in grouped.items() if key not in denied}
+
+            for rule in policy.allow:
+                key = rule.key()
+                if key in denied:
+                    continue
+                entry = grouped.setdefault(
+                    key,
+                    {
+                        "room": rule.room,
+                        "wings": list(rule.normalized_wings()),
+                        "halls": set(),
+                        "count": 0,
+                        "policy": "allow",
+                    },
+                )
+                entry.setdefault("policy", "allow")
+
+            for key, weight in boosted.items():
+                if key in grouped:
+                    grouped[key]["boost"] = weight
+
         tunnels = []
-        for room, data in nodes.items():
-            wings = data["wings"]
-            if len(wings) < 2:
-                continue
+        for tunnel in grouped.values():
+            item = dict(tunnel)
+            item["halls"] = sorted(item.get("halls", []))
+            tunnels.append(item)
+
+        tunnels.sort(
+            key=lambda item: (
+                -(item.get("count", 0) + item.get("boost", 0.0)),
+                item["room"],
+                item["wings"],
+            )
+        )
+        return tunnels
+
+    def find_tunnels(self, wing_a: str | None = None, wing_b: str | None = None) -> list[dict]:
+        tunnels = []
+        for tunnel in self._curated_tunnels():
+            wings = tunnel["wings"]
             if wing_a and wing_a not in wings:
                 continue
             if wing_b and wing_b not in wings:
                 continue
-            tunnels.append(
-                {
-                    "room": room,
-                    "wings": wings,
-                    "halls": data["halls"],
-                    "count": data["count"],
-                }
-            )
-        tunnels.sort(key=lambda x: -x["count"])
+            tunnels.append(tunnel)
         return tunnels[:50]
 
     def graph_stats(self) -> dict:
         nodes, edges = self._get_graph_summary()
-        tunnel_rooms = sum(1 for n in nodes.values() if len(n["wings"]) >= 2)
+        curated_tunnels = self._curated_tunnels()
+        tunnel_rooms = len({(tunnel["room"], tuple(tunnel["wings"])) for tunnel in curated_tunnels})
         wing_counts = Counter()
         for data in nodes.values():
             for w in data["wings"]:
@@ -249,6 +310,6 @@ class GraphService:
         return {
             "total_rooms": len(nodes),
             "tunnel_rooms": tunnel_rooms,
-            "total_edges": len(edges),
+            "total_edges": len(curated_tunnels) or len(edges),
             "rooms_per_wing": dict(wing_counts.most_common()),
         }

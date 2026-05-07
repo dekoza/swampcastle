@@ -4,9 +4,11 @@ from __future__ import annotations
 
 import hashlib
 import json
+import re
 from datetime import datetime, timezone
 from pathlib import Path
 
+from swampcastle.audit.curation import load_alias_curation
 from swampcastle.mining.normalize import (
     _try_chatgpt_json,
     _try_claude_ai_json,
@@ -15,6 +17,10 @@ from swampcastle.mining.normalize import (
     _try_slack_json,
 )
 from swampcastle.models.origin import SourceOrigin
+
+_DIALOGUE_NAME_RE = re.compile(r"(?m)^(?P<name>[A-Z][A-Za-z0-9_-]{1,30}):")
+_SELF_NAMING_RE = re.compile(r"(?i)\b(?:i am|i'm|call me)\s+(?P<name>[A-Z][A-Za-z0-9_-]{1,30})\b")
+_IGNORED_PERSONA_NAMES = {"user", "assistant", "system", "human"}
 
 
 def _utc_now_iso() -> str:
@@ -53,10 +59,59 @@ def _detect_platform_and_transformations(content: str) -> tuple[str | None, list
     return None, []
 
 
-def detect_source_origin(source_file: str | Path) -> SourceOrigin:
+def _heuristic_agent_personas(content: str) -> list[str]:
+    names = []
+    for regex in (_DIALOGUE_NAME_RE, _SELF_NAMING_RE):
+        for match in regex.finditer(content):
+            name = match.group("name")
+            if name.lower() in _IGNORED_PERSONA_NAMES:
+                continue
+            if name not in names:
+                names.append(name)
+    return names
+
+
+def _apply_persona_aliases(
+    heuristics: list[str],
+    content: str,
+    *,
+    castle_path: str | Path | None,
+) -> list[str]:
+    if castle_path is None:
+        return heuristics
+
+    aliases = load_alias_curation(castle_path)
+    resolved: list[str] = []
+
+    for name in heuristics:
+        canonical = aliases.canonical_persona(name)
+        if canonical not in resolved:
+            resolved.append(canonical)
+
+    lowered_content = content.lower()
+    for alias, entry in aliases.personas.items():
+        pattern = re.compile(rf"\b{re.escape(alias.lower())}\b")
+        if pattern.search(lowered_content):
+            canonical = entry.canonical or alias
+            if canonical not in resolved:
+                resolved.append(canonical)
+
+    return resolved
+
+
+def detect_source_origin(
+    source_file: str | Path,
+    *,
+    castle_path: str | Path | None = None,
+) -> SourceOrigin:
     resolved = str(Path(source_file).expanduser().resolve())
     content = _read_text(resolved)
     platform, transformations = _detect_platform_and_transformations(content)
+    agent_personas = _apply_persona_aliases(
+        _heuristic_agent_personas(content),
+        content,
+        castle_path=castle_path,
+    )
 
     source_kind = "unknown"
     if Path(resolved).suffix.lower() in {".txt", ".md", ".json", ".jsonl"}:
@@ -66,6 +121,7 @@ def detect_source_origin(source_file: str | Path) -> SourceOrigin:
         origin_id=_origin_id_for_source(resolved),
         source_kind=source_kind,
         platform=platform,
+        agent_personas=agent_personas,
         declared_transformations=transformations,
         confidence="heuristic",
         source_file=resolved,

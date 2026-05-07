@@ -4,6 +4,8 @@ from __future__ import annotations
 
 import json
 
+import yaml
+
 from swampcastle.audit.origin import (
     detect_source_origin,
     load_origin_manifest,
@@ -83,3 +85,23 @@ def test_origin_manifest_round_trip(tmp_path):
 
     assert loaded is not None
     assert loaded.model_dump() == origin.model_dump()
+
+
+def test_detect_source_origin_applies_persona_alias_override(tmp_path):
+    castle_path = tmp_path / "castle"
+    curation_dir = castle_path / ".swampcastle" / "curation"
+    curation_dir.mkdir(parents=True)
+    (curation_dir / "aliases.yaml").write_text(
+        yaml.safe_dump({"personas": {"Aurora": {"canonical": "Echo"}}}),
+        encoding="utf-8",
+    )
+
+    transcript = tmp_path / "persona.txt"
+    transcript.write_text(
+        "Aurora: I can help with that.\n> What should we do next?\nKeep going.\n",
+        encoding="utf-8",
+    )
+
+    origin = detect_source_origin(str(transcript), castle_path=castle_path)
+
+    assert origin.agent_personas == ["Echo"]

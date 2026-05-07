@@ -15,6 +15,7 @@ from pathlib import Path
 from datetime import datetime
 from collections import defaultdict
 
+from ..audit.curation import resolve_wing_hint
 from ..audit.origin import detect_source_origin, origin_metadata, write_origin_manifest
 from .normalize import normalize
 from .contributor import detect_contributor
@@ -333,6 +334,7 @@ def _source_mtime(source_file: str) -> int | None:
 def _analyze_convo_file(
     filepath: Path,
     *,
+    palace_path: str,
     convo_path: Path,
     team,
     registry,
@@ -348,7 +350,7 @@ def _analyze_convo_file(
 
     room = detect_convo_room(content) if extract_mode != "general" else None
     contributor = detect_contributor(filepath, convo_path, team=team, registry=registry)
-    origin = detect_source_origin(str(filepath))
+    origin = detect_source_origin(str(filepath), castle_path=palace_path)
 
     return {
         "content": content,
@@ -418,7 +420,9 @@ def mine_convos(
     convo_path = Path(convo_dir).expanduser().resolve()
     if not wing:
         wing_root = convo_path.parent if convo_path.is_file() else convo_path
-        wing = wing_root.name.lower().replace(" ", "_").replace("-", "_")
+        wing = resolve_wing_hint(palace_path, convo_path)
+        if not wing:
+            wing = wing_root.name.lower().replace(" ", "_").replace("-", "_")
 
     files = scan_convos(convo_dir)
     if limit > 0:
@@ -464,6 +468,7 @@ def mine_convos(
         try:
             analysis = _analyze_convo_file(
                 filepath,
+                palace_path=palace_path,
                 convo_path=contributor_root,
                 team=team,
                 registry=registry,

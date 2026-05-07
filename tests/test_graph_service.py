@@ -1,6 +1,7 @@
 """Tests for GraphService."""
 
 import pytest
+import yaml
 
 from swampcastle.models.drawer import AddDrawerCommand
 from swampcastle.services.graph import GraphService
@@ -151,6 +152,49 @@ class TestGraphTraversal:
         s = populated.graph_stats()
         assert s["total_rooms"] > 0
         assert s["tunnel_rooms"] > 0
+
+
+class TestTunnelCuration:
+    def test_find_tunnels_applies_deny_policy(self, graph, wal, tmp_path):
+        col = InMemoryCollectionStore()
+        vault = VaultService(col, wal)
+        for wing, room in [("proj", "auth"), ("personal", "auth")]:
+            vault.add_drawer(AddDrawerCommand(wing=wing, room=room, content=f"{wing}/{room}"))
+
+        curation_dir = tmp_path / "castle" / ".swampcastle" / "curation"
+        curation_dir.mkdir(parents=True)
+        (curation_dir / "tunnels.yaml").write_text(
+            yaml.safe_dump({"deny": [{"wing_a": "proj", "wing_b": "personal", "room": "auth"}]}),
+            encoding="utf-8",
+        )
+
+        svc = GraphService(graph, col, wal, castle_path=str(tmp_path / "castle"))
+
+        assert svc.find_tunnels() == []
+
+    def test_find_tunnels_includes_allowed_synthetic_tunnel(self, graph, wal, tmp_path):
+        col = InMemoryCollectionStore()
+        vault = VaultService(col, wal)
+        vault.add_drawer(AddDrawerCommand(wing="proj", room="auth", content="proj/auth"))
+
+        curation_dir = tmp_path / "castle" / ".swampcastle" / "curation"
+        curation_dir.mkdir(parents=True)
+        (curation_dir / "tunnels.yaml").write_text(
+            yaml.safe_dump(
+                {"allow": [{"wing_a": "proj", "wing_b": "personal", "room": "journal"}]}
+            ),
+            encoding="utf-8",
+        )
+
+        svc = GraphService(graph, col, wal, castle_path=str(tmp_path / "castle"))
+
+        tunnels = svc.find_tunnels()
+        assert any(
+            tunnel["room"] == "journal"
+            and tunnel["wings"] == ["personal", "proj"]
+            and tunnel.get("policy") == "allow"
+            for tunnel in tunnels
+        )
 
 
 class TestGraphSummaryCaching:

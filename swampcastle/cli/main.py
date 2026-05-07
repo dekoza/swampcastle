@@ -102,6 +102,12 @@ def main():
 
     p = sub.add_parser("survey", aliases=["status"], help="Survey the castle")
 
+    # curation
+    p_cur = sub.add_parser("curation", help="Inspect local audit-overlay curation files")
+    cur_sub = p_cur.add_subparsers(dest="curation_action")
+    p = cur_sub.add_parser("check", help="Validate and summarize local curation files")
+    p.add_argument("--wing", default=None)
+
     # deskeleton
     p = sub.add_parser(
         "deskeleton",
@@ -277,6 +283,15 @@ def main():
             cmd.cmd_kg_accept(args)
         elif action == "reject":
             cmd.cmd_kg_reject(args)
+        return
+
+    if args.command == "curation":
+        action = getattr(args, "curation_action", None)
+        if not action:
+            p_cur.print_help()
+            return
+        if action == "check":
+            cmd.cmd_curation_check(args)
         return
 
     if args.command == "hook":

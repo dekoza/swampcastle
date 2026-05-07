@@ -1124,6 +1124,57 @@ def test_cmd_seek_prints_explanation_details_when_requested(capsys):
     assert "source: conversation_export / claude-code" in out
 
 
+def test_cmd_curation_check_reports_loaded_files(tmp_path, capsys):
+    castle_path = tmp_path / "castle"
+    curation_dir = castle_path / ".swampcastle" / "curation"
+    notes_dir = curation_dir / "wings"
+    notes_dir.mkdir(parents=True)
+
+    (curation_dir / "aliases.yaml").write_text(
+        "personas:\n  Aurora:\n    canonical: Echo\n",
+        encoding="utf-8",
+    )
+    (curation_dir / "tunnels.yaml").write_text(
+        "allow:\n  - wing_a: proj\n    wing_b: personal\n    room: auth\n",
+        encoding="utf-8",
+    )
+    (notes_dir / "swampcastle.md").write_text(
+        "# swampcastle\n\n"
+        "## Pinned context\n- one\n\n"
+        "## Open threads\n- two\n\n"
+        "## Stale assumptions\n- three\n",
+        encoding="utf-8",
+    )
+
+    commands.cmd_curation_check(
+        SimpleNamespace(palace=str(castle_path), backend=None, wing="swampcastle")
+    )
+
+    out = capsys.readouterr().out
+    assert "SwampCastle Curation" in out
+    assert "Persona aliases: 1" in out
+    assert "Allowed tunnels: 1" in out
+    assert "Wing note: swampcastle" in out
+    assert "Pinned context: 1" in out
+
+
+def test_cmd_curation_check_reports_clear_error_for_bad_alias_file(tmp_path, capsys):
+    castle_path = tmp_path / "castle"
+    curation_dir = castle_path / ".swampcastle" / "curation"
+    curation_dir.mkdir(parents=True)
+    (curation_dir / "aliases.yaml").write_text("personas: [broken", encoding="utf-8")
+
+    with pytest.raises(SystemExit) as exc:
+        commands.cmd_curation_check(
+            SimpleNamespace(palace=str(castle_path), backend=None, wing=None)
+        )
+
+    assert exc.value.code == 2
+    out = capsys.readouterr().out
+    assert "aliases.yaml" in out
+    assert "Error" in out
+
+
 def test_cmd_deskeleton_pages_drawers_in_batches(capsys):
     class PaginatedVault:
         def __init__(self):

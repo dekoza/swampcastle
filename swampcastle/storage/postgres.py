@@ -32,7 +32,7 @@ else:
 
 
 _IDENTIFIER_RE = re.compile(r"^[A-Za-z_][A-Za-z0-9_]*$")
-_FILTER_COLUMNS = {"id", "wing", "room", "source_file", "node_id", "seq"}
+_FILTER_COLUMNS = {"id", "wing", "room", "source_file", "node_id", "seq", "kind"}
 _NUMERIC_FIELDS = {"seq"}
 
 
@@ -210,6 +210,51 @@ class PostgresCollectionStore(CollectionStore):
 
         return inject_sync_meta(metadatas, self._sync_identity)
 
+    def _ensure_kind_column(self) -> None:
+        """Add the ``kind`` column to existing Postgres tables that lack it.
+
+        New tables created by ``_ensure_schema`` already include ``kind``.
+        This migration runs once per collection, on first upsert after upgrade.
+        """
+        if getattr(self, "_kind_column_ensured", False):
+            return
+        self._ensure_schema()
+        self._kind_column_ensured = True
+        with self._pool.connection() as conn:
+            with conn.cursor() as cur:
+                cur.execute(
+                    "SELECT 1 FROM information_schema.columns "
+                    "WHERE table_name = %s AND column_name = 'kind'",
+                    (self._table_name,),
+                )
+                if cur.fetchone() is None:
+                    cur.execute(
+                        f"ALTER TABLE {self._table_name} "
+                        "ADD COLUMN kind TEXT NOT NULL DEFAULT 'document'"
+                    )
+                    cur.execute(
+                        f"CREATE INDEX IF NOT EXISTS idx_{self._table_name}_kind "
+                        f"ON {self._table_name} (kind)"
+                    )
+            conn.commit()
+
+    def add_records(self, envelopes):
+        """Store typed records with kind mapped to the Postgres flat column."""
+        self.upsert(
+            documents=[env.content for env in envelopes],
+            ids=[env.record_id for env in envelopes],
+            metadatas=[
+                {
+                    **env.metadata,
+                    "kind": env.kind,
+                    "node_id": env.node_id,
+                    "seq": env.seq,
+                    "updated_at": env.updated_at.isoformat(),
+                }
+                for env in envelopes
+            ],
+        )
+
     def _ensure_schema(self) -> None:
         if self._schema_ready:
             return
@@ -312,6 +357,7 @@ class PostgresCollectionStore(CollectionStore):
                     str(metadata.get("source_file", "")),
                     str(metadata.get("node_id", "")),
                     int(metadata.get("seq", 0)),
+                    str(metadata.get("kind", "document")),
                     json.dumps(metadata, default=str),
                 )
             )
@@ -358,6 +404,8 @@ class PostgresCollectionStore(CollectionStore):
         self.upsert(documents=documents, ids=ids, metadatas=metadatas)
 
     def upsert(self, *, documents, ids, metadatas=None, embeddings=None, _raw=False) -> None:
+        if not _raw:
+            self._ensure_kind_column()
         rows = self._prepare_rows(
             documents=documents,
             ids=ids,
@@ -367,11 +415,10 @@ class PostgresCollectionStore(CollectionStore):
         )
         if not rows:
             return
-
         sql = f"""
             INSERT INTO {self._table_name}
-                (id, document, embedding, wing, room, source_file, node_id, seq, metadata)
-            VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s::jsonb)
+                (id, document, embedding, wing, room, source_file, node_id, seq, kind, metadata)
+            VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s::jsonb)
             ON CONFLICT (id) DO UPDATE SET
                 document = EXCLUDED.document,
                 embedding = EXCLUDED.embedding,
@@ -380,6 +427,7 @@ class PostgresCollectionStore(CollectionStore):
                 source_file = EXCLUDED.source_file,
                 node_id = EXCLUDED.node_id,
                 seq = EXCLUDED.seq,
+                kind = EXCLUDED.kind,
                 metadata = EXCLUDED.metadata
         """
         with self._pool.connection() as conn:

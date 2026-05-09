@@ -82,3 +82,65 @@ class TestLanceCollection:
         r2 = col.get(limit=3, offset=3)
         assert len(r2["ids"]) == 3
         assert set(r["ids"]) & set(r2["ids"]) == set()
+
+    # ── Wave 1: typed-record add_records ─────────────────────────────────
+
+    def test_add_records_stores_kind_filterable(self, col):
+        from swampcastle.models.record import RecordEnvelope
+
+        col.add_records(
+            [
+                RecordEnvelope(record_id="r1", kind="document", content="alpha"),
+                RecordEnvelope(record_id="r2", kind="tombstone", content="beta"),
+            ]
+        )
+        docs = col.get(where={"kind": "document"})
+        assert [rid for rid in docs["ids"]] == ["r1"]
+
+        tombs = col.get(where={"kind": "tombstone"})
+        assert [rid for rid in tombs["ids"]] == ["r2"]
+
+    def test_add_records_kind_in_filterable(self, col):
+        from swampcastle.models.record import RecordEnvelope
+
+        col.add_records(
+            [
+                RecordEnvelope(record_id="r1", kind="document", content="a"),
+                RecordEnvelope(record_id="r2", kind="transcript", content="b"),
+                RecordEnvelope(record_id="r3", kind="curation", content="c"),
+            ]
+        )
+        docs = col.get(where={"kind": {"$in": ["document", "transcript"]}})
+        returned_ids = set(docs["ids"])
+        assert returned_ids == {"r1", "r2"}
+
+    def test_add_records_node_seq_preserved(self, col):
+        from swampcastle.models.record import RecordEnvelope
+
+        col.add_records(
+            [
+                RecordEnvelope(record_id="r1", kind="document", node_id="n1", seq=99, content="x"),
+            ]
+        )
+        docs = col.get(ids=["r1"])
+        # node_id and seq are injected by the sync identity during upsert;
+        # the envelope values are advisory only unless _raw=True is used.
+        assert docs["ids"] == ["r1"]
+        assert docs["documents"] == ["x"]
+        assert docs["metadatas"][0]["kind"] == "document"
+
+    def test_add_records_custom_metadata_survives(self, col):
+        from swampcastle.models.record import RecordEnvelope
+
+        col.add_records(
+            [
+                RecordEnvelope(
+                    record_id="r1",
+                    kind="document",
+                    content="x",
+                    metadata={"data_class": "financial"},
+                ),
+            ]
+        )
+        docs = col.get(ids=["r1"])
+        assert docs["metadatas"][0]["data_class"] == "financial"

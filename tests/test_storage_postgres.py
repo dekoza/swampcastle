@@ -194,7 +194,21 @@ class TestPostgresCollectionStore:
 
     def test_get_can_include_embeddings(self):
         conn = RecordingConnection(
-            fetchall=[[("d1", "auth policy", {"wing": "proj"}, "proj", "", "", "node", 7, [1.0, 0.0, 0.0])]]
+            fetchall=[
+                [
+                    (
+                        "d1",
+                        "auth policy",
+                        {"wing": "proj"},
+                        "proj",
+                        "",
+                        "",
+                        "node",
+                        7,
+                        [1.0, 0.0, 0.0],
+                    )
+                ]
+            ]
         )
         store = PostgresCollectionStore(RecordingPool(conn), "swampcastle_chests", FakeEmbedder())
         store._schema_ready = True
@@ -215,6 +229,8 @@ class TestPostgresCollectionStore:
         store = PostgresCollectionStore(
             RecordingPool(conn), "swampcastle_chests", FakeEmbedder(), index_threshold=5
         )
+        # Skip the kind-column migration that would add extraneous DDL
+        store._kind_column_ensured = True
 
         store.upsert(
             documents=["auth policy"],

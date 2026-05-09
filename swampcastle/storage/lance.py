@@ -88,7 +88,7 @@ class LanceCollection(CollectionStore):
         metadata_json: string (JSON of full metadata dict)
     """
 
-    FILTER_COLUMNS = {"wing", "room", "source_file", "node_id", "seq"}
+    FILTER_COLUMNS = {"wing", "room", "source_file", "node_id", "seq", "kind"}
     SCHEMA_COLUMNS = {
         "id",
         "document",
@@ -98,6 +98,7 @@ class LanceCollection(CollectionStore):
         "source_file",
         "node_id",
         "seq",
+        "kind",
         "metadata_json",
     }
     INTERNAL_FIELDS = {"_distance", "_relevance_score"}
@@ -268,6 +269,7 @@ class LanceCollection(CollectionStore):
                 "source_file": str(meta.get("source_file", "")),
                 "node_id": str(meta.get("node_id", "")),
                 "seq": int(meta.get("seq", 0)),
+                "kind": str(meta.get("kind", "document")),
                 "metadata_json": json.dumps(meta_with_model, default=str),
             }
             records.append(record)
@@ -419,6 +421,23 @@ class LanceCollection(CollectionStore):
         docs = documents if documents is not None else existing.get("documents", [""] * len(ids))
         metas = metadatas if metadatas is not None else existing.get("metadatas", [{}] * len(ids))
         self.upsert(documents=docs, ids=ids, metadatas=metas)
+
+    def add_records(self, envelopes):
+        """Store typed records with kind mapped to the LanceDB flat column."""
+        self.upsert(
+            documents=[env.content for env in envelopes],
+            ids=[env.record_id for env in envelopes],
+            metadatas=[
+                {
+                    **env.metadata,
+                    "kind": env.kind,
+                    "node_id": env.node_id,
+                    "seq": env.seq,
+                    "updated_at": env.updated_at.isoformat(),
+                }
+                for env in envelopes
+            ],
+        )
 
     def count(self) -> int:
         if self._table is None:

@@ -8,6 +8,8 @@ Two ABCs:
 from abc import ABC, abstractmethod
 from typing import Any
 
+from swampcastle.models.record import RecordEnvelope
+
 
 class CollectionStore(ABC):
     """Contract for drawer storage backends (LanceDB, Postgres, in-memory)."""
@@ -72,6 +74,35 @@ class CollectionStore(ABC):
     @abstractmethod
     def count(self) -> int:
         raise NotImplementedError
+
+    # ── Typed-record operations (Wave 1) ──────────────────────────────────
+
+    def add_records(self, envelopes: list[RecordEnvelope]) -> None:
+        """Store typed records. Backends translate envelopes into their
+        native storage format.
+
+        Default implementation delegates to ``upsert()`` with envelope fields
+        mapped to the legacy drawer interface. Backends SHOULD override this
+        to index ``kind`` and other structural fields natively.
+        """
+        self.upsert(
+            documents=[env.content for env in envelopes],
+            ids=[env.record_id for env in envelopes],
+            metadatas=[_envelope_metadata(env) for env in envelopes],
+        )
+
+
+def _envelope_metadata(env: RecordEnvelope) -> dict[str, Any]:
+    """Extract the metadata dict for a RecordEnvelope used by the default
+    ``add_records`` fallback.  Flattens kind/node_id/seq into the metadata
+    dict so that Chroma-style $where filtering sees them.
+    """
+    meta = dict(env.metadata)
+    meta.setdefault("kind", env.kind)
+    meta["node_id"] = env.node_id
+    meta["seq"] = env.seq
+    meta["updated_at"] = env.updated_at.isoformat()
+    return meta
 
 
 class GraphStore(ABC):

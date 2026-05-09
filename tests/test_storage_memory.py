@@ -112,6 +112,83 @@ class TestInMemoryCollection:
         result = col.get(where={"$and": [{"wing": "a"}, {"room": "r1"}]})
         assert result["ids"] == ["1"]
 
+    # ── Wave 1: typed-record add_records ─────────────────────────────────
+
+    def test_add_records_stores_kind_in_metadata(self, col):
+        from swampcastle.models.record import RecordEnvelope
+
+        col.add_records(
+            [
+                RecordEnvelope(record_id="r1", kind="document", content="hello"),
+                RecordEnvelope(record_id="r2", kind="tombstone", content="bye"),
+            ]
+        )
+        docs = col.get(ids=["r1", "r2"])
+        assert docs["ids"] == ["r1", "r2"]
+
+    def test_add_records_kind_filterable_via_where(self, col):
+        from swampcastle.models.record import RecordEnvelope
+
+        col.add_records(
+            [
+                RecordEnvelope(record_id="r1", kind="document", content="alpha"),
+                RecordEnvelope(record_id="r2", kind="transcript", content="beta"),
+                RecordEnvelope(record_id="r3", kind="tombstone", content="gamma"),
+            ]
+        )
+        docs = col.get(where={"kind": "document"})
+        assert [rid for rid in docs["ids"]] == ["r1"]
+
+        trans = col.get(where={"kind": "transcript"})
+        assert [rid for rid in trans["ids"]] == ["r2"]
+
+    def test_add_records_kind_filterable_via_in_operator(self, col):
+        from swampcastle.models.record import RecordEnvelope
+
+        col.add_records(
+            [
+                RecordEnvelope(record_id="r1", kind="document", content="a"),
+                RecordEnvelope(record_id="r2", kind="transcript", content="b"),
+                RecordEnvelope(record_id="r3", kind="tombstone", content="c"),
+            ]
+        )
+        docs = col.get(where={"kind": {"$in": ["document", "transcript"]}})
+        returned_ids = set(docs["ids"])
+        assert returned_ids == {"r1", "r2"}
+
+    def test_add_records_node_id_and_seq_preserved(self, col):
+        from swampcastle.models.record import RecordEnvelope
+
+        col.add_records(
+            [
+                RecordEnvelope(
+                    record_id="r1", kind="document", node_id="brain-1", seq=42, content="x"
+                ),
+            ]
+        )
+        docs = col.get(ids=["r1"])
+        meta = docs["metadatas"][0]
+        assert meta["node_id"] == "brain-1"
+        assert meta["seq"] == 42
+
+    def test_add_records_custom_metadata_survives(self, col):
+        from swampcastle.models.record import RecordEnvelope
+
+        col.add_records(
+            [
+                RecordEnvelope(
+                    record_id="r1",
+                    kind="document",
+                    content="x",
+                    metadata={"data_class": "financial", "tags": ["urgent"]},
+                ),
+            ]
+        )
+        docs = col.get(ids=["r1"])
+        meta = docs["metadatas"][0]
+        assert meta["data_class"] == "financial"
+        assert meta["tags"] == ["urgent"]
+
 
 class TestInMemoryGraph:
     @pytest.fixture

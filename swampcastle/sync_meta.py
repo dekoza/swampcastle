@@ -16,9 +16,12 @@ Metadata injected into every record:
     updated_at: str   — ISO 8601 UTC wall clock time
 """
 
+import json
 import os
 from datetime import datetime, timezone
+from enum import Enum
 from pathlib import Path
+from typing import Protocol, runtime_checkable
 from uuid import uuid4
 
 try:
@@ -162,3 +165,58 @@ def inject_sync_meta(metadatas: list[dict], identity: NodeIdentity = None) -> li
         result.append(m)
 
     return result
+
+
+class NodeStatus(str, Enum):
+    ACTIVE = "active"
+    REVOKED = "revoked"
+    WIPE_REQUIRED = "wipe_required"
+
+
+@runtime_checkable
+class NodeStatusStore(Protocol):
+    """Protocol for reading and writing node lifecycle status."""
+
+    def get_status(self, node_id: str) -> NodeStatus: ...
+
+    def set_status(self, node_id: str, status: NodeStatus) -> None: ...
+
+
+class InMemoryNodeStatusStore:
+    """Dict-backed store for tests and simple deployments."""
+
+    def __init__(self) -> None:
+        self._statuses: dict[str, NodeStatus] = {}
+
+    def get_status(self, node_id: str) -> NodeStatus:
+        return self._statuses.get(node_id, NodeStatus.ACTIVE)
+
+    def set_status(self, node_id: str, status: NodeStatus) -> None:
+        self._statuses[node_id] = status
+
+
+class JsonFileNodeStatusStore:
+    """JSON-file-backed store for persistent runtimes."""
+
+    def __init__(self, path: str | Path) -> None:
+        self._path = Path(path)
+        self._statuses = self._load()
+
+    def get_status(self, node_id: str) -> NodeStatus:
+        raw = self._statuses.get(node_id)
+        if raw is None:
+            return NodeStatus.ACTIVE
+        return NodeStatus(raw)
+
+    def set_status(self, node_id: str, status: NodeStatus) -> None:
+        self._statuses[node_id] = status.value
+        self._save()
+
+    def _load(self) -> dict[str, str]:
+        if not self._path.exists():
+            return {}
+        return json.loads(self._path.read_text(encoding="utf-8"))
+
+    def _save(self) -> None:
+        self._path.parent.mkdir(parents=True, exist_ok=True)
+        self._path.write_text(json.dumps(self._statuses, sort_keys=True), encoding="utf-8")

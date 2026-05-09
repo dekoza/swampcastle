@@ -33,10 +33,15 @@ from contextlib import asynccontextmanager
 from .settings import CastleSettings as CastleConfig
 from .storage import factory_from_settings
 from .sync import ChangeSet, SyncEngine, SyncRecord
+from .sync_meta import (
+    InMemoryNodeStatusStore,
+    NodeStatus,
+    NodeStatusStore,
+    get_identity,
+)
+from .version import __version__
 
 SUPPORTED_PROTOCOL_VERSIONS = ["2025-03-26", "2024-11-05"]
-from .sync_meta import get_identity
-from .version import __version__
 
 logger = logging.getLogger("swampcastle.sync_server")
 
@@ -139,6 +144,20 @@ def _make_json_response(payload: dict, *, accept_encoding: str | None):
 _engine = None
 _config = None
 _factory = None
+_status_store: NodeStatusStore | None = None
+
+
+def _get_status_store() -> NodeStatusStore:
+    global _status_store
+    if _status_store is None:
+        _status_store = InMemoryNodeStatusStore()
+    return _status_store
+
+
+def set_status_store(store: NodeStatusStore) -> None:
+    """Inject a custom NodeStatusStore for use in tests."""
+    global _status_store
+    _status_store = store
 
 
 def _shutdown_engine() -> None:
@@ -156,6 +175,8 @@ def _shutdown_engine() -> None:
         _factory = None
     _engine = None
     _config = None
+    global _status_store
+    _status_store = None
     logger.debug("Sync engine shutdown complete")
 
 
@@ -268,6 +289,7 @@ def create_app():
             body = await _read_json_body(request)
         except RequestDecodeError as exc:
             raise HTTPException(status_code=400, detail=str(exc)) from exc
+        _check_node_status(body.get("source_node", ""))
         engine = _get_engine()
         cs = ChangeSet(
             source_node=body.get("source_node", ""),
@@ -289,6 +311,7 @@ def create_app():
             body = await _read_json_body(request)
         except RequestDecodeError as exc:
             raise HTTPException(status_code=400, detail=str(exc)) from exc
+        _check_node_status(body.get("source_node", ""))
         engine = _get_engine()
         limit = body.get("limit")
         offset = int(body.get("offset") or 0)
@@ -308,3 +331,23 @@ def create_app():
         return _make_json_response(payload, accept_encoding=request.headers.get("Accept-Encoding"))
 
     return app
+
+
+def _check_node_status(source_node: str) -> None:
+    try:
+        from fastapi import HTTPException
+    except ImportError:  # pragma: no cover — only when fastapi is unavailable
+        return
+
+    if not source_node:
+        return
+    store = _get_status_store()
+    status = store.get_status(source_node)
+    if status == NodeStatus.ACTIVE:
+        return
+    detail = {
+        "status": "wipe_required",
+        "node_id": source_node,
+        "reason": status.value,
+    }
+    raise HTTPException(status_code=409, detail=detail)

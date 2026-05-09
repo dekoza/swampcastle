@@ -239,7 +239,7 @@ class PostgresCollectionStore(CollectionStore):
             conn.commit()
 
     def add_records(self, envelopes):
-        """Store typed records with kind mapped to the Postgres flat column."""
+        """Store typed records with envelope fields mapped to Postgres flat columns."""
         self.upsert(
             documents=[env.content for env in envelopes],
             ids=[env.record_id for env in envelopes],
@@ -250,6 +250,9 @@ class PostgresCollectionStore(CollectionStore):
                     "node_id": env.node_id,
                     "seq": env.seq,
                     "updated_at": env.updated_at.isoformat(),
+                    "data_class": env.metadata.get("data_class", ""),
+                    "trust_class": env.metadata.get("trust_class", ""),
+                    "source_kind": env.metadata.get("source_kind", ""),
                 }
                 for env in envelopes
             ],
@@ -299,6 +302,10 @@ class PostgresCollectionStore(CollectionStore):
                             source_file TEXT NOT NULL DEFAULT '',
                             node_id TEXT NOT NULL DEFAULT '',
                             seq BIGINT NOT NULL DEFAULT 0,
+                            kind TEXT NOT NULL DEFAULT 'document',
+                            data_class TEXT NOT NULL DEFAULT '',
+                            trust_class TEXT NOT NULL DEFAULT '',
+                            source_kind TEXT NOT NULL DEFAULT '',
                             metadata JSONB NOT NULL DEFAULT '{{}}'::jsonb,
                             created_at TIMESTAMPTZ DEFAULT now()
                         )
@@ -319,6 +326,22 @@ class PostgresCollectionStore(CollectionStore):
                     cur.execute(
                         f"CREATE INDEX IF NOT EXISTS idx_{self._table_name}_node_seq "
                         f"ON {self._table_name} (node_id, seq)"
+                    )
+                    cur.execute(
+                        f"CREATE INDEX IF NOT EXISTS idx_{self._table_name}_kind "
+                        f"ON {self._table_name} (kind)"
+                    )
+                    cur.execute(
+                        f"CREATE INDEX IF NOT EXISTS idx_{self._table_name}_data_class "
+                        f"ON {self._table_name} (data_class)"
+                    )
+                    cur.execute(
+                        f"CREATE INDEX IF NOT EXISTS idx_{self._table_name}_trust_class "
+                        f"ON {self._table_name} (trust_class)"
+                    )
+                    cur.execute(
+                        f"CREATE INDEX IF NOT EXISTS idx_{self._table_name}_source_kind "
+                        f"ON {self._table_name} (source_kind)"
                     )
                     cur.execute(
                         "INSERT INTO _swampcastle_meta "

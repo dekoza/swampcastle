@@ -88,7 +88,17 @@ class LanceCollection(CollectionStore):
         metadata_json: string (JSON of full metadata dict)
     """
 
-    FILTER_COLUMNS = {"wing", "room", "source_file", "node_id", "seq", "kind"}
+    FILTER_COLUMNS = {
+        "wing",
+        "room",
+        "source_file",
+        "node_id",
+        "seq",
+        "kind",
+        "data_class",
+        "trust_class",
+        "source_kind",
+    }
     SCHEMA_COLUMNS = {
         "id",
         "document",
@@ -99,6 +109,9 @@ class LanceCollection(CollectionStore):
         "node_id",
         "seq",
         "kind",
+        "data_class",
+        "trust_class",
+        "source_kind",
         "metadata_json",
     }
     INTERNAL_FIELDS = {"_distance", "_relevance_score"}
@@ -270,6 +283,9 @@ class LanceCollection(CollectionStore):
                 "node_id": str(meta.get("node_id", "")),
                 "seq": int(meta.get("seq", 0)),
                 "kind": str(meta.get("kind", "document")),
+                "data_class": str(meta.get("data_class", "")),
+                "trust_class": str(meta.get("trust_class", "")),
+                "source_kind": str(meta.get("source_kind", "")),
                 "metadata_json": json.dumps(meta_with_model, default=str),
             }
             records.append(record)
@@ -423,7 +439,7 @@ class LanceCollection(CollectionStore):
         self.upsert(documents=docs, ids=ids, metadatas=metas)
 
     def add_records(self, envelopes):
-        """Store typed records with kind mapped to the LanceDB flat column."""
+        """Store typed records with envelope fields mapped to LanceDB flat columns."""
         self.upsert(
             documents=[env.content for env in envelopes],
             ids=[env.record_id for env in envelopes],
@@ -434,6 +450,9 @@ class LanceCollection(CollectionStore):
                     "node_id": env.node_id,
                     "seq": env.seq,
                     "updated_at": env.updated_at.isoformat(),
+                    "data_class": env.metadata.get("data_class", ""),
+                    "trust_class": env.metadata.get("trust_class", ""),
+                    "source_kind": env.metadata.get("source_kind", ""),
                 }
                 for env in envelopes
             ],

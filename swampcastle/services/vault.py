@@ -7,7 +7,8 @@ import multiprocessing
 import os
 from collections.abc import Callable
 from concurrent.futures import FIRST_COMPLETED, ProcessPoolExecutor, wait
-from datetime import datetime
+from dataclasses import dataclass
+from datetime import datetime, timedelta, timezone
 
 from pydantic import BaseModel, Field
 
@@ -147,6 +148,12 @@ def _resolve_distill_workers(explicit: int | None) -> int | None:
 _DIARY_READ_SCAN_LIMIT = 100_000
 _REFORGE_MIN_BATCH_SIZE = 1000
 _REFORGE_MAX_PROGRESS_UPDATES = 20
+_TOMBSTONE_ID_PREFIX = "tombstone:"
+
+
+@dataclass
+class GCCollectResult:
+    deleted_ids: list[str]
 
 
 class DiaryReadQuery(BaseModel):
@@ -348,14 +355,43 @@ class VaultService:
         include: list | None = None,
         limit: int | None = None,
         offset: int | None = None,
+        *,
+        ids: list[str] | None = None,
+        include_tombstoned: bool = False,
     ) -> dict:
-        """Retrieve drawers matching a metadata filter via the collection store."""
-        return self._col.get(
-            where=where or {},
-            include=include or ["metadatas"],
-            limit=limit,
-            offset=offset,
-        )
+        """Retrieve drawers matching a metadata filter via the collection store.
+
+        By default, tombstoned target records are excluded. Pass
+        ``include_tombstoned=True`` to see them.
+        """
+        effective_include = include or ["metadatas"]
+        if ids is not None:
+            result = self._col.get(
+                ids=ids,
+                include=effective_include,
+            )
+        else:
+            result = self._col.get(
+                where=where or {},
+                include=effective_include,
+                limit=limit,
+                offset=offset,
+            )
+
+        if include_tombstoned or not result.get("ids"):
+            return result
+
+        # Exclude tombstoned targets from results.
+        active_set = self._active_tombstone_targets()
+        if not active_set:
+            return result
+
+        keep_indices = [i for i, rid in enumerate(result["ids"]) if rid not in active_set]
+        return {
+            key: [result[key][i] for i in keep_indices]
+            for key in result
+            if isinstance(result[key], list)
+        }
 
     def delete_drawer(self, cmd: DeleteDrawerCommand) -> DeleteDrawerResult:
         existing = self._col.get(ids=[cmd.drawer_id])
@@ -366,17 +402,154 @@ class VaultService:
                 error=f"Drawer not found: {cmd.drawer_id}",
             )
 
-        self._wal.log(
-            "delete_drawer",
-            {
-                "drawer_id": cmd.drawer_id,
-                "content_preview": existing.get("documents", [""])[0][:200],
-            },
+        # Backward compat: tombstone + immediate gc.
+        self.create_tombstone(
+            cmd.drawer_id,
+            deleted_by="delete_drawer",
+            reason="delete_drawer",
+            grace_days=0,
         )
-
-        self._col.delete(ids=[cmd.drawer_id])
+        self.gc_collect(
+            [cmd.drawer_id],
+            executed_at=datetime.now(timezone.utc),
+        )
         self._invalidate_graph_cache()
         return DeleteDrawerResult(success=True, drawer_id=cmd.drawer_id)
+
+    # ── Wave 2: tombstone-first deletion ────────────────────────────────
+
+    def create_tombstone(
+        self,
+        record_id: str,
+        *,
+        deleted_by: str,
+        reason: str,
+        grace_days: int = 90,
+    ) -> str:
+        """Mark a record as logically deleted.
+
+        The target record is hidden from normal reads but not physically
+        removed until ``gc_collect`` is called after the grace period.
+        """
+        now = datetime.now(timezone.utc)
+        grace_until = now + timedelta(days=grace_days)
+        metadata = {
+            "kind": "tombstone",
+            "target_record_id": record_id,
+            "deleted_by": deleted_by,
+            "reason": reason,
+            "grace_until": grace_until.isoformat(),
+            "created_at": now.isoformat(),
+            "updated_at": now.isoformat(),
+        }
+        tombstone_id = f"{_TOMBSTONE_ID_PREFIX}{record_id}"
+        self._col.upsert(
+            documents=[record_id],
+            ids=[tombstone_id],
+            metadatas=[metadata],
+        )
+        self._wal.log(
+            "create_tombstone",
+            {
+                "tombstone_id": tombstone_id,
+                "target_record_id": record_id,
+                "deleted_by": deleted_by,
+                "reason": reason,
+                "grace_days": grace_days,
+            },
+        )
+        self._invalidate_graph_cache()
+        return tombstone_id
+
+    def is_tombstoned(self, record_id: str) -> bool:
+        """Return True if the record has an unexpired tombstone."""
+        now = datetime.now(timezone.utc)
+        tombstone_id = f"{_TOMBSTONE_ID_PREFIX}{record_id}"
+        result = self._col.get(ids=[tombstone_id])
+        if not result["ids"]:
+            return False
+        metadata = result.get("metadatas", [{}])[0]
+        grace_until_str = metadata.get("grace_until", "")
+        if not grace_until_str:
+            return True
+        grace_until = datetime.fromisoformat(grace_until_str)
+        return now < grace_until
+
+    def list_pending_gc(self, *, executed_at: datetime) -> list[str]:
+        """Return record IDs whose tombstones have passed their grace period."""
+        raw = self._col.get(include=["metadatas"])
+        targets: list[str] = []
+        for rid, meta in zip(raw.get("ids", []), raw.get("metadatas", [])):
+            if not rid.startswith(_TOMBSTONE_ID_PREFIX):
+                continue
+            target_id = meta.get("target_record_id", "")
+            grace_str = meta.get("grace_until", "")
+            if not target_id or not grace_str:
+                continue
+            try:
+                grace = datetime.fromisoformat(grace_str)
+            except (ValueError, TypeError):
+                continue
+            if executed_at >= grace:
+                targets.append(target_id)
+        return targets
+
+    def gc_collect(self, record_ids: list[str], *, executed_at: datetime) -> "GCCollectResult":
+        """Permanently delete records whose tombstones have expired.
+
+        Only records with fully expired tombstones are removed.
+        Tombstones themselves are deleted alongside their targets.
+        """
+        deleted: list[str] = []
+        tombstone_ids_to_delete: list[str] = []
+
+        pending = set(self.list_pending_gc(executed_at=executed_at))
+        for rid in record_ids:
+            if rid not in pending:
+                continue
+            tombstone_ids_to_delete.append(f"{_TOMBSTONE_ID_PREFIX}{rid}")
+
+        if tombstone_ids_to_delete:
+            self._col.delete(ids=tombstone_ids_to_delete)
+            self._col.delete(ids=record_ids)
+            deleted = [rid for rid in record_ids if rid in pending]
+            self._wal.log(
+                "gc_collect",
+                {
+                    "record_ids": deleted,
+                    "executed_at": executed_at.isoformat(),
+                },
+            )
+            self._invalidate_graph_cache()
+
+        return GCCollectResult(deleted_ids=deleted)
+
+    def _active_tombstone_targets(self) -> set[str]:
+        """Return the set of record IDs that have unexpired tombstones.
+
+        Used by ``get_drawers`` to exclude logically deleted records.
+        """
+        now = datetime.now(timezone.utc)
+        raw = self._col.get(include=["metadatas"])
+        active: set[str] = set()
+        for rid, meta in zip(raw.get("ids", []), raw.get("metadatas", [])):
+            if not rid.startswith(_TOMBSTONE_ID_PREFIX):
+                continue
+            target_id = meta.get("target_record_id", "")
+            grace_str = meta.get("grace_until", "")
+            if not target_id or not grace_str:
+                active.add(target_id)
+                continue
+            try:
+                grace = datetime.fromisoformat(grace_str)
+            except (ValueError, TypeError):
+                active.add(target_id)
+                continue
+            if now < grace:
+                active.add(target_id)
+        return active
+
+    # ── diary_write ──────────────────────────────────────────────────────
 
     def diary_write(self, cmd: DiaryWriteCommand) -> DiaryWriteResult:
         wing = f"wing_{cmd.agent_name.lower().replace(' ', '_')}"

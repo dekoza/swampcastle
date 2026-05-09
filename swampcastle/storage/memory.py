@@ -42,6 +42,8 @@ def _match_where(meta: dict, where: dict | None) -> bool:
                     return False
                 if op == "$eq" and actual != expected:
                     return False
+                if op == "$in" and (actual is None or actual not in expected):
+                    return False
         elif meta.get(key) != value:
             return False
 

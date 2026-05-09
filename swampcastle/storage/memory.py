@@ -59,7 +59,7 @@ class InMemoryCollectionStore(CollectionStore):
     def add(self, *, documents, ids, metadatas=None):
         self.upsert(documents=documents, ids=ids, metadatas=metadatas)
 
-    def upsert(self, *, documents, ids, metadatas=None):
+    def upsert(self, *, documents, ids, metadatas=None, **kwargs):
         metadatas = metadatas or [{} for _ in ids]
         for doc, id_, meta in zip(documents, ids, metadatas):
             self._docs[id_] = {"document": doc, "metadata": dict(meta)}

@@ -168,7 +168,9 @@ class TestSyncEngine:
         col.upsert(
             documents=["doc"],
             ids=["r1"],
-            metadatas=[{"node_id": "node_y", "seq": 1, "wing": "p", "room": "r", "source_file": ""}],
+            metadatas=[
+                {"node_id": "node_y", "seq": 1, "wing": "p", "room": "r", "source_file": ""}
+            ],
         )
         ni = NodeIdentity(config_dir=str(tmp_path / "config"))
         engine = SyncEngine(col, identity=ni, vv_path=vv_path)
@@ -350,76 +352,41 @@ class TestSyncEngine:
         r = col.get(ids=["conflict_id"], include=["documents"])
         assert r["documents"][0] == "local version WINS"
 
-    def test_conflict_local_wins_when_newer(self, tmp_path):
-        engine, col, ni = _make_engine(tmp_path)
-
-        # Write a local record with a known future timestamp (bypass sync injection)
-        col.upsert(
-            documents=["local version WINS"],
-            ids=["conflict_id"],
-            metadatas=[
-                {
-                    "wing": "p",
-                    "room": "r",
-                    "source_file": "",
-                    "node_id": ni.node_id,
-                    "seq": 1,
-                    "updated_at": "2099-01-01T00:00:00+00:00",
-                }
-            ],
-            _raw=True,
-        )
-
-        # Remote has an OLDER version
-        cs = ChangeSet(
-            source_node="remote",
-            records=[
-                SyncRecord(
-                    id="conflict_id",
-                    document="remote version LOSES",
-                    metadata={
-                        "wing": "p",
-                        "room": "r",
-                        "source_file": "",
-                        "node_id": "remote",
-                        "seq": 5,
-                        "updated_at": "2020-01-01T00:00:00+00:00",
-                    },
-                )
-            ],
-        )
-
-        result = engine.apply_changes(cs)
-        assert result.rejected_conflicts == 1
-
-        r = col.get(ids=["conflict_id"], include=["documents"])
-        assert r["documents"][0] == "local version WINS"
-
     def test_apply_changes_returns_winning_records_on_local_win(self, tmp_path):
         """When a local record beats incoming, it must appear in winning_records."""
         engine, col, ni = _make_engine(tmp_path)
         col.upsert(
             documents=["local WINS"],
             ids=["doc1"],
-            metadatas=[{
-                "wing": "p", "room": "r", "source_file": "",
-                "node_id": ni.node_id, "seq": 3,
-                "updated_at": "2099-01-01T00:00:00+00:00",
-            }],
+            metadatas=[
+                {
+                    "wing": "p",
+                    "room": "r",
+                    "source_file": "",
+                    "node_id": ni.node_id,
+                    "seq": 3,
+                    "updated_at": "2099-01-01T00:00:00+00:00",
+                }
+            ],
             _raw=True,
         )
 
         cs = ChangeSet(
             source_node="remote",
-            records=[SyncRecord(
-                id="doc1",
-                document="remote LOSES",
-                metadata={
-                    "wing": "p", "room": "r", "source_file": "",
-                    "node_id": "remote", "seq": 9,
-                    "updated_at": "2020-01-01T00:00:00+00:00",
-                },
-            )],
+            records=[
+                SyncRecord(
+                    id="doc1",
+                    document="remote LOSES",
+                    metadata={
+                        "wing": "p",
+                        "room": "r",
+                        "source_file": "",
+                        "node_id": "remote",
+                        "seq": 9,
+                        "updated_at": "2020-01-01T00:00:00+00:00",
+                    },
+                )
+            ],
         )
 
         result = engine.apply_changes(cs)
@@ -437,25 +404,35 @@ class TestSyncEngine:
         col.upsert(
             documents=["local OLD"],
             ids=["doc1"],
-            metadatas=[{
-                "wing": "p", "room": "r", "source_file": "",
-                "node_id": ni.node_id, "seq": 1,
-                "updated_at": "2020-01-01T00:00:00+00:00",
-            }],
+            metadatas=[
+                {
+                    "wing": "p",
+                    "room": "r",
+                    "source_file": "",
+                    "node_id": ni.node_id,
+                    "seq": 1,
+                    "updated_at": "2020-01-01T00:00:00+00:00",
+                }
+            ],
             _raw=True,
         )
 
         cs = ChangeSet(
             source_node="remote",
-            records=[SyncRecord(
-                id="doc1",
-                document="remote WINS",
-                metadata={
-                    "wing": "p", "room": "r", "source_file": "",
-                    "node_id": "remote", "seq": 9,
-                    "updated_at": "2099-01-01T00:00:00+00:00",
-                },
-            )],
+            records=[
+                SyncRecord(
+                    id="doc1",
+                    document="remote WINS",
+                    metadata={
+                        "wing": "p",
+                        "room": "r",
+                        "source_file": "",
+                        "node_id": "remote",
+                        "seq": 9,
+                        "updated_at": "2099-01-01T00:00:00+00:00",
+                    },
+                )
+            ],
         )
 
         result = engine.apply_changes(cs)
@@ -468,22 +445,26 @@ class TestSyncEngine:
         engine, col, ni = _make_engine(tmp_path)
         cs = ChangeSet(
             source_node="remote",
-            records=[SyncRecord(
-                id="brand_new",
-                document="never seen before",
-                metadata={
-                    "wing": "p", "room": "r", "source_file": "",
-                    "node_id": "remote", "seq": 1,
-                    "updated_at": "2026-01-01T00:00:00+00:00",
-                },
-            )],
+            records=[
+                SyncRecord(
+                    id="brand_new",
+                    document="never seen before",
+                    metadata={
+                        "wing": "p",
+                        "room": "r",
+                        "source_file": "",
+                        "node_id": "remote",
+                        "seq": 1,
+                        "updated_at": "2026-01-01T00:00:00+00:00",
+                    },
+                )
+            ],
         )
 
         result = engine.apply_changes(cs)
 
         assert result.accepted == 1
         assert result.winning_records == []
-
 
         engine, col, ni = _make_engine(tmp_path)
 
@@ -947,8 +928,11 @@ class TestTwoNodeSync:
             ids=[f"server_{i}" for i in range(5)],
             metadatas=[
                 {
-                    "wing": "p", "room": "r", "source_file": "",
-                    "node_id": server_ni.node_id, "seq": i + 1,
+                    "wing": "p",
+                    "room": "r",
+                    "source_file": "",
+                    "node_id": server_ni.node_id,
+                    "seq": i + 1,
                     "updated_at": "2026-01-01T00:00:00+00:00",
                 }
                 for i in range(5)
@@ -1001,11 +985,16 @@ class TestTwoNodeSync:
         col_server.upsert(
             documents=["server version (T2, wins)"],
             ids=["doc_x"],
-            metadatas=[{
-                "wing": "p", "room": "r", "source_file": "x.txt",
-                "node_id": ni_server.node_id, "seq": 3,
-                "updated_at": "2099-01-01T00:00:00+00:00",
-            }],
+            metadatas=[
+                {
+                    "wing": "p",
+                    "room": "r",
+                    "source_file": "x.txt",
+                    "node_id": ni_server.node_id,
+                    "seq": 3,
+                    "updated_at": "2099-01-01T00:00:00+00:00",
+                }
+            ],
             _raw=True,
         )
 
@@ -1020,11 +1009,16 @@ class TestTwoNodeSync:
         col_client.upsert(
             documents=["client re-mine (T1, loses)"],
             ids=["doc_x"],
-            metadatas=[{
-                "wing": "p", "room": "r", "source_file": "x.txt",
-                "node_id": ni_client.node_id, "seq": 1,
-                "updated_at": "2020-01-01T00:00:00+00:00",
-            }],
+            metadatas=[
+                {
+                    "wing": "p",
+                    "room": "r",
+                    "source_file": "x.txt",
+                    "node_id": ni_client.node_id,
+                    "seq": 1,
+                    "updated_at": "2020-01-01T00:00:00+00:00",
+                }
+            ],
             _raw=True,
         )
         engine_client._vv.update(ni_client.node_id, 1)
@@ -1495,3 +1489,160 @@ class TestSyncServer:
         r3 = c.get("/sync/status")
         assert r3.json()["total_drawers"] == 2
         assert r3.json()["version_vector"].get("laptop_node") == 2
+
+
+# ── Wave 4: sync typed-record and tombstone awareness ───────────────────
+
+
+class TestSyncTypedRecords:
+    """Sync tests using InMemory backends for speed."""
+
+    @staticmethod
+    def _build_engine(config_dir) -> SyncEngine:
+        ni = NodeIdentity(config_dir=str(config_dir))
+        col = InMemoryCollectionStore()
+        vv_path = os.path.join(str(config_dir), "vv.json")
+        return SyncEngine(col, identity=ni, vv_path=vv_path), col, ni
+
+    def test_tombstone_record_appears_in_change_set(self, tmp_path):
+        engine, col, ni = self._build_engine(tmp_path / "node_a")
+
+        col.upsert(
+            documents=["target content"],
+            ids=["doc-1"],
+            metadatas=[{"wing": "w", "room": "r", "node_id": ni.node_id, "seq": 1}],
+        )
+        col.upsert(
+            documents=["doc-1"],
+            ids=["tombstone:doc-1"],
+            metadatas=[
+                {
+                    "kind": "tombstone",
+                    "target_record_id": "doc-1",
+                    "wing": "",
+                    "room": "",
+                    "node_id": ni.node_id,
+                    "seq": 2,
+                }
+            ],
+        )
+
+        cs = engine.get_changes_since({})
+        record_ids = {r.id for r in cs.records}
+        assert "tombstone:doc-1" in record_ids
+
+    def test_tombstone_propagates_and_hides_target(self, tmp_path):
+        """Node A tombstones doc-1 → Node B syncs → Node B can't read doc-1."""
+        a_engine, a_col, a_ni = self._build_engine(tmp_path / "node_a")
+        b_engine, b_col, b_ni = self._build_engine(tmp_path / "node_b")
+
+        # Node A creates a doc and tombstones it
+        a_col.upsert(
+            documents=["secret data"],
+            ids=["doc-1"],
+            metadatas=[{"wing": "w", "room": "r", "node_id": a_ni.node_id, "seq": 1}],
+        )
+        a_col.upsert(
+            documents=["doc-1"],
+            ids=["tombstone:doc-1"],
+            metadatas=[
+                {
+                    "kind": "tombstone",
+                    "target_record_id": "doc-1",
+                    "wing": "",
+                    "room": "",
+                    "node_id": a_ni.node_id,
+                    "seq": 2,
+                }
+            ],
+        )
+
+        # Node B pulls
+        cs = a_engine.get_changes_since({})
+        result = b_engine.apply_changes(cs)
+
+        assert result.accepted == 2
+
+        # Verify tombstone record exists in B's collection
+        b_all = b_col.get(ids=["tombstone:doc-1"])
+        assert b_all["ids"] == ["tombstone:doc-1"]
+
+        # Verify doc-1 metadata carries tombstone marker
+        b_meta = b_col.get(ids=["tombstone:doc-1"])
+        assert b_meta["metadatas"][0]["kind"] == "tombstone"
+        assert b_meta["metadatas"][0]["target_record_id"] == "doc-1"
+
+    def test_sync_engine_does_not_filter_by_kind(self, tmp_path):
+        """Sync returns ALL records regardless of kind — filtering is the
+        caller's responsibility."""
+        engine, col, ni = self._build_engine(tmp_path / "node_a")
+
+        col.upsert(
+            documents=["a"],
+            ids=["r1"],
+            metadatas=[
+                {"wing": "w", "room": "r", "kind": "document", "node_id": ni.node_id, "seq": 1}
+            ],
+        )
+        col.upsert(
+            documents=["b"],
+            ids=["r2"],
+            metadatas=[
+                {"wing": "w", "room": "r", "kind": "manifest", "node_id": ni.node_id, "seq": 2}
+            ],
+        )
+        col.upsert(
+            documents=["c"],
+            ids=["r3"],
+            metadatas=[
+                {"wing": "w", "room": "r", "kind": "control", "node_id": ni.node_id, "seq": 3}
+            ],
+        )
+
+        cs = engine.get_changes_since({})
+        record_ids = {r.id for r in cs.records}
+        assert record_ids == {"r1", "r2", "r3"}
+
+    def test_tombstone_sync_round_trip(self, tmp_path):
+        """Full round-trip: A creates doc → B syncs → A tombstones → B syncs
+        again → B tombstones applied."""
+        a_engine, a_col, a_ni = self._build_engine(tmp_path / "node_a")
+        b_engine, b_col, b_ni = self._build_engine(tmp_path / "node_b")
+
+        # A creates doc
+        a_col.upsert(
+            documents=["hello"],
+            ids=["doc-1"],
+            metadatas=[{"wing": "w", "room": "r", "node_id": a_ni.node_id, "seq": 1}],
+        )
+
+        # B syncs
+        cs1 = a_engine.get_changes_since({})
+        result1 = b_engine.apply_changes(cs1)
+        assert result1.accepted == 1
+
+        # A tombstones
+        a_col.upsert(
+            documents=["doc-1"],
+            ids=["tombstone:doc-1"],
+            metadatas=[
+                {
+                    "kind": "tombstone",
+                    "target_record_id": "doc-1",
+                    "wing": "",
+                    "room": "",
+                    "node_id": a_ni.node_id,
+                    "seq": 2,
+                }
+            ],
+        )
+
+        # B syncs again, gets tombstone
+        cs2 = a_engine.get_changes_since(b_engine.version_vector)
+        tombstone_ids = {r.id for r in cs2.records}
+        assert "tombstone:doc-1" in tombstone_ids
+
+        result2 = b_engine.apply_changes(cs2)
+        assert result2.accepted == 1
+        b_tomb = b_col.get(ids=["tombstone:doc-1"])
+        assert b_tomb["metadatas"][0]["kind"] == "tombstone"

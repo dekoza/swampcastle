@@ -30,7 +30,7 @@ def tools(castle):
 
 class TestToolRegistry:
     def test_22_tools_registered(self, tools):
-        assert len(tools) == 22
+        assert len(tools) == 27
 
     def test_all_have_schemas(self, tools):
         for name, tool in tools.items():
@@ -249,7 +249,7 @@ class TestJsonRpcHandler:
         assert "search" in tool_names
         assert "get_origin" in tool_names
         assert "swampcastle_search" not in tool_names
-        assert len(tool_names) == 22
+        assert len(tool_names) == 27
 
     def test_tool_call_uses_canonical_name(self, handler):
         handler(

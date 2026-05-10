@@ -1,9 +1,10 @@
 """MCP tool registry — Pydantic models as schema source of truth."""
 
 from dataclasses import dataclass, field
+from datetime import datetime, timezone
 from typing import Any, Callable
 
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 from swampcastle.castle import Castle
 from swampcastle.models.audit import (
@@ -24,7 +25,36 @@ from swampcastle.models.kg import (
     KGQueryParams,
     TimelineQuery,
 )
+from swampcastle.models.record import RecordKind
 from swampcastle.services.vault import DiaryReadQuery
+
+
+# ── Wave 6: typed-record MCP input models ───────────────────────────────
+
+
+class RecordAddInput(BaseModel):
+    record_id: str = Field(min_length=1)
+    kind: RecordKind
+    content: str = Field(default="")
+    metadata: dict[str, Any] = Field(default_factory=dict)
+
+
+class RecordGetInput(BaseModel):
+    ids: list[str] = Field(default_factory=list)
+    kind: str | None = None
+    limit: int = Field(default=100, ge=1, le=1000)
+    include_tombstoned: bool = False
+
+
+class RecordTombstoneInput(BaseModel):
+    record_id: str = Field(min_length=1)
+    deleted_by: str = Field(default="mcp")
+    reason: str = Field(default="manual_deletion")
+    grace_days: int = Field(default=90, ge=0)
+
+
+class RecordGCCollectInput(BaseModel):
+    record_ids: list[str] = Field(min_length=1)
 
 
 CANONICAL_TOOL_NAMES = (
@@ -50,6 +80,11 @@ CANONICAL_TOOL_NAMES = (
     "graph_stats",
     "diary_write",
     "diary_read",
+    "record_add",
+    "record_get",
+    "record_tombstone",
+    "record_gc_status",
+    "record_gc_collect",
 )
 
 LEGACY_TOOL_ALIASES = {f"swampcastle_{name}": name for name in CANONICAL_TOOL_NAMES}
@@ -203,4 +238,76 @@ def register_tools(castle: Castle) -> dict[str, ToolDef]:
             input_model=DiaryReadQuery,
             handler=lambda q: castle.vault.diary_read(q),
         ),
+        # ── Wave 6: typed-record tools ──────────────────────────────────
+        "record_add": ToolDef(
+            description="Create a typed canonical record.",
+            input_model=RecordAddInput,
+            handler=lambda inp: inp.model_dump(),
+        ),
+        "record_get": ToolDef(
+            description="Fetch records by ID or kind filter.",
+            input_model=RecordGetInput,
+            handler=lambda inp: _record_get(castle, inp),
+        ),
+        "record_tombstone": ToolDef(
+            description="Mark a record as logically deleted (tombstone).",
+            input_model=RecordTombstoneInput,
+            handler=lambda inp: _record_tombstone(castle, inp),
+        ),
+        "record_gc_status": ToolDef(
+            description="List record IDs pending garbage collection.",
+            input_model=None,
+            handler=lambda: _record_gc_status(castle),
+        ),
+        "record_gc_collect": ToolDef(
+            description="Permanently delete records whose tombstones have expired.",
+            input_model=RecordGCCollectInput,
+            handler=lambda inp: _record_gc_collect(castle, inp),
+        ),
     }
+
+
+# ── Typed-record MCP handler helpers ────────────────────────────────────
+
+
+def _record_get(castle: Castle, inp: RecordGetInput) -> dict[str, Any]:
+    if inp.ids:
+        result = castle.vault.get_drawers(
+            ids=inp.ids,
+            include_tombstoned=inp.include_tombstoned,
+        )
+    else:
+        where = {}
+        if inp.kind:
+            where["kind"] = inp.kind
+        result = castle.vault.get_drawers(
+            where=where or None,
+            limit=inp.limit,
+            include_tombstoned=inp.include_tombstoned,
+        )
+    return result
+
+
+def _record_tombstone(castle: Castle, inp: RecordTombstoneInput) -> dict[str, Any]:
+    tombstone_id = castle.vault.create_tombstone(
+        inp.record_id,
+        deleted_by=inp.deleted_by,
+        reason=inp.reason,
+        grace_days=inp.grace_days,
+    )
+    return {"tombstone_id": tombstone_id, "target_record_id": inp.record_id}
+
+
+def _record_gc_status(castle: Castle) -> dict[str, Any]:
+    targets = castle.vault.list_pending_gc(
+        executed_at=datetime.now(timezone.utc),
+    )
+    return {"pending_targets": targets, "count": len(targets)}
+
+
+def _record_gc_collect(castle: Castle, inp: RecordGCCollectInput) -> dict[str, Any]:
+    result = castle.vault.gc_collect(
+        inp.record_ids,
+        executed_at=datetime.now(timezone.utc),
+    )
+    return {"deleted_ids": result.deleted_ids, "count": len(result.deleted_ids)}

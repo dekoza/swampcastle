@@ -28,17 +28,27 @@ Important nuance:
 
 Each synced record carries:
 
+- `id` (record id)
 - `document`
-- `metadata`
+- `metadata` (including `kind`, `node_id`, `seq`, `updated_at`)
 - `embedding` when the source backend stores one
 
-Each stored record also includes sync metadata:
+The sync metadata (`node_id`, `seq`, `updated_at`) is used to compute version vectors
+and conflict resolution. The `kind` field is required and must be one of the typed-record
+kinds listed above.
 
-- `node_id`
-- `seq`
-- `updated_at`
+## Tombstone propagation
 
-These are used to compute version vectors and conflict resolution.
+When a record is logically deleted via tombstone, the tombstone is a separate record with
+its own `node_id` and `seq`. It appears in change sets just like any other record.
+
+Key properties:
+- tombstone records are always included in change sets (no kind-based filtering)
+- applying a synced tombstone locally hides the target record from normal reads
+- the target record is not physically deleted until garbage collection runs on the node
+  that owns it; the tombstone merely signals logical deletion to downstream nodes
+- Patsy's subset-aware sync layer (`PortableSubsetResolver`) handles export-history-aware
+  tombstone propagation so tombstones reach only nodes that previously received the target
 
 ## Version vectors
 

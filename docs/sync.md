@@ -50,6 +50,45 @@ Key properties:
 - Patsy's subset-aware sync layer (`PortableSubsetResolver`) handles export-history-aware
   tombstone propagation so tombstones reach only nodes that previously received the target
 
+## Node-status gating
+
+SwampCastle tracks node lifecycle state via `NodeStatus` (active / revoked / wipe_required).
+The sync server enforces node status at the edge: revoked nodes receive a structured
+`409 Conflict` response before any data exchange occurs.
+
+Status is stored in a `NodeStatusStore` (InMemory or JsonFile-backed) and is written
+by upstream orchestration layers (e.g. Patsy's `NodeRegistryService.revoke_node()`).
+
+### Behavior per endpoint
+
+| Endpoint | Active node | Revoked / wipe_required node |
+|---|---|---|
+| `/sync/status` | Returns version vector and drawer count | `409` with `{"status": "wipe_required", "node_id": "...", "reason": "..."}` |
+| `/sync/push` | Accepts pushed changes | `409` with structured error, no data accepted |
+| `/sync/pull` | Returns new changes | `409` with structured error, no changes returned |
+| `/health` | `200 OK` | `200 OK` (unaffected — load-balancer probes) |
+
+### Example response
+
+```json
+HTTP/1.1 409 Conflict
+Content-Type: application/json
+
+{
+  "status": "wipe_required",
+  "node_id": "laptop-edge",
+  "reason": "Node laptop-edge was revoked. Run edge-wipe and re-enroll."
+}
+```
+
+### Patsy integration
+
+When Patsy's `NodeRegistryService.revoke_node()` fires, it additionally sets the node
+status in SwampCastle's `NodeStatusStore`. The sync server then enforces the status
+check before any push/pull data exchange.
+
+See Patsy's `docs/node-identity-and-capability-tokens.md` for the full revocation flow.
+
 ## Version vectors
 
 Version vectors are persisted locally at:

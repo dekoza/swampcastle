@@ -26,10 +26,19 @@ from swampcastle.wal import WalWriter
 class Castle:
     """Sync castle context. Owns all services and their dependencies."""
 
-    def __init__(self, settings: CastleSettings, factory: StorageFactory):
+    def __init__(
+        self,
+        settings: CastleSettings,
+        factory: StorageFactory,
+        *,
+        skip_embedder_check: bool = False,
+    ):
         self._settings = settings
         self._factory = factory
-        self._collection = factory.open_collection(settings.collection_name)
+        self._collection = factory.open_collection(
+            settings.collection_name,
+            skip_embedder_check=skip_embedder_check,
+        )
         self._graph_store = factory.open_graph()
 
         wal = WalWriter(settings.wal_path)

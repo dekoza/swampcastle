@@ -34,6 +34,25 @@ class TestCastleLifecycle:
             assert c.graph is not None
             assert c.kg_proposals is not None
 
+    def test_skip_embedder_check_propagated_to_factory(self, settings, factory, monkeypatch):
+        calls = []
+        real_open = factory.open_collection
+
+        def spy_open_collection(name, *, skip_embedder_check=False):
+            calls.append(skip_embedder_check)
+            return real_open(name)
+
+        monkeypatch.setattr(factory, "open_collection", spy_open_collection)
+
+        Castle(settings, factory, skip_embedder_check=True)
+        assert calls == [True]
+
+        Castle(settings, factory, skip_embedder_check=False)
+        assert calls == [True, False]
+
+        Castle(settings, factory)
+        assert calls == [True, False, False]
+
     def test_services_accessible(self, castle):
         assert castle.catalog is not None
         assert castle.audit is not None

@@ -25,7 +25,18 @@ Reading
 | Prior discussions, decisions, context | swampcastle_search | query = short keywords only, not sentences or prompts |
 | Entity facts and relationships | swampcastle_kg_query | Query by entity name; use as_of for point-in-time |
 | Fact timeline | swampcastle_kg_timeline | Chronological view of an entity's history |
+| KG overview | swampcastle_kg_stats | Entities, triples, relationship types |
 | Castle structure | swampcastle_status, swampcastle_get_taxonomy | Use on first interaction or when unsure where to look |
+| Wings / rooms | swampcastle_list_wings, swampcastle_list_rooms | Drawer counts per wing/room |
+| Graph traversal | swampcastle_traverse, swampcastle_find_tunnels | Walk rooms, find cross-wing bridges |
+| Graph stats | swampcastle_graph_stats | Connectivity overview |
+| Source origins | swampcastle_get_origin | Read manifest by origin_id or source_file |
+| Curation data | swampcastle_get_curation | Local audit-overlay curation |
+| Catalog cards | swampcastle_list_catalog_cards | Rebuildable derived catalog for a wing |
+| Diary entries | swampcastle_diary_read | Read agent's recent diary entries |
+| Typed records | swampcastle_record_get | Fetch by ID, kind filter, or with tombstone visibility |
+| GC status | swampcastle_record_gc_status | List record IDs pending garbage collection |
+| AAAK dialect | swampcastle_get_aaak_spec | Compressed symbolic format reference |
 
 Writing
 
@@ -34,12 +45,17 @@ Persist only when the workflow explicitly calls for it. Choose the right tool:
 | Tool | What to store | Example |
 |---|---|---|
 | swampcastle_add_drawer | Long-form content: decisions, discussions, specs | "We chose LanceDB because…" |
+| swampcastle_delete_drawer | Remove a drawer by ID | — |
 | swampcastle_kg_add | Structured facts (subject → predicate → object) | ("SwampCastle", "uses", "LanceDB") |
+| swampcastle_kg_invalidate | Mark a fact as no longer true | — |
 | swampcastle_diary_write | Agent session notes and reflections | End-of-session summary |
+| swampcastle_record_add | Create a typed canonical record | kind=document, content=… |
 
 Before writing:
 - Duplicates: call swampcastle_check_duplicate before swampcastle_add_drawer.
-- Stale facts: call swampcastle_kg_invalidate before adding a replacement via swampcastle_kg_add."""
+- Stale facts: call swampcastle_kg_invalidate before adding a replacement via swampcastle_kg_add.
+- Logical deletion: call swampcastle_record_tombstone to mark a record deleted (grace period applies).
+- Permanent deletion: call swampcastle_record_gc_collect after the tombstone grace period expires."""
 
 AAAK_SPEC = """AAAK is a compressed memory dialect that SwampCastle uses for efficient storage.
 It is designed to be readable by both humans and LLMs without decoding.

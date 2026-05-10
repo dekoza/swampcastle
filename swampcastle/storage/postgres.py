@@ -1063,7 +1063,9 @@ class PostgresStorageFactory(StorageFactory):
             self._embedder = get_embedder()
         return self._embedder
 
-    def open_collection(self, name: str) -> PostgresCollectionStore:
+    def open_collection(
+        self, name: str, *, skip_embedder_check: bool = False
+    ) -> PostgresCollectionStore:
         return PostgresCollectionStore(
             self._pool,
             name,

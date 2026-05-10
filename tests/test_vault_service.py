@@ -322,3 +322,46 @@ class TestTombstoneLifecycle:
         svc.gc_collect([r.drawer_id], executed_at=future)
         ops = [e["operation"] for e in wal.read_entries()]
         assert "gc_collect" in ops
+
+
+# ── Reforge ───────────────────────────────────────────────────────────
+
+
+class TestReforge:
+    def test_reforge_all_drawers(self, svc, col):
+        for i in range(5):
+            svc.add_drawer(AddDrawerCommand(wing="w", room="r", content=f"doc {i}"))
+        assert col.count() == 5
+
+        count = svc.reforge()
+        assert count == 5
+        assert col.count() == 5
+
+    def test_reforge_filtered_by_wing(self, svc, col):
+        svc.add_drawer(AddDrawerCommand(wing="alpha", room="r", content="a"))
+        svc.add_drawer(AddDrawerCommand(wing="beta", room="r", content="b"))
+        count = svc.reforge(wing="alpha")
+        assert count == 1
+
+    def test_reforge_dry_run_returns_count_without_mutating(self, svc, col):
+        for i in range(3):
+            svc.add_drawer(AddDrawerCommand(wing="w", room="r", content=f"doc {i}"))
+        count = svc.reforge(dry_run=True)
+        assert count == 3
+
+    def test_reforge_progress_callback(self, svc, col):
+        for i in range(5):
+            svc.add_drawer(AddDrawerCommand(wing="w", room="r", content=f"doc {i}"))
+        progress_calls = []
+
+        def cb(processed, total):
+            progress_calls.append((processed, total))
+
+        svc.reforge(batch_size=2, progress_callback=cb)
+        # Should receive: (0, 5), (2, 5), (4, 5), (5, 5)
+        assert progress_calls[0] == (0, 5)
+        assert progress_calls[-1] == (5, 5)
+        assert len(progress_calls) >= 2
+
+    def test_reforge_no_drawers(self, svc):
+        assert svc.reforge() == 0

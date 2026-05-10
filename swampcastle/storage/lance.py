@@ -116,7 +116,16 @@ class LanceCollection(CollectionStore):
     }
     INTERNAL_FIELDS = {"_distance", "_relevance_score"}
 
-    def __init__(self, db, table_name: str, embedder, sync_identity=None, palace_path=None):
+    def __init__(
+        self,
+        db,
+        table_name: str,
+        embedder,
+        sync_identity=None,
+        palace_path=None,
+        *,
+        skip_embedder_check: bool = False,
+    ):
         self._db = db
         self._table_name = table_name
         self._embedder = embedder
@@ -127,7 +136,8 @@ class LanceCollection(CollectionStore):
         if table_name in self._list_table_names():
             self._table = db.open_table(table_name)
             self._check_dimension()
-            self._check_embedder_contract()
+            if not skip_embedder_check:
+                self._check_embedder_contract()
 
     def _embedder_meta_path(self) -> str | None:
         if self._palace_path is None:
@@ -253,12 +263,25 @@ class LanceCollection(CollectionStore):
                 f"Run 'swampcastle reforge' to re-embed with the new model."
             )
 
+    def _table_schema_columns(self) -> set[str] | None:
+        """Return the set of column names in the existing table schema.
+
+        Returns ``None`` when the table has not been opened yet (new table).
+        """
+        if self._table is None:
+            return None
+        try:
+            return {f.name for f in self._table.schema}
+        except Exception:
+            return None
+
     def _to_records(self, documents, ids, metadatas, embeddings=None):
         provided_embeddings = embeddings is not None
         if embeddings is None:
             embeddings = self._embedder.embed(documents)
 
         active_contract = self._active_embedder_contract()
+        schema_cols = self._table_schema_columns()
         records = []
         for doc, id_, meta, vec in zip(documents, ids, metadatas, embeddings):
             meta_with_model = dict(meta)
@@ -288,6 +311,11 @@ class LanceCollection(CollectionStore):
                 "source_kind": str(meta.get("source_kind", "")),
                 "metadata_json": json.dumps(meta_with_model, default=str),
             }
+            # Filter to columns that exist in the table schema so that upserts
+            # against legacy tables (created before new columns were added)
+            # do not fail with "Field 'x' not found in target schema".
+            if schema_cols is not None:
+                record = {k: v for k, v in record.items() if k in schema_cols}
             records.append(record)
         return records
 
@@ -516,6 +544,8 @@ class LanceBackend:
         create: bool = True,
         embedder=None,
         sync_identity=None,
+        *,
+        skip_embedder_check: bool = False,
     ):
         import lancedb
 
@@ -541,6 +571,7 @@ class LanceBackend:
             embedder,
             sync_identity=sync_identity,
             palace_path=palace_path,
+            skip_embedder_check=skip_embedder_check,
         )
 
 
@@ -553,12 +584,13 @@ class LocalStorageFactory(StorageFactory):
         self._backend = LanceBackend()
         self._graph = None
 
-    def open_collection(self, name: str) -> LanceCollection:
+    def open_collection(self, name: str, *, skip_embedder_check: bool = False) -> LanceCollection:
         return self._backend.get_collection(
             self._castle_path,
             name,
             create=True,
             embedder=self._embedder,
+            skip_embedder_check=skip_embedder_check,
         )
 
     def open_graph(self):

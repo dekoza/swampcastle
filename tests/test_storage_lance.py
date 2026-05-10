@@ -144,3 +144,248 @@ class TestLanceCollection:
         )
         docs = col.get(ids=["r1"])
         assert docs["metadatas"][0]["data_class"] == "financial"
+
+    def test_skip_embedder_check_bypasses_fingerprint_mismatch(self, tmp_path):
+        """Reforge must be able to open a collection with a mismatched embedder."""
+
+        class FakeEmbedderA:
+            model_name = "same-dim"
+            dimension = 384
+            fingerprint = {
+                "backend": "fake-a",
+                "model_name": "same-dim",
+                "dimension": 384,
+            }
+
+            def embed(self, texts):
+                return [[0.1] * 384 for _ in texts]
+
+        class FakeEmbedderB:
+            model_name = "same-dim"
+            dimension = 384
+            fingerprint = {
+                "backend": "fake-b",
+                "model_name": "same-dim",
+                "dimension": 384,
+            }
+
+            def embed(self, texts):
+                return [[0.2] * 384 for _ in texts]
+
+        backend = LanceBackend()
+        palace = str(tmp_path / "palace")
+        col = backend.get_collection(palace, "chests", embedder=FakeEmbedderA())
+        col.upsert(
+            documents=["seed"],
+            ids=["s1"],
+            metadatas=[{"wing": "t", "room": "r", "source_file": ""}],
+        )
+
+        # Without the flag, opening with a different fingerprint raises
+        with pytest.raises(RuntimeError, match="fingerprint"):
+            backend.get_collection(palace, "chests", embedder=FakeEmbedderB())
+
+        # With skip_embedder_check=True, it opens fine
+        col2 = backend.get_collection(
+            palace, "chests", embedder=FakeEmbedderB(), skip_embedder_check=True
+        )
+        assert col2.count() == 1
+
+    def test_skip_embedder_check_allows_reforge_path(self, tmp_path):
+        """Simulate the full reforge flow: open with skip, read drawers, upsert with new embedder."""
+
+        class FakeEmbedderA:
+            model_name = "test"
+            dimension = 384
+            fingerprint = {"backend": "fake-a", "model_name": "test", "dimension": 384}
+
+            def embed(self, texts):
+                return [[0.1] * 384 for _ in texts]
+
+        class FakeEmbedderB:
+            model_name = "test"
+            dimension = 384
+            fingerprint = {"backend": "fake-b", "model_name": "test", "dimension": 384}
+
+            def embed(self, texts):
+                return [[0.2] * 384 for _ in texts]
+
+        backend = LanceBackend()
+        palace = str(tmp_path / "palace")
+        col = backend.get_collection(palace, "chests", embedder=FakeEmbedderA())
+        col.upsert(
+            documents=["doc"],
+            ids=["d1"],
+            metadatas=[{"wing": "w", "room": "r", "source_file": ""}],
+        )
+
+        col2 = backend.get_collection(
+            palace, "chests", embedder=FakeEmbedderB(), skip_embedder_check=True
+        )
+        results = col2.get(ids=["d1"], include=["documents", "metadatas"])
+        assert results["documents"] == ["doc"]
+
+        # Re-embed with the new model (this is what reforge does)
+        col2.upsert(
+            ids=results["ids"],
+            documents=results["documents"],
+            metadatas=results["metadatas"],
+        )
+        # Upsert succeeds because it uses the new embedder
+        assert col2.count() == 1
+
+    def test_upsert_on_legacy_schema_without_new_columns(self, tmp_path):
+        """Tables created before Wave 1 / Wave 6 lack kind/data_class/trust_class/source_kind.
+
+        Upsert must not fail when the target schema is missing these columns.
+        """
+        import lancedb
+        import pyarrow as pa
+
+        class FakeEmbedder:
+            model_name = "legacy"
+            dimension = 384
+
+            def embed(self, texts):
+                return [[0.0] * 384 for _ in texts]
+
+        palace = str(tmp_path / "palace")
+        db = lancedb.connect(palace)
+
+        # Create a table with the pre-Wave-1 schema (no kind, data_class, etc.)
+        old_schema = pa.schema(
+            [
+                pa.field("id", pa.string()),
+                pa.field("document", pa.string()),
+                pa.field("vector", pa.list_(pa.float32(), 384)),
+                pa.field("wing", pa.string()),
+                pa.field("room", pa.string()),
+                pa.field("source_file", pa.string()),
+                pa.field("node_id", pa.string()),
+                pa.field("seq", pa.int64()),
+                pa.field("metadata_json", pa.string()),
+            ]
+        )
+        db.create_table("chests", schema=old_schema)
+
+        # Open with current code and upsert — must not raise
+        col = LanceBackend().get_collection(palace, "chests", embedder=FakeEmbedder())
+        col.upsert(
+            documents=["doc"],
+            ids=["d1"],
+            metadatas=[{"wing": "w", "room": "r", "source_file": ""}],
+        )
+        assert col.count() == 1
+
+        # Overwrite existing record (merge_insert path)
+        col.upsert(
+            documents=["updated"],
+            ids=["d1"],
+            metadatas=[{"wing": "w", "room": "r", "source_file": ""}],
+        )
+        r = col.get(ids=["d1"])
+        assert r["documents"] == ["updated"]
+
+    def test_upsert_adds_new_columns_on_legacy_schema(self, tmp_path):
+        """When the table lacks new columns, upsert should still work and get() should return
+        sensible defaults for missing metadata fields."""
+        import lancedb
+        import pyarrow as pa
+
+        class FakeEmbedder:
+            model_name = "legacy"
+            dimension = 384
+
+            def embed(self, texts):
+                return [[0.0] * 384 for _ in texts]
+
+        palace = str(tmp_path / "palace")
+        db = lancedb.connect(palace)
+
+        old_schema = pa.schema(
+            [
+                pa.field("id", pa.string()),
+                pa.field("document", pa.string()),
+                pa.field("vector", pa.list_(pa.float32(), 384)),
+                pa.field("wing", pa.string()),
+                pa.field("room", pa.string()),
+                pa.field("source_file", pa.string()),
+                pa.field("node_id", pa.string()),
+                pa.field("seq", pa.int64()),
+                pa.field("metadata_json", pa.string()),
+            ]
+        )
+        db.create_table("chests", schema=old_schema)
+
+        col = LanceBackend().get_collection(palace, "chests", embedder=FakeEmbedder())
+        col.upsert(
+            documents=["doc"],
+            ids=["d1"],
+            metadatas=[{"wing": "w", "room": "r", "source_file": ""}],
+        )
+
+        r = col.get(ids=["d1"], include=["metadatas"])
+        meta = r["metadatas"][0]
+        assert meta["wing"] == "w"
+        # Missing columns should return empty string (the default in _to_records)
+        assert meta.get("kind", "") == ""
+        assert meta.get("data_class", "") == ""
+        assert meta.get("trust_class", "") == ""
+        assert meta.get("source_kind", "") == ""
+
+    def test_parallel_reforge_writes_new_embedder_metadata(self, tmp_path):
+        """When embeddings are pre-computed and passed to upsert, _to_records must
+        still write the new embedder model/fingerprint via setdefault."""
+
+        class FakeEmbedderA:
+            model_name = "old-model"
+            dimension = 384
+            fingerprint = {"backend": "fake-a", "model_name": "old-model"}
+
+            def embed(self, texts):
+                return [[0.1] * 384 for _ in texts]
+
+        class FakeEmbedderB:
+            model_name = "new-model"
+            dimension = 384
+            fingerprint = {"backend": "fake-b", "model_name": "new-model"}
+
+            def embed(self, texts):
+                return [[0.2] * 384 for _ in texts]
+
+        backend = LanceBackend()
+        palace = str(tmp_path / "palace")
+        col = backend.get_collection(palace, "chests", embedder=FakeEmbedderA())
+        col.upsert(
+            documents=["seed"],
+            ids=["s1"],
+            metadatas=[{"wing": "t", "room": "r", "source_file": ""}],
+        )
+
+        # Old metadata should be present
+        old_meta = col.get(ids=["s1"], include=["metadatas"])["metadatas"][0]
+        assert old_meta.get("embedding_model") == "old-model"
+
+        # Reopen with new embedder, skip contract check
+        col2 = backend.get_collection(
+            palace, "chests", embedder=FakeEmbedderB(), skip_embedder_check=True
+        )
+
+        # Simulate what parallel reforge does: strip old metadata, embed, upsert
+        results = col2.get(ids=["s1"], include=["documents", "metadatas"])
+        docs = results["documents"]
+        metas = results["metadatas"]
+        for meta in metas:
+            meta.pop("embedding_model", None)
+            meta.pop("embedding_fingerprint", None)
+
+        embeddings = col2._embedder.embed(docs)
+        col2.upsert(ids=["s1"], documents=docs, metadatas=metas, embeddings=embeddings)
+
+        # New metadata should be written via setdefault in _to_records
+        new_meta = col2.get(ids=["s1"], include=["metadatas"])["metadatas"][0]
+        assert new_meta.get("embedding_model") == "new-model"
+        fp = new_meta.get("embedding_fingerprint")
+        assert fp is not None
+        assert fp["backend"] == "fake-b"
+        assert fp["model_name"] == "new-model"

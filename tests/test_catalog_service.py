@@ -1,5 +1,7 @@
 """Tests for CatalogService."""
 
+import re
+
 import pytest
 
 from swampcastle.services.catalog import CatalogService
@@ -50,6 +52,15 @@ class TestStatus:
         assert "swampcastle_kg_invalidate" in protocol
         assert "ON WAKE-UP" not in protocol
         assert "This protocol ensures" not in protocol
+
+    def test_protocol_documents_every_canonical_tool(self, svc):
+        """Every registered MCP tool must appear in the herald protocol."""
+        from swampcastle.mcp.tools import CANONICAL_TOOL_NAMES
+
+        protocol = svc.status().protocol
+        found = set(re.findall(r"swampcastle_(\w+)", protocol))
+        missing = set(CANONICAL_TOOL_NAMES) - found
+        assert not missing, f"Missing from CASTLE_PROTOCOL: {sorted(missing)}"
 
 
 class TestListWings:

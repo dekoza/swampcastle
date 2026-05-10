@@ -25,7 +25,7 @@ class StorageFactory(ABC):
     """Creates storage backends for a Castle instance."""
 
     @abstractmethod
-    def open_collection(self, name: str) -> CollectionStore:
+    def open_collection(self, name: str, *, skip_embedder_check: bool = False) -> CollectionStore:
         raise NotImplementedError
 
     @abstractmethod

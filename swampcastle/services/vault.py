@@ -735,6 +735,65 @@ class VaultService:
             phase_progress_callback=phase_progress_callback,
         )
 
+    def _iter_reforge_batches(
+        self,
+        where: dict | None,
+        batch_size: int,
+    ):
+        """Stream matching drawers in fixed-size batches.
+
+        Keeps peak memory bounded regardless of collection size.
+        """
+        offset = 0
+        while True:
+            results = self._col.get(
+                where=where or {},
+                include=["documents", "metadatas"],
+                limit=batch_size,
+                offset=offset,
+            )
+            ids = results.get("ids", [])
+            if not ids:
+                break
+            yield ids, results.get("documents", []), results.get("metadatas", [])
+            if len(ids) < batch_size:
+                break
+            offset += batch_size
+
+    def _count_drawers(self, where: dict | None) -> int:
+        """Fast count of drawers matching the where clause."""
+        if not where:
+            return self._col.count()
+
+        total = 0
+        offset = 0
+        while True:
+            batch = self._col.get(where=where, include=["ids"], limit=10_000, offset=offset)
+            n = len(batch.get("ids", []))
+            if n == 0:
+                break
+            total += n
+            if n < 10_000:
+                break
+            offset += 10_000
+        return total
+
+    def _reforge_sequential(
+        self,
+        where: dict | None,
+        total: int,
+        batch_size: int,
+        progress_callback: Callable[[int, int], None] | None,
+    ) -> int:
+        """Single-threaded re-embed path."""
+        processed = 0
+        for ids, docs, metas in self._iter_reforge_batches(where, batch_size):
+            self._col.upsert(ids=ids, documents=docs, metadatas=metas)
+            processed += len(ids)
+            if progress_callback is not None:
+                progress_callback(processed, total)
+        return total
+
     def reforge(
         self,
         wing: str = None,
@@ -745,7 +804,8 @@ class VaultService:
     ) -> int:
         """Re-embed all drawers using the currently configured embedding model.
 
-        Useful when switching to a different model (e.g. ST -> ONNX or ONNX -> Ollama).
+        Drawers are streamed in fixed-size batches so peak memory stays bounded
+        regardless of collection size.
 
         Args:
             batch_size: Optional override for re-embed write batch size. If omitted,
@@ -762,13 +822,9 @@ class VaultService:
         if room:
             where["room"] = room
 
-        results = self._col.get(where=where, include=["documents", "metadatas"])
-        ids = results.get("ids", [])
-        documents = results.get("documents", [])
-        metadatas = results.get("metadatas", [])
-        total = len(ids)
+        total = self._count_drawers(where or None)
 
-        if not ids:
+        if total == 0:
             return 0
 
         if progress_callback is not None:
@@ -786,14 +842,9 @@ class VaultService:
             adaptive_batch_size = (total + target_updates - 1) // target_updates
             effective_batch_size = min(total, max(_REFORGE_MIN_BATCH_SIZE, adaptive_batch_size))
 
-        for start in range(0, total, effective_batch_size):
-            end = min(start + effective_batch_size, total)
-            self._col.upsert(
-                ids=ids[start:end],
-                documents=documents[start:end],
-                metadatas=metadatas[start:end],
-            )
-            if progress_callback is not None:
-                progress_callback(end, total)
-
-        return total
+        return self._reforge_sequential(
+            where or None,
+            total,
+            effective_batch_size,
+            progress_callback,
+        )

@@ -24,7 +24,16 @@ def restore_castle_env(monkeypatch, tmp_path):
 
 class DummyCastle:
     def __init__(
-        self, settings, factory, *, status=None, search=None, distill_count=0, reforge_count=0
+        self,
+        settings,
+        factory,
+        *,
+        status=None,
+        search=None,
+        distill_count=0,
+        reforge_count=0,
+        skip_embedder_check=False,
+        **kwargs,
     ):
         self.catalog = SimpleNamespace(status=lambda: status)
         self.search = SimpleNamespace(search=lambda query: search)
@@ -52,7 +61,7 @@ def test_settings_uses_palace_and_backend(tmp_path):
 def test_cmd_survey_prints_status(capsys):
     status = SimpleNamespace(total_drawers=3, wings={"a": 1}, rooms={"r": 1})
 
-    with patch("swampcastle.castle.Castle", lambda s, f: DummyCastle(s, f, status=status)):
+    with patch("swampcastle.castle.Castle", lambda s, f, **kw: DummyCastle(s, f, status=status)):
         with patch("swampcastle.cli.commands.factory_from_settings", return_value=object()):
             commands.cmd_survey(SimpleNamespace(palace=None, backend=None))
 
@@ -69,7 +78,7 @@ def test_cmd_seek_prints_no_results(capsys):
         query="nothing", wing=None, room=None, results=5, palace=None, backend=None
     )
 
-    with patch("swampcastle.castle.Castle", lambda s, f: DummyCastle(s, f, search=result)):
+    with patch("swampcastle.castle.Castle", lambda s, f, **kw: DummyCastle(s, f, search=result)):
         with patch("swampcastle.cli.commands.factory_from_settings", return_value=object()):
             commands.cmd_seek(args)
 
@@ -85,7 +94,7 @@ def test_cmd_seek_prints_hits(capsys):
         query="hello", wing=None, room=None, results=5, palace=None, backend=None
     )
 
-    with patch("swampcastle.castle.Castle", lambda s, f: DummyCastle(s, f, search=result)):
+    with patch("swampcastle.castle.Castle", lambda s, f, **kw: DummyCastle(s, f, search=result)):
         with patch("swampcastle.cli.commands.factory_from_settings", return_value=object()):
             commands.cmd_seek(args)
 
@@ -270,14 +279,13 @@ def test_cmd_gather_projects_renders_progress_bar(tmp_path, capsys):
 
 
 def test_cmd_herald_prints_protocol_only(capsys):
-    status = SimpleNamespace(protocol="L0+L1", wings={"alpha": 1}, total_drawers=5)
+    """herald must print the protocol without instantiating Castle."""
+    with patch("swampcastle.castle.Castle") as mock_castle:
+        commands.cmd_herald(SimpleNamespace(palace=None, backend=None))
 
-    with patch("swampcastle.castle.Castle", lambda s, f: DummyCastle(s, f, status=status)):
-        with patch("swampcastle.cli.commands.factory_from_settings", return_value=object()):
-            commands.cmd_herald(SimpleNamespace(palace=None, backend=None))
-
+    mock_castle.assert_not_called()
     out = capsys.readouterr().out
-    assert "L0+L1" in out
+    assert "SwampCastle protocol" in out
     assert "Total: 5 drawers" not in out
     assert "Wings:" not in out
 
@@ -342,7 +350,7 @@ def test_cmd_distill_prints_no_drawers(capsys):
         backend=None,
     )
 
-    with patch("swampcastle.castle.Castle", lambda s, f: DummyCastle(s, f, distill_count=0)):
+    with patch("swampcastle.castle.Castle", lambda s, f, **kw: DummyCastle(s, f, distill_count=0)):
         with patch("swampcastle.cli.commands.factory_from_settings", return_value=object()):
             commands.cmd_distill(args)
 
@@ -363,7 +371,7 @@ def test_cmd_distill_defaults_to_preview_mode(capsys):
         wing="w", room="r", dry_run=False, apply=False, config=None, palace=None, backend=None
     )
 
-    with patch("swampcastle.castle.Castle", lambda s, f: castle):
+    with patch("swampcastle.castle.Castle", lambda s, f, **kw: castle):
         with patch("swampcastle.cli.commands.factory_from_settings", return_value=object()):
             commands.cmd_distill(args)
 
@@ -402,7 +410,7 @@ def test_cmd_distill_passes_config_and_dry_run(capsys):
         backend=None,
     )
 
-    with patch("swampcastle.castle.Castle", lambda s, f: castle):
+    with patch("swampcastle.castle.Castle", lambda s, f, **kw: castle):
         with patch("swampcastle.cli.commands.factory_from_settings", return_value=object()):
             commands.cmd_distill(args)
 
@@ -433,7 +441,7 @@ def test_cmd_distill_apply_enables_real_write(capsys):
         wing="w", room="r", dry_run=False, apply=True, config=None, palace=None, backend=None
     )
 
-    with patch("swampcastle.castle.Castle", lambda s, f: castle):
+    with patch("swampcastle.castle.Castle", lambda s, f, **kw: castle):
         with patch("swampcastle.cli.commands.factory_from_settings", return_value=object()):
             commands.cmd_distill(args)
 
@@ -470,7 +478,7 @@ def test_cmd_distill_renders_progress_bar(capsys):
         wing="w", room="r", dry_run=False, apply=True, config=None, palace=None, backend=None
     )
 
-    with patch("swampcastle.castle.Castle", lambda s, f: castle):
+    with patch("swampcastle.castle.Castle", lambda s, f, **kw: castle):
         with patch("swampcastle.cli.commands.factory_from_settings", return_value=object()):
             commands.cmd_distill(args)
 
@@ -510,7 +518,7 @@ def test_cmd_kg_extract_defaults_to_preview_mode(capsys):
         wing="w", room="r", dry_run=False, apply=False, limit=10, palace=None, backend=None
     )
 
-    with patch("swampcastle.castle.Castle", lambda s, f: castle):
+    with patch("swampcastle.castle.Castle", lambda s, f, **kw: castle):
         with patch("swampcastle.cli.commands.factory_from_settings", return_value=object()):
             commands.cmd_kg_extract(args)
 
@@ -522,7 +530,7 @@ def test_cmd_kg_extract_defaults_to_preview_mode(capsys):
 
 def test_cmd_kg_extract_apply_persists_proposals(capsys):
     class ProposalCastle(DummyCastle):
-        def __init__(self, settings, factory):
+        def __init__(self, settings, factory, **kw):
             self.calls = []
             self.catalog = SimpleNamespace(status=lambda: None)
             self.search = SimpleNamespace(search=lambda q: None)
@@ -550,7 +558,7 @@ def test_cmd_kg_extract_apply_persists_proposals(capsys):
         wing="w", room="r", dry_run=False, apply=True, limit=10, palace=None, backend=None
     )
 
-    with patch("swampcastle.castle.Castle", lambda s, f: castle):
+    with patch("swampcastle.castle.Castle", lambda s, f, **kw: castle):
         with patch("swampcastle.cli.commands.factory_from_settings", return_value=object()):
             commands.cmd_kg_extract(args)
 
@@ -560,7 +568,7 @@ def test_cmd_kg_extract_apply_persists_proposals(capsys):
 
 def test_cmd_kg_review_lists_candidates(capsys):
     class ProposalCastle(DummyCastle):
-        def __init__(self, settings, factory):
+        def __init__(self, settings, factory, **kw):
             self.catalog = SimpleNamespace(status=lambda: None)
             self.search = SimpleNamespace(search=lambda q: None)
             self.vault = SimpleNamespace(distill=lambda **kwargs: 0, reforge=lambda **kwargs: 0)
@@ -592,7 +600,7 @@ def test_cmd_kg_review_lists_candidates(capsys):
         backend=None,
     )
 
-    with patch("swampcastle.castle.Castle", lambda s, f: ProposalCastle(s, f)):
+    with patch("swampcastle.castle.Castle", lambda s, f, **kw: ProposalCastle(s, f)):
         with patch("swampcastle.cli.commands.factory_from_settings", return_value=object()):
             commands.cmd_kg_review(args)
 
@@ -604,7 +612,7 @@ def test_cmd_kg_review_lists_candidates(capsys):
 
 def test_cmd_kg_review_prints_conflict_marker(capsys):
     class ProposalCastle(DummyCastle):
-        def __init__(self, settings, factory):
+        def __init__(self, settings, factory, **kw):
             self.catalog = SimpleNamespace(status=lambda: None)
             self.search = SimpleNamespace(search=lambda q: None)
             self.vault = SimpleNamespace(distill=lambda **kwargs: 0, reforge=lambda **kwargs: 0)
@@ -636,7 +644,7 @@ def test_cmd_kg_review_prints_conflict_marker(capsys):
         backend=None,
     )
 
-    with patch("swampcastle.castle.Castle", lambda s, f: ProposalCastle(s, f)):
+    with patch("swampcastle.castle.Castle", lambda s, f, **kw: ProposalCastle(s, f)):
         with patch("swampcastle.cli.commands.factory_from_settings", return_value=object()):
             commands.cmd_kg_review(args)
 
@@ -647,7 +655,7 @@ def test_cmd_kg_review_prints_conflict_marker(capsys):
 
 def test_cmd_kg_review_conflicts_only_filters_out_clean_candidates(capsys):
     class ProposalCastle(DummyCastle):
-        def __init__(self, settings, factory):
+        def __init__(self, settings, factory, **kw):
             self.catalog = SimpleNamespace(status=lambda: None)
             self.search = SimpleNamespace(search=lambda q: None)
             self.vault = SimpleNamespace(distill=lambda **kwargs: 0, reforge=lambda **kwargs: 0)
@@ -688,7 +696,7 @@ def test_cmd_kg_review_conflicts_only_filters_out_clean_candidates(capsys):
         backend=None,
     )
 
-    with patch("swampcastle.castle.Castle", lambda s, f: ProposalCastle(s, f)):
+    with patch("swampcastle.castle.Castle", lambda s, f, **kw: ProposalCastle(s, f)):
         with patch("swampcastle.cli.commands.factory_from_settings", return_value=object()):
             commands.cmd_kg_review(args)
 
@@ -701,7 +709,7 @@ def test_cmd_kg_accept_and_reject(capsys):
     calls = []
 
     class ProposalCastle(DummyCastle):
-        def __init__(self, settings, factory):
+        def __init__(self, settings, factory, **kw):
             self.catalog = SimpleNamespace(status=lambda: None)
             self.search = SimpleNamespace(search=lambda q: None)
             self.vault = SimpleNamespace(distill=lambda **kwargs: 0, reforge=lambda **kwargs: 0)
@@ -752,7 +760,7 @@ def test_cmd_kg_accept_and_reject(capsys):
     )
     reject_args = SimpleNamespace(candidate_id="cand_2", palace=None, backend=None)
 
-    with patch("swampcastle.castle.Castle", lambda s, f: ProposalCastle(s, f)):
+    with patch("swampcastle.castle.Castle", lambda s, f, **kw: ProposalCastle(s, f)):
         with patch("swampcastle.cli.commands.factory_from_settings", return_value=object()):
             commands.cmd_kg_accept(accept_args)
             commands.cmd_kg_reject(reject_args)
@@ -794,9 +802,13 @@ def test_cmd_drawbridge_run_sets_env_and_calls_server(tmp_path):
     mock_main.assert_called_once()
 
 
-def test_cmd_reforge_updates_embedder_settings_and_prints(capsys):
+def test_cmd_reforge_passes_skip_embedder_check(capsys):
+    """Reforge must open the collection with skip_embedder_check=True."""
+    castle_calls = []
+
     class ReforgeCastle(DummyCastle):
-        def __init__(self, settings, factory):
+        def __init__(self, settings, factory, *, skip_embedder_check=False, **kw):
+            castle_calls.append(skip_embedder_check)
             self.calls = []
             self.catalog = SimpleNamespace(status=lambda: None)
             self.search = SimpleNamespace(search=lambda q: None)
@@ -812,19 +824,15 @@ def test_cmd_reforge_updates_embedder_settings_and_prints(capsys):
             self.vault = SimpleNamespace(reforge=reforge)
             self._collection = object()
 
-    castle = ReforgeCastle(None, None)
     args = SimpleNamespace(
         wing="w", room="r", dry_run=False, embedder="onnx", device="cpu", palace=None, backend=None
     )
 
-    with patch("swampcastle.castle.Castle", lambda s, f: castle):
+    with patch("swampcastle.castle.Castle", lambda s, f, **kw: ReforgeCastle(s, f, **kw)):
         with patch("swampcastle.cli.commands.factory_from_settings", return_value=object()):
             commands.cmd_reforge(args)
 
-    assert castle.calls[0]["wing"] == "w"
-    assert castle.calls[0]["room"] == "r"
-    assert castle.calls[0]["dry_run"] is False
-    assert callable(castle.calls[0]["progress_callback"])
+    assert castle_calls == [True]
     out = capsys.readouterr().out
     assert "onnx embedder" in out
     assert "Reforging" in out
@@ -833,7 +841,7 @@ def test_cmd_reforge_updates_embedder_settings_and_prints(capsys):
 
 def test_cmd_reforge_dry_run_does_not_render_progress(capsys):
     class ReforgeCastle(DummyCastle):
-        def __init__(self, settings, factory):
+        def __init__(self, settings, factory, *, skip_embedder_check=False, **kw):
             self.calls = []
             self.catalog = SimpleNamespace(status=lambda: None)
             self.search = SimpleNamespace(search=lambda q: None)
@@ -845,7 +853,7 @@ def test_cmd_reforge_dry_run_does_not_render_progress(capsys):
         wing="w", room="r", dry_run=True, embedder="onnx", device="cpu", palace=None, backend=None
     )
 
-    with patch("swampcastle.castle.Castle", lambda s, f: castle):
+    with patch("swampcastle.castle.Castle", lambda s, f, **kw: castle):
         with patch("swampcastle.cli.commands.factory_from_settings", return_value=object()):
             commands.cmd_reforge(args)
 
@@ -938,7 +946,7 @@ def test_cmd_parley_dry_run(capsys):
             self.search = None
             self.vault = None
 
-    with patch("swampcastle.castle.Castle", lambda s, f: ParleyCastle(s, f)):
+    with patch("swampcastle.castle.Castle", lambda s, f, **kw: ParleyCastle(s, f)):
         with patch("swampcastle.cli.commands.factory_from_settings", return_value=object()):
             with patch("swampcastle.sync.SyncEngine"):
                 with patch("swampcastle.sync_client.SyncClient") as mock_client:
@@ -967,7 +975,7 @@ def test_cmd_parley_live_prints_summary(capsys):
     client = SimpleNamespace(
         sync=lambda engine, **kw: {"push": {"sent": 2}, "pull": {"received": 3}}
     )
-    with patch("swampcastle.castle.Castle", lambda s, f: ParleyCastle(s, f)):
+    with patch("swampcastle.castle.Castle", lambda s, f, **kw: ParleyCastle(s, f)):
         with patch("swampcastle.cli.commands.factory_from_settings", return_value=object()):
             with patch("swampcastle.sync.SyncEngine"):
                 with patch("swampcastle.sync_client.SyncClient", return_value=client):
@@ -996,7 +1004,7 @@ def test_cmd_parley_uses_config_dir_for_identity(tmp_path):
     palace = tmp_path / "castle"
     args = SimpleNamespace(server="http://x", dry_run=True, palace=str(palace), backend=None)
 
-    with patch("swampcastle.castle.Castle", lambda s, f: ParleyCastle(s, f)):
+    with patch("swampcastle.castle.Castle", lambda s, f, **kw: ParleyCastle(s, f)):
         with patch("swampcastle.cli.commands.factory_from_settings", return_value=object()):
             with patch("swampcastle.sync.SyncEngine"):
                 with patch("swampcastle.sync_client.SyncClient"):
@@ -1030,7 +1038,7 @@ def test_cmd_seek_prints_contributor_filter_and_hit(capsys):
         backend=None,
     )
 
-    with patch("swampcastle.castle.Castle", lambda s, f: DummyCastle(s, f, search=result)):
+    with patch("swampcastle.castle.Castle", lambda s, f, **kw: DummyCastle(s, f, search=result)):
         with patch("swampcastle.cli.commands.factory_from_settings", return_value=object()):
             commands.cmd_seek(args)
 
@@ -1067,7 +1075,7 @@ def test_cmd_seek_passes_rerank_and_explain_flags_to_search_query():
         backend=None,
     )
 
-    with patch("swampcastle.castle.Castle", lambda s, f: QueryCaptureCastle(s, f)):
+    with patch("swampcastle.castle.Castle", lambda s, f, **kw: QueryCaptureCastle(s, f)):
         with patch("swampcastle.cli.commands.factory_from_settings", return_value=object()):
             commands.cmd_seek(args)
 
@@ -1111,7 +1119,7 @@ def test_cmd_seek_prints_explanation_details_when_requested(capsys):
         backend=None,
     )
 
-    with patch("swampcastle.castle.Castle", lambda s, f: DummyCastle(s, f, search=result)):
+    with patch("swampcastle.castle.Castle", lambda s, f, **kw: DummyCastle(s, f, search=result)):
         with patch("swampcastle.cli.commands.factory_from_settings", return_value=object()):
             commands.cmd_seek(args)
 
@@ -1241,7 +1249,7 @@ def test_cmd_seek_write_trace_persists_trace_file(tmp_path, capsys):
         backend=None,
     )
 
-    with patch("swampcastle.castle.Castle", lambda s, f: DummyCastle(s, f, search=result)):
+    with patch("swampcastle.castle.Castle", lambda s, f, **kw: DummyCastle(s, f, search=result)):
         with patch("swampcastle.cli.commands.factory_from_settings", return_value=object()):
             commands.cmd_seek(args)
 

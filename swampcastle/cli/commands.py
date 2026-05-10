@@ -359,11 +359,9 @@ def cmd_gather(args):
 
 def cmd_herald(args):
     """Print the stable SwampCastle protocol for agent wake-up."""
-    from swampcastle.castle import Castle
+    from swampcastle.services.catalog import CASTLE_PROTOCOL
 
-    settings = _settings(args)
-    with Castle(settings, factory_from_settings(settings)) as castle:
-        print(castle.catalog.status().protocol)
+    print(CASTLE_PROTOCOL)
 
 
 def cmd_brief(args):
@@ -654,7 +652,7 @@ def cmd_reforge(args):
         def progress_callback(processed: int, total: int) -> None:
             _print_progress("Reforging", processed, total)
 
-    with Castle(settings, factory_from_settings(settings)) as castle:
+    with Castle(settings, factory_from_settings(settings), skip_embedder_check=True) as castle:
         count = castle.vault.reforge(
             wing=args.wing,
             room=args.room,

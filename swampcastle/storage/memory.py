@@ -364,7 +364,9 @@ class InMemoryStorageFactory(StorageFactory):
         self._collections: dict[str, InMemoryCollectionStore] = {}
         self._graph: InMemoryGraphStore | None = None
 
-    def open_collection(self, name: str) -> InMemoryCollectionStore:
+    def open_collection(
+        self, name: str, *, skip_embedder_check: bool = False
+    ) -> InMemoryCollectionStore:
         if name not in self._collections:
             self._collections[name] = InMemoryCollectionStore()
         return self._collections[name]

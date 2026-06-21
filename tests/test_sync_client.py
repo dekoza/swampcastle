@@ -9,7 +9,7 @@ from urllib.error import HTTPError, URLError
 
 import pytest
 
-from swampcastle.sync import ChangeSet, MergeResult, SyncRecord
+from swampcastle.models.sync import ChangeSet, MergeResult, SyncRecord
 from swampcastle.sync_client import SyncClient
 
 

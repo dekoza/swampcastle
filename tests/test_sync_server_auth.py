@@ -19,7 +19,8 @@ pytest.importorskip("fastapi", reason="fastapi required for sync server tests")
 
 from fastapi.testclient import TestClient  # noqa: E402
 
-from swampcastle.sync import ChangeSet, MergeResult, SyncEngine  # noqa: E402
+from swampcastle.models.sync import ChangeSet, MergeResult  # noqa: E402
+from swampcastle.sync import SyncEngine  # noqa: E402
 from swampcastle.sync_server import create_app  # noqa: E402
 
 

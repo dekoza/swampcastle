@@ -47,7 +47,14 @@ from .kg_candidates import (
     CandidateTripleFilter,
 )
 from .origin import SourceOrigin
-from .sync import ChangeSet, MergeResult, SyncRecord, SyncStatus, VersionVector
+from .sync import (
+    ChangeSet,
+    MergeResult,
+    SyncRecord,
+    SyncStatus,
+    VersionVector,
+    VersionVectorStore,
+)
 
 __all__ = [
     "AddDrawerCommand",
@@ -95,5 +102,6 @@ __all__ = [
     "TimelineResult",
     "TripleResult",
     "VersionVector",
+    "VersionVectorStore",
     "WingsResponse",
 ]

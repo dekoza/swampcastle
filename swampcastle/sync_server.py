@@ -32,7 +32,8 @@ from contextlib import asynccontextmanager
 
 from .settings import CastleSettings as CastleConfig
 from .storage import factory_from_settings
-from .sync import ChangeSet, SyncEngine, SyncRecord
+from .models.sync import ChangeSet, SyncRecord
+from .sync import SyncEngine
 from .sync_meta import (
     InMemoryNodeStatusStore,
     NodeStatus,

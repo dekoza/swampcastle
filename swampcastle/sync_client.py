@@ -21,7 +21,8 @@ import logging
 import os
 from urllib.request import Request, urlopen
 
-from .sync import ChangeSet, SyncEngine
+from .models.sync import ChangeSet
+from .sync import SyncEngine
 
 logger = logging.getLogger("swampcastle.sync_client")
 

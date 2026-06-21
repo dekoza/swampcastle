@@ -8,7 +8,13 @@ import pytest
 
 from swampcastle.storage.lance import LanceBackend, LanceCollection
 from swampcastle.storage.memory import InMemoryCollectionStore
-from swampcastle.sync import ChangeSet, SyncEngine, SyncRecord, VersionVector
+from swampcastle.models.sync import (
+    ChangeSet,
+    SyncRecord,
+    VersionVector,
+    VersionVectorStore,
+)
+from swampcastle.sync import SyncEngine
 from swampcastle.sync_meta import NodeIdentity
 
 
@@ -56,12 +62,12 @@ class TestVersionVector:
 
     def test_persistence(self, tmp_path):
         path = str(tmp_path / "vv.json")
-        vv1 = VersionVector(path=path)
-        vv1.update("node_a", 42)
-        vv1.save()
+        store1 = VersionVectorStore(path=path)
+        store1.update("node_a", 42)
+        store1.save()
 
-        vv2 = VersionVector(path=path)
-        assert vv2.get("node_a") == 42
+        store2 = VersionVectorStore(path=path)
+        assert store2.get("node_a") == 42
 
     def test_update_from_records(self):
         vv = VersionVector()
@@ -82,29 +88,29 @@ class TestVersionVector:
     def test_update_does_not_save_per_call(self, tmp_path):
         """update() must not write to disk on every call — only on save()."""
         path = str(tmp_path / "vv.json")
-        vv = VersionVector(path=path)
+        store = VersionVectorStore(path=path)
         for i in range(500):
-            vv.update(f"node_{i % 10}", i)
+            store.update(f"node_{i % 10}", i)
         # Not persisted yet — a fresh load should see nothing
-        vv2 = VersionVector(path=path)
-        assert vv2.to_dict() == {}
+        store2 = VersionVectorStore(path=path)
+        assert store2.to_dict() == {}
         # Explicit save persists everything
-        vv.save()
-        vv3 = VersionVector(path=path)
-        assert vv3.get("node_9") == 499
+        store.save()
+        store3 = VersionVectorStore(path=path)
+        assert store3.get("node_9") == 499
 
     def test_update_from_records_saves_once(self, tmp_path):
         """update_from_records() should persist exactly once at the end."""
         path = str(tmp_path / "vv.json")
-        vv = VersionVector(path=path)
+        store = VersionVectorStore(path=path)
         records = [
             SyncRecord(id=f"r{i}", document="", metadata={"node_id": "a", "seq": i})
             for i in range(100)
         ]
-        vv.update_from_records(records)
+        store.update_from_records(records)
         # Should be persisted after the call
-        vv2 = VersionVector(path=path)
-        assert vv2.get("a") == 99
+        store2 = VersionVectorStore(path=path)
+        assert store2.get("a") == 99
 
 
 # ── ChangeSet serialisation ───────────────────────────────────────────────────
@@ -1021,7 +1027,7 @@ class TestTwoNodeSync:
             ],
             _raw=True,
         )
-        engine_client._vv.update(ni_client.node_id, 1)
+        engine_client._vv_store.update(ni_client.node_id, 1)
 
         # Sync: client pushes its (losing) version, server rejects it
         server_vv = engine_server.version_vector
@@ -1121,7 +1127,7 @@ class TestSyncServerFactoryRouting:
         assert engine._identity.node_id == "server-node"
         assert calls["collection_name"] == "custom_chests"
         assert calls["config_dir"] == str(settings.config_dir)
-        assert engine._vv._path == os.path.join(str(settings.castle_path), "version_vector.json")
+        assert engine._vv_store._path == os.path.join(str(settings.castle_path), "version_vector.json")
 
     def test_get_engine_reuses_cached_engine(self, tmp_path, monkeypatch):
         import swampcastle.sync_server as ss

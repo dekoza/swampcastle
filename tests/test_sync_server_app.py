@@ -19,7 +19,7 @@ try:
 except ImportError:
     TestClient = None
 
-from swampcastle.sync import ChangeSet, MergeResult, SyncRecord
+from swampcastle.models.sync import ChangeSet, MergeResult, SyncRecord
 
 
 class FakeFastAPI:

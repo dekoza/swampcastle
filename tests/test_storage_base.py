@@ -1,8 +1,11 @@
-"""Tests for swampcastle.storage.base — ABC contract enforcement."""
+"""Tests for swampcastle.storage.base — ABC contract enforcement + default implementations."""
+
+from datetime import datetime, timezone
 
 import pytest
 
-from swampcastle.storage.base import CollectionStore, GraphStore
+from swampcastle.models.record import RecordEnvelope
+from swampcastle.storage.base import CollectionStore, GraphStore, _env_meta
 
 
 class TestCollectionStoreABC:
@@ -134,3 +137,125 @@ class TestGraphStoreABC:
                 pass
 
         assert isinstance(Complete(), GraphStore)
+
+
+# ── CollectionStore.add_records default implementation ──────────────────
+
+
+class TestAddRecordsDefault:
+    """Test the default add_records() implementation on a concrete store."""
+
+    def _make_store(self):
+        class ConcreteStore(CollectionStore):
+            def __init__(self):
+                self.upsert_calls = []
+
+            def add(self, *, documents, ids, metadatas=None):
+                self.upsert(documents=documents, ids=ids, metadatas=metadatas)
+
+            def upsert(self, *, documents, ids, metadatas=None):
+                self.upsert_calls.append(
+                    {"documents": documents, "ids": ids, "metadatas": metadatas}
+                )
+
+            def query(self, *, query_texts, n_results=5, where=None, include=None):
+                return {"ids": [], "documents": [], "metadatas": [], "distances": []}
+
+            def get(self, *, ids=None, where=None, limit=None, offset=None, include=None):
+                return {"ids": [], "documents": [], "metadatas": []}
+
+            def delete(self, *, ids):
+                pass
+
+            def update(self, *, ids, documents=None, metadatas=None):
+                pass
+
+            def count(self):
+                return 0
+
+        return ConcreteStore()
+
+    def test_delegates_to_upsert(self):
+        store = self._make_store()
+        env = RecordEnvelope(record_id="r1", kind="document", content="hello")
+        store.add_records([env])
+
+        assert len(store.upsert_calls) == 1
+        assert store.upsert_calls[0]["ids"] == ["r1"]
+        assert store.upsert_calls[0]["documents"] == ["hello"]
+
+    def test_multiple_envelopes(self):
+        store = self._make_store()
+        envs = [
+            RecordEnvelope(record_id="r1", kind="document", content="a"),
+            RecordEnvelope(record_id="r2", kind="transcript", content="b"),
+        ]
+        store.add_records(envs)
+
+        assert len(store.upsert_calls) == 1
+        assert store.upsert_calls[0]["ids"] == ["r1", "r2"]
+        assert store.upsert_calls[0]["documents"] == ["a", "b"]
+
+
+# ── _env_meta helper ────────────────────────────────────────────────────
+
+
+class TestEnvMeta:
+    def test_flattens_envelope_fields(self):
+        env = RecordEnvelope(
+            record_id="r1",
+            kind="document",
+            node_id="node-1",
+            seq=42,
+            content="test",
+        )
+        meta = _env_meta(env)
+
+        assert meta["kind"] == "document"
+        assert meta["node_id"] == "node-1"
+        assert meta["seq"] == 42
+        assert "updated_at" in meta
+
+    def test_preserves_custom_metadata(self):
+        env = RecordEnvelope(
+            record_id="r1",
+            kind="document",
+            content="test",
+            metadata={"wing": "proj", "room": "auth", "custom_key": "value"},
+        )
+        meta = _env_meta(env)
+
+        assert meta["wing"] == "proj"
+        assert meta["room"] == "auth"
+        assert meta["custom_key"] == "value"
+
+    def test_kind_defaults_to_envelope_kind(self):
+        env = RecordEnvelope(record_id="r1", kind="tombstone", content="")
+        meta = _env_meta(env)
+
+        assert meta["kind"] == "tombstone"
+
+    def test_kind_setdefault_does_not_override_existing(self):
+        env = RecordEnvelope(
+            record_id="r1",
+            kind="document",
+            content="test",
+            metadata={"kind": "override"},
+        )
+        meta = _env_meta(env)
+
+        # setdefault should not override an existing key
+        assert meta["kind"] == "override"
+
+    def test_does_not_mutate_original_metadata(self):
+        original = {"wing": "proj"}
+        env = RecordEnvelope(
+            record_id="r1",
+            kind="document",
+            content="test",
+            metadata=original,
+        )
+        meta = _env_meta(env)
+
+        assert "kind" not in original
+        assert "node_id" not in original

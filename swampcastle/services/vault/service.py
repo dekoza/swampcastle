@@ -41,6 +41,20 @@ class VaultService:
         self._col = collection
         self._wal = wal
         self._graph_cache_invalidator = graph_cache_invalidator
+        self._tombstone_targets: set[str] = set()
+        self._load_tombstones()
+
+    def _load_tombstones(self) -> None:
+        """Load existing tombstones from collection into memory."""
+        try:
+            raw = self._col.get(include=["metadatas"])
+        except Exception:
+            return
+        for rid, meta in zip(raw.get("ids", []), raw.get("metadatas", [])):
+            if rid.startswith(_TOMBSTONE_ID_PREFIX):
+                target_id = meta.get("target_record_id", "")
+                if target_id:
+                    self._tombstone_targets.add(target_id)
 
     def _invalidate_graph_cache(self) -> None:
         if self._graph_cache_invalidator is not None:
@@ -132,11 +146,10 @@ class VaultService:
         if include_tombstoned or not result.get("ids"):
             return result
 
-        active_set = self._active_tombstone_targets()
-        if not active_set:
+        if not self._tombstone_targets:
             return result
 
-        keep_indices = [i for i, rid in enumerate(result["ids"]) if rid not in active_set]
+        keep_indices = [i for i, rid in enumerate(result["ids"]) if rid not in self._tombstone_targets]
         return {
             key: [result[key][i] for i in keep_indices]
             for key in result
@@ -203,22 +216,13 @@ class VaultService:
                 "grace_days": grace_days,
             },
         )
+        self._tombstone_targets.add(record_id)
         self._invalidate_graph_cache()
         return tombstone_id
 
     def is_tombstoned(self, record_id: str) -> bool:
         """Return True if the record has an unexpired tombstone."""
-        now = datetime.now(timezone.utc)
-        tombstone_id = f"{_TOMBSTONE_ID_PREFIX}{record_id}"
-        result = self._col.get(ids=[tombstone_id])
-        if not result["ids"]:
-            return False
-        metadata = result.get("metadatas", [{}])[0]
-        grace_until_str = metadata.get("grace_until", "")
-        if not grace_until_str:
-            return True
-        grace_until = datetime.fromisoformat(grace_until_str)
-        return now < grace_until
+        return record_id in self._tombstone_targets
 
     def list_pending_gc(self, *, executed_at: datetime) -> list[str]:
         """Return record IDs whose tombstones have passed their grace period."""
@@ -253,6 +257,7 @@ class VaultService:
             self._col.delete(ids=tombstone_ids_to_delete)
             self._col.delete(ids=record_ids)
             deleted = [rid for rid in record_ids if rid in pending]
+            self._tombstone_targets.difference_update(deleted)
             self._wal.log(
                 "gc_collect",
                 {"record_ids": deleted, "executed_at": executed_at.isoformat()},

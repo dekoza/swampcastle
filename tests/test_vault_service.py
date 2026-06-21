@@ -85,7 +85,10 @@ def test_get_drawers_forwards_limit_and_offset(wal):
 
         def get(self, **kwargs):
             self.calls.append(kwargs)
-            return {"ids": []}
+            return {"ids": [], "metadatas": [], "documents": []}
+
+        def count(self):
+            return 0
 
     collection = SpyCollection()
     svc = VaultService(collection, wal)
@@ -97,14 +100,14 @@ def test_get_drawers_forwards_limit_and_offset(wal):
         offset=50,
     )
 
-    assert collection.calls == [
-        {
-            "where": {"wing": "proj"},
-            "include": ["metadatas"],
-            "limit": 25,
-            "offset": 50,
-        }
-    ]
+    # First call is _load_tombstones (include=['metadatas']), second is the actual get_drawers
+    assert len(collection.calls) == 2
+    assert collection.calls[1] == {
+        "where": {"wing": "proj"},
+        "include": ["metadatas"],
+        "limit": 25,
+        "offset": 50,
+    }
 
 
 class TestDiary:
@@ -156,6 +159,62 @@ class TestDiary:
         )
         ops = [e["operation"] for e in wal.read_entries()]
         assert "diary_write" in ops
+
+
+class TestTombstoneSetCaching:
+    def test_get_drawers_filters_tombstones_without_scanning_collection(self, svc, col):
+        """get_drawers() must use the in-memory tombstone set, not a full scan."""
+        # Add 3 drawers
+        r1 = svc.add_drawer(AddDrawerCommand(wing="w", room="r", content="keep1"))
+        r2 = svc.add_drawer(AddDrawerCommand(wing="w", room="r", content="delete-me"))
+        r3 = svc.add_drawer(AddDrawerCommand(wing="w", room="r", content="keep2"))
+
+        # Tombstone r2
+        svc.create_tombstone(r2.drawer_id, deleted_by="admin", reason="test")
+
+        # Spy on collection.get to ensure no extra calls for tombstone filtering
+        original_get = col.get
+        get_call_count = 0
+        def counting_get(**kwargs):
+            nonlocal get_call_count
+            get_call_count += 1
+            return original_get(**kwargs)
+        col.get = counting_get
+
+        result = svc.get_drawers(where={"wing": "w"})
+        # Should only be the initial get_drawers call, no tombstone scan
+        assert get_call_count == 1
+        assert r1.drawer_id in result["ids"]
+        assert r2.drawer_id not in result["ids"]
+        assert r3.drawer_id in result["ids"]
+
+    def test_tombstone_set_loaded_at_construction(self, col, wal):
+        """VaultService loads existing tombstones from collection at init time."""
+        # Pre-populate collection with a tombstone
+        col.upsert(
+            documents=["target_id"],
+            ids=["tombstone:target_id"],
+            metadatas=[{
+                "kind": "tombstone",
+                "target_record_id": "target_id",
+                "grace_until": "2099-01-01T00:00:00+00:00",
+            }],
+        )
+
+        # VaultService should load tombstones on construction
+        svc2 = VaultService(col, wal)
+        assert "target_id" in svc2._tombstone_targets
+
+    def test_gc_collect_updates_tombstone_set(self, svc, col):
+        from datetime import datetime, timedelta, timezone
+
+        r = svc.add_drawer(AddDrawerCommand(wing="w", room="r", content="x"))
+        svc.create_tombstone(r.drawer_id, deleted_by="admin", reason="test", grace_days=1)
+        assert r.drawer_id in svc._tombstone_targets
+
+        future = datetime.now(timezone.utc) + timedelta(days=2)
+        svc.gc_collect([r.drawer_id], executed_at=future)
+        assert r.drawer_id not in svc._tombstone_targets
 
 
 # ── Wave 2: tombstone-first deletion ────────────────────────────────────

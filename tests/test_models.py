@@ -12,6 +12,7 @@ from swampcastle.models import (
     SearchResponse,
     SearchHit,
     StatusResponse,
+    VersionVector,
 )
 
 
@@ -124,6 +125,23 @@ class TestDiaryWriteCommand:
     def test_defaults(self):
         cmd = DiaryWriteCommand(agent_name="reviewer", entry="found bug")
         assert cmd.topic == "general"
+
+
+class TestVersionVector:
+    def test_empty(self):
+        vv = VersionVector()
+        assert vv.get("node1") == 0
+
+    def test_update_and_get(self):
+        vv = VersionVector()
+        vv.update("node1", 5)
+        assert vv.get("node1") == 5
+
+    def test_update_ignores_lower(self):
+        vv = VersionVector()
+        vv.update("node1", 10)
+        vv.update("node1", 3)
+        assert vv.get("node1") == 10
 
 
 class TestSerialization:

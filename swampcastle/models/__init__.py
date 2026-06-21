@@ -47,12 +47,14 @@ from .kg_candidates import (
     CandidateTripleFilter,
 )
 from .origin import SourceOrigin
+from .sync import ChangeSet, MergeResult, SyncRecord, SyncStatus, VersionVector
 
 __all__ = [
     "AddDrawerCommand",
     "AddTripleCommand",
     "CatalogCardsQuery",
     "CatalogCardsResponse",
+    "ChangeSet",
     "CurationQuery",
     "CurationResponse",
     "DeleteDrawerCommand",
@@ -75,6 +77,7 @@ __all__ = [
     "CandidateTriple",
     "CandidateTripleFilter",
     "CatalogCard",
+    "MergeResult",
     "OriginLookupQuery",
     "OriginLookupResponse",
     "RoomsResponse",
@@ -84,10 +87,13 @@ __all__ = [
     "SearchResponse",
     "StatusResponse",
     "SearchTrace",
+    "SyncRecord",
+    "SyncStatus",
     "TaxonomyResponse",
     "WingBriefResponse",
     "TimelineQuery",
     "TimelineResult",
     "TripleResult",
+    "VersionVector",
     "WingsResponse",
 ]

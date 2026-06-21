@@ -27,17 +27,11 @@ class GraphService:
         self._col = collection
         self._wal = wal
         self._castle_path = castle_path
-        self._summary_cache: tuple[dict, list[dict]] | None = None
-        self._summary_cache_count: int | None = None
+        self._graph_summary_cache: tuple[dict, list[dict]] | None = None
 
     def invalidate_cache(self) -> None:
-        """Drop the cached room graph summary.
-
-        Called after drawer writes/deletes so read-only graph operations do not
-        rebuild the entire summary unless the collection actually changed.
-        """
-        self._summary_cache = None
-        self._summary_cache_count = None
+        """Drop the cached room graph summary."""
+        self._graph_summary_cache = None
 
     def kg_query(
         self, entity: str, as_of: str | None = None, direction: str = "both"
@@ -170,15 +164,9 @@ class GraphService:
         return nodes, edges
 
     def _get_graph_summary(self) -> tuple[dict, list[dict]]:
-        """Return a cached graph summary when the collection size is unchanged."""
-        total = self._col.count()
-        if self._summary_cache is not None and self._summary_cache_count == total:
-            return self._summary_cache
-
-        summary = self._build_graph()
-        self._summary_cache = summary
-        self._summary_cache_count = total
-        return summary
+        if self._graph_summary_cache is None:
+            self._graph_summary_cache = self._build_graph()
+        return self._graph_summary_cache
 
     def traverse(self, start_room: str, max_hops: int = 2) -> list[dict]:
         nodes, edges = self._get_graph_summary()

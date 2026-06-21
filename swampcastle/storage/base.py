@@ -88,15 +88,12 @@ class CollectionStore(ABC):
         self.upsert(
             documents=[env.content for env in envelopes],
             ids=[env.record_id for env in envelopes],
-            metadatas=[_envelope_metadata(env) for env in envelopes],
+            metadatas=[_env_meta(env) for env in envelopes],
         )
 
 
-def _envelope_metadata(env: RecordEnvelope) -> dict[str, Any]:
-    """Extract the metadata dict for a RecordEnvelope used by the default
-    ``add_records`` fallback.  Flattens kind/node_id/seq into the metadata
-    dict so that Chroma-style $where filtering sees them.
-    """
+def _env_meta(env: RecordEnvelope) -> dict[str, Any]:
+    """Flatten envelope fields into a metadata dict."""
     meta = dict(env.metadata)
     meta.setdefault("kind", env.kind)
     meta["node_id"] = env.node_id

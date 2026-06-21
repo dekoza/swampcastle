@@ -84,28 +84,42 @@ class CatalogService:
         self._col = collection
         self._castle_path = castle_path
 
+    def _scan_all(self, *, where: dict | None = None) -> list[dict]:
+        """Fetch all metadata rows using offset pagination.
+
+        Returns a flat list of metadata dicts.  Callers that only need to
+        iterate once can use the generator variant ``_iter_all`` instead.
+        """
+        rows: list[dict] = []
+        offset = 0
+        while True:
+            batch = self._col.get(
+                include=["metadatas"],
+                limit=BATCH_SIZE,
+                offset=offset,
+                where=where,
+            )
+            metas = batch.get("metadatas", [])
+            rows.extend(metas)
+            if len(metas) < BATCH_SIZE:
+                break
+            offset += len(metas)
+        return rows
+
     def status(self) -> StatusResponse:
         count = self._col.count()
         wings: dict[str, int] = {}
         rooms: dict[str, int] = {}
         error_info = None
-        offset = 0
 
-        while True:
-            try:
-                batch = self._col.get(include=["metadatas"], limit=BATCH_SIZE, offset=offset)
-                rows = batch["metadatas"]
-                for m in rows:
-                    w = m.get("wing", "unknown")
-                    r = m.get("room", "unknown")
-                    wings[w] = wings.get(w, 0) + 1
-                    rooms[r] = rooms.get(r, 0) + 1
-                offset += len(rows)
-                if len(rows) < BATCH_SIZE:
-                    break
-            except Exception as e:
-                error_info = f"Partial result, failed at offset {offset}: {e}"
-                break
+        try:
+            for m in self._scan_all():
+                w = m.get("wing", "unknown")
+                r = m.get("room", "unknown")
+                wings[w] = wings.get(w, 0) + 1
+                rooms[r] = rooms.get(r, 0) + 1
+        except Exception as e:
+            error_info = f"Partial result: {e}"
 
         return StatusResponse(
             total_drawers=count,
@@ -120,59 +134,36 @@ class CatalogService:
 
     def list_wings(self) -> WingsResponse:
         wings: dict[str, int] = {}
-        offset = 0
-        while True:
-            try:
-                batch = self._col.get(include=["metadatas"], limit=BATCH_SIZE, offset=offset)
-                rows = batch["metadatas"]
-                for m in rows:
-                    w = m.get("wing", "unknown")
-                    wings[w] = wings.get(w, 0) + 1
-                offset += len(rows)
-                if len(rows) < BATCH_SIZE:
-                    break
-            except Exception as e:
-                return WingsResponse(wings=wings, error=str(e))
+        try:
+            for m in self._scan_all():
+                w = m.get("wing", "unknown")
+                wings[w] = wings.get(w, 0) + 1
+        except Exception as e:
+            return WingsResponse(wings=wings, error=str(e))
         return WingsResponse(wings=wings)
 
     def list_rooms(self, wing: str | None = None) -> RoomsResponse:
         rooms: dict[str, int] = {}
-        offset = 0
-        while True:
-            try:
-                kwargs: dict = {"include": ["metadatas"], "limit": BATCH_SIZE, "offset": offset}
-                if wing:
-                    kwargs["where"] = {"wing": wing}
-                batch = self._col.get(**kwargs)
-                rows = batch["metadatas"]
-                for m in rows:
-                    r = m.get("room", "unknown")
-                    rooms[r] = rooms.get(r, 0) + 1
-                offset += len(rows)
-                if len(rows) < BATCH_SIZE:
-                    break
-            except Exception as e:
-                return RoomsResponse(wing=wing or "all", rooms=rooms, error=str(e))
+        where = {"wing": wing} if wing else None
+        try:
+            for m in self._scan_all(where=where):
+                r = m.get("room", "unknown")
+                rooms[r] = rooms.get(r, 0) + 1
+        except Exception as e:
+            return RoomsResponse(wing=wing or "all", rooms=rooms, error=str(e))
         return RoomsResponse(wing=wing or "all", rooms=rooms)
 
     def get_taxonomy(self) -> TaxonomyResponse:
         taxonomy: dict[str, dict[str, int]] = {}
-        offset = 0
-        while True:
-            try:
-                batch = self._col.get(include=["metadatas"], limit=BATCH_SIZE, offset=offset)
-                rows = batch["metadatas"]
-                for m in rows:
-                    w = m.get("wing", "unknown")
-                    r = m.get("room", "unknown")
-                    if w not in taxonomy:
-                        taxonomy[w] = {}
-                    taxonomy[w][r] = taxonomy[w].get(r, 0) + 1
-                offset += len(rows)
-                if len(rows) < BATCH_SIZE:
-                    break
-            except Exception as e:
-                return TaxonomyResponse(taxonomy=taxonomy, error=str(e))
+        try:
+            for m in self._scan_all():
+                w = m.get("wing", "unknown")
+                r = m.get("room", "unknown")
+                if w not in taxonomy:
+                    taxonomy[w] = {}
+                taxonomy[w][r] = taxonomy[w].get(r, 0) + 1
+        except Exception as e:
+            return TaxonomyResponse(taxonomy=taxonomy, error=str(e))
         return TaxonomyResponse(taxonomy=taxonomy)
 
     def brief(self, wing: str) -> WingBriefResponse:
@@ -180,42 +171,28 @@ class CatalogService:
         contributors: dict[str, int] = {}
         source_files: set[str] = set()
         total_drawers = 0
-        offset = 0
+        try:
+            for meta in self._scan_all(where={"wing": wing}):
+                total_drawers += 1
+                room = meta.get("room", "unknown")
+                rooms[room] = rooms.get(room, 0) + 1
 
-        while True:
-            try:
-                batch = self._col.get(
-                    include=["metadatas"],
-                    where={"wing": wing},
-                    limit=BATCH_SIZE,
-                    offset=offset,
-                )
-                rows = batch["metadatas"]
-                for meta in rows:
-                    total_drawers += 1
-                    room = meta.get("room", "unknown")
-                    rooms[room] = rooms.get(room, 0) + 1
+                contributor = meta.get("contributor")
+                if contributor:
+                    contributors[contributor] = contributors.get(contributor, 0) + 1
 
-                    contributor = meta.get("contributor")
-                    if contributor:
-                        contributors[contributor] = contributors.get(contributor, 0) + 1
-
-                    source_file = meta.get("source_file")
-                    if source_file:
-                        source_files.add(source_file)
-
-                offset += len(rows)
-                if len(rows) < BATCH_SIZE:
-                    break
-            except Exception as e:
-                return WingBriefResponse(
-                    wing=wing,
-                    total_drawers=total_drawers,
-                    rooms=rooms,
-                    contributors=contributors,
-                    source_files=len(source_files),
-                    error=str(e),
-                )
+                source_file = meta.get("source_file")
+                if source_file:
+                    source_files.add(source_file)
+        except Exception as e:
+            return WingBriefResponse(
+                wing=wing,
+                total_drawers=total_drawers,
+                rooms=rooms,
+                contributors=contributors,
+                source_files=len(source_files),
+                error=str(e),
+            )
 
         return WingBriefResponse(
             wing=wing,

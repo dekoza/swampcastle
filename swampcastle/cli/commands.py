@@ -19,6 +19,10 @@ logger = logging.getLogger("swampcastle.cli.commands")
 DESKELETON_BATCH_SIZE = 1000
 
 
+# ═══════════════════════════════════════════════════════════════════════
+# Region: Shared helpers (DeskeletonTargetStore, _settings, _print_*)
+# ═══════════════════════════════════════════════════════════════════════
+
 class DeskeletonTargetStore:
     """SQLite-backed temporary store for unique deskeleton targets."""
 
@@ -93,6 +97,10 @@ def _settings(args) -> CastleSettings:
     return CastleSettings(_env_file=None, _json_file=str(config_path), **kwargs)
 
 
+# ═══════════════════════════════════════════════════════════════════════
+# Region: Query / read commands (survey, seek, brief, herald)
+# ═══════════════════════════════════════════════════════════════════════
+
 def cmd_survey(args):
     from swampcastle.castle import Castle
 
@@ -106,6 +114,10 @@ def cmd_survey(args):
         if s.rooms:
             _print_kv("Rooms", ", ".join(sorted(s.rooms.keys())))
 
+
+# ───────────────────────────────────────────────────────────────────────
+# Audit overlay reads
+# ───────────────────────────────────────────────────────────────────────
 
 def cmd_curation_check(args):
     from swampcastle.audit.curation import (
@@ -169,6 +181,10 @@ def cmd_derived_rebuild(args):
         for wing, count in sorted(summary["wings"].items()):
             _print_kv(f"Catalog[{wing}]", count)
 
+
+# ───────────────────────────────────────────────────────────────────────
+# Search helpers
+# ───────────────────────────────────────────────────────────────────────
 
 def _coerce_search_response(result, query: str):
     from swampcastle.models import SearchHit, SearchResponse
@@ -270,6 +286,10 @@ def cmd_seek(args):
             _print_kv("Trace", trace_path)
 
 
+# ═══════════════════════════════════════════════════════════════════════
+# Region: Write / ingest commands (gather, distill, reforge, deskeleton)
+# ═══════════════════════════════════════════════════════════════════════
+
 def cmd_project(args):
     from swampcastle.mining.rooms import detect_rooms_local
 
@@ -357,6 +377,10 @@ def cmd_gather(args):
                 logger.warning("Error closing storage factory after gather: %s", exc)
 
 
+# ───────────────────────────────────────────────────────────────────────
+# Protocol / briefing
+# ───────────────────────────────────────────────────────────────────────
+
 def cmd_herald(args):
     """Print the stable SwampCastle protocol for agent wake-up."""
     from swampcastle.services.catalog import CASTLE_PROTOCOL
@@ -399,6 +423,10 @@ def cmd_brief(args):
         )
         _print_kv("Contributors", contributors)
 
+
+# ═══════════════════════════════════════════════════════════════════════
+# Region: Maintenance commands (distill, reforge, deskeleton, cleave)
+# ═══════════════════════════════════════════════════════════════════════
 
 def cmd_cleave(args):
     from swampcastle.split_mega_files import main as split_main
@@ -453,6 +481,10 @@ def cmd_distill(args):
         else:
             print(f"  Distilled {count} drawers with AAAK dialect.")
 
+
+# ═══════════════════════════════════════════════════════════════════════
+# Region: KG candidate commands (extract, review, accept, reject)
+# ═══════════════════════════════════════════════════════════════════════
 
 def cmd_kg_extract(args):
     from swampcastle.castle import Castle
@@ -573,6 +605,10 @@ def cmd_kg_reject(args):
     print(f"  Rejected {result.candidate_id}.")
 
 
+# ═══════════════════════════════════════════════════════════════════════
+# Region: Config / setup (wizard, tune, project, drawbridge)
+# ═══════════════════════════════════════════════════════════════════════
+
 def cmd_wizard(args):
     from swampcastle.wizard import run_wizard
 
@@ -584,6 +620,10 @@ def cmd_tune(args):
 
     run_tune()
 
+
+# ───────────────────────────────────────────────────────────────────────
+# MCP server
+# ───────────────────────────────────────────────────────────────────────
 
 def cmd_drawbridge_setup(args):
     base_cmd = "swampcastle drawbridge run"
@@ -609,6 +649,10 @@ def cmd_drawbridge_run(args):
     mcp_main()
 
 
+# ═══════════════════════════════════════════════════════════════════════
+# Region: Internal / hidden commands (hook, instructions, ni)
+# ═══════════════════════════════════════════════════════════════════════
+
 def cmd_hook(args):
     from swampcastle.hooks_cli import run_hook
 
@@ -620,6 +664,10 @@ def cmd_instructions(args):
 
     run_instructions(args.name)
 
+
+# ═══════════════════════════════════════════════════════════════════════
+# Region: Ops / admin (raise, armory, garrison, parley)
+# ═══════════════════════════════════════════════════════════════════════
 
 def cmd_raise(args):
     from swampcastle.migrate import migrate
@@ -752,6 +800,10 @@ def cmd_ni(args):
     print("\n  We are the Knights who say... Ni!")
     print("  Bring us a shrubbery! (Or run: swampcastle build <dir>)\n")
 
+
+# ═══════════════════════════════════════════════════════════════════════
+# Region: Deskeleton (scan helper + command)
+# ═══════════════════════════════════════════════════════════════════════
 
 def _scan_deskeleton_targets(
     vault,

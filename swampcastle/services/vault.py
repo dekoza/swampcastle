@@ -24,20 +24,16 @@ from swampcastle.models.drawer import (
     DeleteDrawerResult,
     DrawerResult,
 )
+from swampcastle.models.record import RecordEnvelope
 from swampcastle.storage.base import CollectionStore
 from swampcastle.wal import WalWriter
 
 logger = logging.getLogger("swampcastle.vault")
 
 
-# Module-level variable to hold the initialized Dialect instance for the worker process
-_worker_dialect = None
+# ── Multiprocessing worker (must be module-level for pickling) ──────────
 
-_DISTILL_MAX_WORKERS = 32
-_DISTILL_MAX_IN_FLIGHT_BATCHES = 32
-_DISTILL_TASK_BATCH_SIZE = 50
-_DISTILL_WRITE_BATCH_SIZE = 500
-_DISTILL_PROGRESS_UPDATE_STEP = 100
+_worker_dialect = None
 
 
 def _init_worker(cfg_path):
@@ -50,7 +46,6 @@ def _init_worker(cfg_path):
         _worker_dialect = Dialect()
 
 
-# Worker must be module-level so it can be pickled by multiprocessing
 def _distill_worker(args):
     results = []
     for doc_id, doc, meta in args:
@@ -61,94 +56,297 @@ def _distill_worker(args):
     return results
 
 
-def _iter_distill_batches(
-    ids: list[str],
-    documents: list[str],
-    metadatas: list[dict],
-    batch_size: int,
-):
-    batch = []
-    for item in zip(ids, documents, metadatas):
-        batch.append(item)
-        if len(batch) >= batch_size:
-            yield batch
-            batch = []
-    if batch:
-        yield batch
+# ── DistillEngine — AAAK compression (sequential + parallel) ────────────
 
-
-def _flush_distill_updates(collection: CollectionStore, updates: list[tuple[str, dict]]) -> None:
-    collection.update(
-        ids=[doc_id for doc_id, _ in updates],
-        metadatas=[metadata for _, metadata in updates],
-    )
-
-
-def _should_report_distill_progress(processed: int, total: int) -> bool:
-    return processed >= total or processed % _DISTILL_PROGRESS_UPDATE_STEP == 0
-
-
-def _emit_progress(
-    progress_callback: Callable[[int, int], None] | None,
-    phase_progress_callback: Callable[[str, int, int], None] | None,
-    *,
-    primary_phase: str,
-    phase: str,
-    processed: int,
-    total: int,
-) -> None:
-    if phase == primary_phase and progress_callback is not None:
-        progress_callback(processed, total)
-    if phase_progress_callback is not None:
-        phase_progress_callback(phase, processed, total)
-
-
-def _flush_distill_updates_with_progress(
-    collection: CollectionStore,
-    updates: list[tuple[str, dict]],
-    *,
-    phase_progress_callback: Callable[[str, int, int], None] | None,
-) -> None:
-    if not updates:
-        return
-
-    if phase_progress_callback is not None:
-        phase_progress_callback("persist", 0, len(updates))
-
-    persisted = 0
-    for start in range(0, len(updates), _DISTILL_WRITE_BATCH_SIZE):
-        batch = updates[start : start + _DISTILL_WRITE_BATCH_SIZE]
-        _flush_distill_updates(collection, batch)
-        persisted += len(batch)
-        if phase_progress_callback is not None:
-            phase_progress_callback("persist", persisted, len(updates))
-
-
-def _resolve_distill_workers(explicit: int | None) -> int | None:
-    if explicit is not None:
-        if explicit <= 1:
-            return None
-        return min(explicit, _DISTILL_MAX_WORKERS)
-    if os.environ.get("SWAMPCASTLE_DISTILL_PARALLEL", "").lower() in (
-        "1",
-        "true",
-        "yes",
-    ):
-        raw = os.environ.get("SWAMPCASTLE_DISTILL_WORKERS", "")
-        try:
-            configured = int(raw) if raw else (os.cpu_count() or 2)
-        except ValueError:
-            configured = os.cpu_count() or 2
-        if configured <= 1:
-            return None
-        return min(configured, _DISTILL_MAX_WORKERS)
-    return None
-
+_DISTILL_MAX_WORKERS = 32
+_DISTILL_MAX_IN_FLIGHT_BATCHES = 32
+_DISTILL_TASK_BATCH_SIZE = 50
+_DISTILL_WRITE_BATCH_SIZE = 500
+_DISTILL_PROGRESS_UPDATE_STEP = 100
 
 _DIARY_READ_SCAN_LIMIT = 100_000
+_TOMBSTONE_ID_PREFIX = "tombstone:"
+
+
+class _DistillEngine:
+    """Encapsulates AAAK dialect compression logic.
+
+    Owns the batch iteration, progress reporting, and both sequential and
+    parallel execution paths.  Instantiated per-call by VaultService.distill()
+    so that config_path and dialect state are not shared across invocations.
+    """
+
+    def __init__(self, collection: CollectionStore):
+        self._col = collection
+
+    # ── public entry ─────────────────────────────────────────────────
+
+    def run(
+        self,
+        ids: list[str],
+        documents: list[str],
+        metadatas: list[dict],
+        *,
+        total: int,
+        dry_run: bool,
+        config_path: str | None,
+        max_workers: int | None,
+        progress_callback: Callable[[int, int], None] | None,
+        phase_progress_callback: Callable[[str, int, int], None] | None,
+    ) -> int:
+        self._emit(progress_callback, phase_progress_callback, "distill", 0, total)
+
+        if max_workers is not None:
+            return self._parallel(
+                ids, documents, metadatas,
+                total=total, dry_run=dry_run, config_path=config_path,
+                max_workers=max_workers,
+                progress_callback=progress_callback,
+                phase_progress_callback=phase_progress_callback,
+            )
+        return self._sequential(
+            ids, documents, metadatas,
+            total=total, dry_run=dry_run, config_path=config_path,
+            progress_callback=progress_callback,
+            phase_progress_callback=phase_progress_callback,
+        )
+
+    # ── sequential path ───────────────────────────────────────────────
+
+    def _sequential(
+        self,
+        ids: list[str],
+        documents: list[str],
+        metadatas: list[dict],
+        *,
+        total: int,
+        dry_run: bool,
+        config_path: str | None,
+        progress_callback: Callable[[int, int], None] | None,
+        phase_progress_callback: Callable[[str, int, int], None] | None,
+    ) -> int:
+        from swampcastle.dialect import Dialect
+
+        dialect = Dialect.from_config(config_path) if config_path else Dialect()
+
+        updates = []
+        processed = 0
+        for doc_id, doc, meta in zip(ids, documents, metadatas):
+            meta_copy = dict(meta)
+            aaak = dialect.compress(doc, metadata=meta_copy)
+            meta_copy["aaak"] = aaak
+            updates.append((doc_id, meta_copy))
+            processed += 1
+            if self._should_report(processed, total):
+                self._emit(progress_callback, phase_progress_callback, "distill", processed, total)
+
+        if not dry_run and updates:
+            self._flush_with_progress(updates, phase_progress_callback)
+        return len(ids)
+
+    # ── parallel path ─────────────────────────────────────────────────
+
+    def _parallel(
+        self,
+        ids: list[str],
+        documents: list[str],
+        metadatas: list[dict],
+        *,
+        total: int,
+        dry_run: bool,
+        config_path: str | None,
+        max_workers: int,
+        progress_callback: Callable[[int, int], None] | None,
+        phase_progress_callback: Callable[[str, int, int], None] | None,
+    ) -> int:
+        task_batch_size = min(max(1, len(ids) // (max_workers * 4)), _DISTILL_TASK_BATCH_SIZE)
+        in_flight_limit = min(max_workers * 4, _DISTILL_MAX_IN_FLIGHT_BATCHES)
+        batch_iter = iter(self._iter_batches(ids, documents, metadatas, task_batch_size))
+        write_buffer = []
+        ready_results: dict[str, dict] = {}
+        next_write_index = 0
+        processed = 0
+        spawn_context = multiprocessing.get_context("spawn")
+
+        with ProcessPoolExecutor(
+            max_workers=max_workers,
+            mp_context=spawn_context,
+            initializer=_init_worker,
+            initargs=(config_path,),
+        ) as ex:
+            pending: set = set()
+            for _ in range(in_flight_limit):
+                batch = next(batch_iter, None)
+                if batch is None:
+                    break
+                pending.add(ex.submit(_distill_worker, batch))
+
+            while pending:
+                done, pending = wait(pending, return_when=FIRST_COMPLETED)
+                for future in done:
+                    batch_results = future.result()
+                    processed += len(batch_results)
+                    self._emit(progress_callback, phase_progress_callback, "distill", processed, total)
+
+                    if not dry_run:
+                        for doc_id, metadata in batch_results:
+                            ready_results[doc_id] = metadata
+                        while next_write_index < len(ids):
+                            next_doc_id = ids[next_write_index]
+                            if next_doc_id not in ready_results:
+                                break
+                            write_buffer.append((next_doc_id, ready_results.pop(next_doc_id)))
+                            next_write_index += 1
+                            if len(write_buffer) >= _DISTILL_WRITE_BATCH_SIZE:
+                                self._flush(write_buffer)
+                                write_buffer.clear()
+
+                    batch = next(batch_iter, None)
+                    if batch is not None:
+                        pending.add(ex.submit(_distill_worker, batch))
+
+        if not dry_run and write_buffer:
+            self._flush_with_progress(write_buffer, phase_progress_callback)
+        return processed
+
+    # ── helpers ───────────────────────────────────────────────────────
+
+    @staticmethod
+    def _iter_batches(ids, documents, metadatas, batch_size):
+        batch = []
+        for item in zip(ids, documents, metadatas):
+            batch.append(item)
+            if len(batch) >= batch_size:
+                yield batch
+                batch = []
+        if batch:
+            yield batch
+
+    def _flush(self, updates):
+        self._col.update(
+            ids=[doc_id for doc_id, _ in updates],
+            metadatas=[meta for _, meta in updates],
+        )
+
+    def _flush_with_progress(self, updates, phase_cb):
+        if not updates:
+            return
+        if phase_cb is not None:
+            phase_cb("persist", 0, len(updates))
+        persisted = 0
+        for start in range(0, len(updates), _DISTILL_WRITE_BATCH_SIZE):
+            batch = updates[start : start + _DISTILL_WRITE_BATCH_SIZE]
+            self._flush(batch)
+            persisted += len(batch)
+            if phase_cb is not None:
+                phase_cb("persist", persisted, len(updates))
+
+    @staticmethod
+    def _should_report(processed, total):
+        return processed >= total or processed % _DISTILL_PROGRESS_UPDATE_STEP == 0
+
+    @staticmethod
+    def _emit(progress_cb, phase_cb, phase, processed, total):
+        if phase_cb is not None:
+            phase_cb(phase, processed, total)
+
+    @staticmethod
+    def resolve_workers(explicit: int | None) -> int | None:
+        if explicit is not None:
+            return min(explicit, _DISTILL_MAX_WORKERS) if explicit > 1 else None
+        if os.environ.get("SWAMPCASTLE_DISTILL_PARALLEL", "").lower() in ("1", "true", "yes"):
+            raw = os.environ.get("SWAMPCASTLE_DISTILL_WORKERS", "")
+            try:
+                configured = int(raw) if raw else (os.cpu_count() or 2)
+            except ValueError:
+                configured = os.cpu_count() or 2
+            return min(configured, _DISTILL_MAX_WORKERS) if configured > 1 else None
+        return None
+
+
+# ── ReforgeEngine — batch re-embedding ──────────────────────────────────
+
 _REFORGE_MIN_BATCH_SIZE = 1000
 _REFORGE_MAX_PROGRESS_UPDATES = 20
-_TOMBSTONE_ID_PREFIX = "tombstone:"
+
+
+class _ReforgeEngine:
+    """Encapsulates batch re-embedding logic.
+
+    Owns the offset-pagination iteration, adaptive batch sizing, and the
+    sequential re-embed loop.
+    """
+
+    def __init__(self, collection: CollectionStore):
+        self._col = collection
+
+    def run(
+        self,
+        *,
+        where: dict | None,
+        total: int,
+        dry_run: bool,
+        batch_size: int | None,
+        progress_callback: Callable[[int, int], None] | None,
+    ) -> int:
+        if total == 0:
+            return 0
+        if progress_callback is not None:
+            progress_callback(0, total)
+        if dry_run:
+            return total
+
+        if batch_size is not None:
+            effective_bs = max(1, batch_size)
+        elif progress_callback is None:
+            effective_bs = total
+        else:
+            target = max(1, _REFORGE_MAX_PROGRESS_UPDATES)
+            effective_bs = min(total, max(_REFORGE_MIN_BATCH_SIZE, (total + target - 1) // target))
+
+        processed = 0
+        for ids, docs, metas in self._iter_batches(where, effective_bs):
+            self._col.upsert(ids=ids, documents=docs, metadatas=metas)
+            processed += len(ids)
+            if progress_callback is not None:
+                progress_callback(processed, total)
+        return total
+
+    def count(self, where: dict | None) -> int:
+        if not where:
+            return self._col.count()
+        total = 0
+        offset = 0
+        while True:
+            batch = self._col.get(where=where, include=["ids"], limit=10_000, offset=offset)
+            n = len(batch.get("ids", []))
+            if n == 0:
+                break
+            total += n
+            if n < 10_000:
+                break
+            offset += 10_000
+        return total
+
+    def _iter_batches(self, where, batch_size):
+        offset = 0
+        while True:
+            results = self._col.get(
+                where=where or {},
+                include=["documents", "metadatas"],
+                limit=batch_size,
+                offset=offset,
+            )
+            ids = results.get("ids", [])
+            if not ids:
+                break
+            yield ids, results.get("documents", []), results.get("metadatas", [])
+            if len(ids) < batch_size:
+                break
+            offset += batch_size
+
+
+# ── VaultService ────────────────────────────────────────────────────────
 
 
 @dataclass
@@ -176,134 +374,7 @@ class VaultService:
         if self._graph_cache_invalidator is not None:
             self._graph_cache_invalidator()
 
-    def _distill_sequential(
-        self,
-        ids: list[str],
-        documents: list[str],
-        metadatas: list[dict],
-        *,
-        total: int,
-        dry_run: bool,
-        config_path: str | None,
-        progress_callback: Callable[[int, int], None] | None,
-        phase_progress_callback: Callable[[str, int, int], None] | None,
-    ) -> int:
-        from swampcastle.dialect import Dialect
-
-        if config_path:
-            dialect = Dialect.from_config(config_path)
-        else:
-            dialect = Dialect()
-
-        updates = []
-        processed = 0
-        for doc_id, doc, meta in zip(ids, documents, metadatas):
-            meta_copy = dict(meta)
-            aaak = dialect.compress(doc, metadata=meta_copy)
-            meta_copy["aaak"] = aaak
-            updates.append((doc_id, meta_copy))
-            processed += 1
-
-            if _should_report_distill_progress(processed, total):
-                _emit_progress(
-                    progress_callback,
-                    phase_progress_callback,
-                    primary_phase="distill",
-                    phase="distill",
-                    processed=processed,
-                    total=total,
-                )
-
-        if not dry_run and updates:
-            _flush_distill_updates_with_progress(
-                self._col,
-                updates,
-                phase_progress_callback=phase_progress_callback,
-            )
-
-        return len(ids)
-
-    def _distill_parallel(
-        self,
-        ids: list[str],
-        documents: list[str],
-        metadatas: list[dict],
-        *,
-        total: int,
-        dry_run: bool,
-        config_path: str | None,
-        max_workers: int,
-        progress_callback: Callable[[int, int], None] | None,
-        phase_progress_callback: Callable[[str, int, int], None] | None,
-    ) -> int:
-        task_batch_size = max(1, len(ids) // (max_workers * 4))
-        task_batch_size = min(task_batch_size, _DISTILL_TASK_BATCH_SIZE)
-        in_flight_limit = min(max_workers * 4, _DISTILL_MAX_IN_FLIGHT_BATCHES)
-        batch_iter = iter(_iter_distill_batches(ids, documents, metadatas, task_batch_size))
-        write_buffer = []
-        ready_results = {}
-        next_write_index = 0
-        processed = 0
-        spawn_context = multiprocessing.get_context("spawn")
-
-        with ProcessPoolExecutor(
-            max_workers=max_workers,
-            mp_context=spawn_context,
-            initializer=_init_worker,
-            initargs=(config_path,),
-        ) as ex:
-            pending = set()
-
-            for _ in range(in_flight_limit):
-                batch = next(batch_iter, None)
-                if batch is None:
-                    break
-                pending.add(ex.submit(_distill_worker, batch))
-
-            while pending:
-                done, pending = wait(pending, return_when=FIRST_COMPLETED)
-
-                for future in done:
-                    batch_results = future.result()
-                    processed += len(batch_results)
-
-                    _emit_progress(
-                        progress_callback,
-                        phase_progress_callback,
-                        primary_phase="distill",
-                        phase="distill",
-                        processed=processed,
-                        total=total,
-                    )
-
-                    if not dry_run:
-                        for doc_id, metadata in batch_results:
-                            ready_results[doc_id] = metadata
-
-                        while next_write_index < len(ids):
-                            next_doc_id = ids[next_write_index]
-                            if next_doc_id not in ready_results:
-                                break
-
-                            write_buffer.append((next_doc_id, ready_results.pop(next_doc_id)))
-                            next_write_index += 1
-
-                            if len(write_buffer) >= _DISTILL_WRITE_BATCH_SIZE:
-                                _flush_distill_updates(self._col, write_buffer)
-                                write_buffer.clear()
-
-                    batch = next(batch_iter, None)
-                    if batch is not None:
-                        pending.add(ex.submit(_distill_worker, batch))
-
-        if not dry_run and write_buffer:
-            _flush_distill_updates_with_progress(
-                self._col,
-                write_buffer,
-                phase_progress_callback=phase_progress_callback,
-            )
-
-        return processed
+    # ── drawer operations ─────────────────────────────────────────────
 
     def add_drawer(self, cmd: AddDrawerCommand) -> DrawerResult:
         drawer_id = cmd.drawer_id()
@@ -349,6 +420,17 @@ class VaultService:
             room=cmd.room,
         )
 
+    def add_record(self, envelope: RecordEnvelope) -> dict:
+        """Store a typed canonical record.
+
+        This is the generic typed-record write path.  Unlike
+        ``add_drawer`` it does not compute a content hash-based ID —
+        the caller provides ``record_id`` directly.
+        """
+        self._col.add_records([envelope])
+        self._invalidate_graph_cache()
+        return {"record_id": envelope.record_id, "kind": envelope.kind}
+
     def get_drawers(
         self,
         where: dict | None = None,
@@ -366,10 +448,7 @@ class VaultService:
         """
         effective_include = include or ["metadatas"]
         if ids is not None:
-            result = self._col.get(
-                ids=ids,
-                include=effective_include,
-            )
+            result = self._col.get(ids=ids, include=effective_include)
         else:
             result = self._col.get(
                 where=where or {},
@@ -381,7 +460,6 @@ class VaultService:
         if include_tombstoned or not result.get("ids"):
             return result
 
-        # Exclude tombstoned targets from results.
         active_set = self._active_tombstone_targets()
         if not active_set:
             return result
@@ -402,7 +480,6 @@ class VaultService:
                 error=f"Drawer not found: {cmd.drawer_id}",
             )
 
-        # Backward compat: tombstone + immediate gc.
         self.create_tombstone(
             cmd.drawer_id,
             deleted_by="delete_drawer",
@@ -416,7 +493,7 @@ class VaultService:
         self._invalidate_graph_cache()
         return DeleteDrawerResult(success=True, drawer_id=cmd.drawer_id)
 
-    # ── Wave 2: tombstone-first deletion ────────────────────────────────
+    # ── tombstone lifecycle ───────────────────────────────────────────
 
     def create_tombstone(
         self,
@@ -426,11 +503,7 @@ class VaultService:
         reason: str,
         grace_days: int = 90,
     ) -> str:
-        """Mark a record as logically deleted.
-
-        The target record is hidden from normal reads but not physically
-        removed until ``gc_collect`` is called after the grace period.
-        """
+        """Mark a record as logically deleted."""
         now = datetime.now(timezone.utc)
         grace_until = now + timedelta(days=grace_days)
         metadata = {
@@ -495,14 +568,9 @@ class VaultService:
         return targets
 
     def gc_collect(self, record_ids: list[str], *, executed_at: datetime) -> "GCCollectResult":
-        """Permanently delete records whose tombstones have expired.
-
-        Only records with fully expired tombstones are removed.
-        Tombstones themselves are deleted alongside their targets.
-        """
+        """Permanently delete records whose tombstones have expired."""
         deleted: list[str] = []
         tombstone_ids_to_delete: list[str] = []
-
         pending = set(self.list_pending_gc(executed_at=executed_at))
         for rid in record_ids:
             if rid not in pending:
@@ -515,20 +583,14 @@ class VaultService:
             deleted = [rid for rid in record_ids if rid in pending]
             self._wal.log(
                 "gc_collect",
-                {
-                    "record_ids": deleted,
-                    "executed_at": executed_at.isoformat(),
-                },
+                {"record_ids": deleted, "executed_at": executed_at.isoformat()},
             )
             self._invalidate_graph_cache()
 
         return GCCollectResult(deleted_ids=deleted)
 
     def _active_tombstone_targets(self) -> set[str]:
-        """Return the set of record IDs that have unexpired tombstones.
-
-        Used by ``get_drawers`` to exclude logically deleted records.
-        """
+        """Return the set of record IDs that have unexpired tombstones."""
         now = datetime.now(timezone.utc)
         raw = self._col.get(include=["metadatas"])
         active: set[str] = set()
@@ -549,7 +611,7 @@ class VaultService:
                 active.add(target_id)
         return active
 
-    # ── diary_write ──────────────────────────────────────────────────────
+    # ── diary ─────────────────────────────────────────────────────────
 
     def diary_write(self, cmd: DiaryWriteCommand) -> DiaryWriteResult:
         wing = f"wing_{cmd.agent_name.lower().replace(' ', '_')}"
@@ -561,11 +623,7 @@ class VaultService:
 
         self._wal.log(
             "diary_write",
-            {
-                "agent_name": cmd.agent_name,
-                "topic": cmd.topic,
-                "entry_id": entry_id,
-            },
+            {"agent_name": cmd.agent_name, "topic": cmd.topic, "entry_id": entry_id},
         )
 
         self._col.add(
@@ -594,20 +652,7 @@ class VaultService:
         )
 
     def diary_read(self, query: DiaryReadQuery) -> DiaryResponse:
-        """Return the most recent `last_n` diary entries for the agent.
-
-        Implementation notes:
-        - Backends do not expose server-side sort on `filed_at` because that
-          timestamp lives in metadata, not in a dedicated indexed column.
-        - Offset pagination on LanceDB is O(N²) over many pages, so we avoid
-          it entirely and fetch diary rows in a single call.
-        - We still keep Python-side memory bounded for the *selected* results:
-          a min-heap of size `last_n` retains only the most recent entries.
-        - The overall scan is capped at `_DIARY_READ_SCAN_LIMIT` rows to avoid
-          unbounded reads on pathological castles.
-        - We expect `filed_at` to be an ISO8601 string so lexicographic
-          ordering corresponds to chronological ordering.
-        """
+        """Return the most recent `last_n` diary entries for the agent."""
         wing = f"wing_{query.agent_name.lower().replace(' ', '_')}"
 
         results = self._col.get(
@@ -623,7 +668,6 @@ class VaultService:
                 message="No diary entries yet.",
             )
 
-        # Min-heap of (timestamp_str, counter, document, metadata)
         heap: list[tuple[str, int, str, dict]] = []
         counter = 0
         for doc, meta in zip(results.get("documents", []), results.get("metadatas", [])):
@@ -646,6 +690,8 @@ class VaultService:
 
         return DiaryResponse(agent=query.agent_name, entries=entries)
 
+    # ── maintenance: distill ──────────────────────────────────────────
+
     def distill(
         self,
         wing: str = None,
@@ -656,26 +702,7 @@ class VaultService:
         progress_callback: Callable[[int, int], None] | None = None,
         phase_progress_callback: Callable[[str, int, int], None] | None = None,
     ) -> int:
-        """Compute and store AAAK Dialect summaries in drawer metadata.
-
-        AAAK Dialect is a lossy compressed symbolic format that extracts
-        entities, topics, key quotes, emotions, and flags from plain text.
-        These summaries are stored in the 'aaak' metadata field.
-
-        Args:
-            wing: Filter to specific wing.
-            room: Filter to specific room.
-            dry_run: If True, compute count but don't persist.
-            config_path: Path to entities.json for custom Dialect config.
-            parallel_workers: Optional worker count for CPU-bound AAAK compression.
-                Values <= 1 keep the sequential path.
-            progress_callback: Optional callback receiving (processed, total).
-            phase_progress_callback: Optional callback receiving
-                (phase, processed, total). Phases: distill, persist.
-
-        Returns:
-            Number of drawers processed.
-        """
+        """Compute and store AAAK Dialect summaries in drawer metadata."""
         where = {}
         if wing:
             where["wing"] = wing
@@ -689,110 +716,21 @@ class VaultService:
         total = len(ids)
 
         if not ids:
-            _emit_progress(
-                progress_callback,
-                phase_progress_callback,
-                primary_phase="distill",
-                phase="distill",
-                processed=0,
-                total=0,
-            )
+            if phase_progress_callback is not None:
+                phase_progress_callback("distill", 0, 0)
             return 0
 
-        _emit_progress(
-            progress_callback,
-            phase_progress_callback,
-            primary_phase="distill",
-            phase="distill",
-            processed=0,
-            total=total,
-        )
-
-        max_workers = _resolve_distill_workers(parallel_workers)
-
-        # Sequential fallback (preserve current behaviour by default)
-        if max_workers is None:
-            return self._distill_sequential(
-                ids,
-                documents,
-                metadatas,
-                total=total,
-                dry_run=dry_run,
-                config_path=config_path,
-                progress_callback=progress_callback,
-                phase_progress_callback=phase_progress_callback,
-            )
-
-        return self._distill_parallel(
-            ids,
-            documents,
-            metadatas,
-            total=total,
-            dry_run=dry_run,
-            config_path=config_path,
+        max_workers = _DistillEngine.resolve_workers(parallel_workers)
+        engine = _DistillEngine(self._col)
+        return engine.run(
+            ids, documents, metadatas,
+            total=total, dry_run=dry_run, config_path=config_path,
             max_workers=max_workers,
             progress_callback=progress_callback,
             phase_progress_callback=phase_progress_callback,
         )
 
-    def _iter_reforge_batches(
-        self,
-        where: dict | None,
-        batch_size: int,
-    ):
-        """Stream matching drawers in fixed-size batches.
-
-        Keeps peak memory bounded regardless of collection size.
-        """
-        offset = 0
-        while True:
-            results = self._col.get(
-                where=where or {},
-                include=["documents", "metadatas"],
-                limit=batch_size,
-                offset=offset,
-            )
-            ids = results.get("ids", [])
-            if not ids:
-                break
-            yield ids, results.get("documents", []), results.get("metadatas", [])
-            if len(ids) < batch_size:
-                break
-            offset += batch_size
-
-    def _count_drawers(self, where: dict | None) -> int:
-        """Fast count of drawers matching the where clause."""
-        if not where:
-            return self._col.count()
-
-        total = 0
-        offset = 0
-        while True:
-            batch = self._col.get(where=where, include=["ids"], limit=10_000, offset=offset)
-            n = len(batch.get("ids", []))
-            if n == 0:
-                break
-            total += n
-            if n < 10_000:
-                break
-            offset += 10_000
-        return total
-
-    def _reforge_sequential(
-        self,
-        where: dict | None,
-        total: int,
-        batch_size: int,
-        progress_callback: Callable[[int, int], None] | None,
-    ) -> int:
-        """Single-threaded re-embed path."""
-        processed = 0
-        for ids, docs, metas in self._iter_reforge_batches(where, batch_size):
-            self._col.upsert(ids=ids, documents=docs, metadatas=metas)
-            processed += len(ids)
-            if progress_callback is not None:
-                progress_callback(processed, total)
-        return total
+    # ── maintenance: reforge ──────────────────────────────────────────
 
     def reforge(
         self,
@@ -802,49 +740,19 @@ class VaultService:
         batch_size: int | None = None,
         progress_callback: Callable[[int, int], None] | None = None,
     ) -> int:
-        """Re-embed all drawers using the currently configured embedding model.
-
-        Drawers are streamed in fixed-size batches so peak memory stays bounded
-        regardless of collection size.
-
-        Args:
-            batch_size: Optional override for re-embed write batch size. If omitted,
-                reforge uses a large adaptive batch size to keep progress visible
-                without causing severe slowdown from many tiny upserts.
-            progress_callback: Optional callback receiving (processed, total).
-
-        Returns:
-            Number of drawers processed.
-        """
+        """Re-embed all drawers using the currently configured embedding model."""
         where = {}
         if wing:
             where["wing"] = wing
         if room:
             where["room"] = room
 
-        total = self._count_drawers(where or None)
-
-        if total == 0:
-            return 0
-
-        if progress_callback is not None:
-            progress_callback(0, total)
-
-        if dry_run:
-            return total
-
-        if batch_size is not None:
-            effective_batch_size = max(1, batch_size)
-        elif progress_callback is None:
-            effective_batch_size = total
-        else:
-            target_updates = max(1, _REFORGE_MAX_PROGRESS_UPDATES)
-            adaptive_batch_size = (total + target_updates - 1) // target_updates
-            effective_batch_size = min(total, max(_REFORGE_MIN_BATCH_SIZE, adaptive_batch_size))
-
-        return self._reforge_sequential(
-            where or None,
-            total,
-            effective_batch_size,
-            progress_callback,
+        engine = _ReforgeEngine(self._col)
+        total = engine.count(where or None)
+        return engine.run(
+            where=where or None,
+            total=total,
+            dry_run=dry_run,
+            batch_size=batch_size,
+            progress_callback=progress_callback,
         )

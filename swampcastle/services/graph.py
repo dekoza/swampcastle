@@ -1,9 +1,10 @@
 """GraphService — knowledge graph + palace graph traversal."""
 
 from collections import Counter, defaultdict
+from dataclasses import dataclass, field
 from datetime import date
 
-from swampcastle.audit.curation import load_tunnel_curation
+from swampcastle.audit.curation import load_tunnel_curation, TunnelCuration
 from swampcastle.models.kg import (
     InvalidateResult,
     KGQueryResult,
@@ -13,6 +14,120 @@ from swampcastle.models.kg import (
 )
 from swampcastle.storage.base import CollectionStore, GraphStore
 from swampcastle.wal import WalWriter
+
+
+@dataclass(frozen=True)
+class _PalaceNode:
+    wings: tuple[str, ...]
+    halls: tuple[str, ...]
+    count: int
+    dates: tuple[str, ...]
+
+
+@dataclass
+class PalaceGraph:
+    """Immutable snapshot of the palace room graph, loaded once at construction.
+
+    Nodes are keyed by room name. Edges connect rooms that share wings.
+    Curation policy is baked in at construction time.
+    """
+    nodes: dict[str, _PalaceNode] = field(default_factory=dict)
+    edges: list[dict] = field(default_factory=list)
+    curation: TunnelCuration | None = None
+
+    @classmethod
+    def build(cls, collection: CollectionStore, castle_path: str | None = None) -> "PalaceGraph":
+        """Scan collection metadata and build the palace graph."""
+        total = collection.count()
+        room_data: dict[str, dict] = defaultdict(
+            lambda: {"wings": set(), "halls": set(), "count": 0, "dates": set()}
+        )
+        offset = 0
+        while offset < max(total, 1):
+            batch = collection.get(limit=1000, offset=offset, include=["metadatas"])
+            if not batch["ids"]:
+                break
+            for meta in batch["metadatas"]:
+                room = meta.get("room", "")
+                wing = meta.get("wing", "")
+                hall = meta.get("hall", "")
+                dt = meta.get("date", "")
+                if room and room != "general" and wing:
+                    room_data[room]["wings"].add(wing)
+                    if hall:
+                        room_data[room]["halls"].add(hall)
+                    if dt:
+                        room_data[room]["dates"].add(dt)
+                    room_data[room]["count"] += 1
+            offset += len(batch["ids"])
+
+        nodes: dict[str, _PalaceNode] = {}
+        edges: list[dict] = []
+        for room, data in room_data.items():
+            wings = sorted(data["wings"])
+            nodes[room] = _PalaceNode(
+                wings=tuple(wings),
+                halls=tuple(sorted(data["halls"])),
+                count=data["count"],
+                dates=tuple(sorted(data["dates"])[-5:]) if data["dates"] else (),
+            )
+            if len(wings) >= 2:
+                for i, wa in enumerate(wings):
+                    for wb in wings[i + 1:]:
+                        for hall in data["halls"] or [""]:
+                            edges.append({
+                                "room": room,
+                                "wing_a": wa,
+                                "wing_b": wb,
+                                "hall": hall,
+                                "count": data["count"],
+                            })
+
+        curation = load_tunnel_curation(castle_path) if castle_path else None
+        return cls(nodes=nodes, edges=edges, curation=curation)
+
+    def compute_curated_tunnels(self) -> list[dict]:
+        """Compute curated tunnel list from edges + curation policy."""
+        grouped: dict[tuple[str, tuple[str, str]], dict] = {}
+        for edge in self.edges:
+            wings = tuple(sorted((edge["wing_a"], edge["wing_b"])))
+            key = (edge["room"], wings)
+            item = grouped.setdefault(
+                key,
+                {"room": edge["room"], "wings": list(wings), "halls": set(), "count": edge["count"]},
+            )
+            hall = edge.get("hall")
+            if hall:
+                item["halls"].add(hall)
+            item["count"] = max(item["count"], edge["count"])
+
+        if self.curation is not None:
+            denied = {rule.key() for rule in self.curation.deny}
+            boosted = {rule.key(): rule.weight for rule in self.curation.boost}
+            grouped = {k: v for k, v in grouped.items() if k not in denied}
+            for rule in self.curation.allow:
+                key = rule.key()
+                if key in denied:
+                    continue
+                entry = grouped.setdefault(
+                    key,
+                    {"room": rule.room, "wings": list(rule.normalized_wings()),
+                     "halls": set(), "count": 0, "policy": "allow"},
+                )
+                entry.setdefault("policy", "allow")
+            for key, weight in boosted.items():
+                if key in grouped:
+                    grouped[key]["boost"] = weight
+
+        tunnels = []
+        for tunnel in grouped.values():
+            item = dict(tunnel)
+            item["halls"] = sorted(item.get("halls", []))
+            tunnels.append(item)
+        tunnels.sort(
+            key=lambda t: (-(t.get("count", 0) + t.get("boost", 0.0)), t["room"], t["wings"])
+        )
+        return tunnels
 
 
 class GraphService:
@@ -27,11 +142,16 @@ class GraphService:
         self._col = collection
         self._wal = wal
         self._castle_path = castle_path
-        self._graph_summary_cache: tuple[dict, list[dict]] | None = None
+        self._palace_graph: PalaceGraph | None = None
 
     def invalidate_cache(self) -> None:
-        """Drop the cached room graph summary."""
-        self._graph_summary_cache = None
+        """Drop the cached palace graph."""
+        self._palace_graph = None
+
+    def _get_palace_graph(self) -> PalaceGraph:
+        if self._palace_graph is None:
+            self._palace_graph = PalaceGraph.build(self._col, self._castle_path)
+        return self._palace_graph
 
     def kg_query(
         self, entity: str, as_of: str | None = None, direction: str = "both"
@@ -111,76 +231,19 @@ class GraphService:
         raw = self._graph.stats()
         return KGStatsResult(**raw)
 
-    def _build_graph(self):
-        total = self._col.count()
-        room_data = defaultdict(
-            lambda: {"wings": set(), "halls": set(), "count": 0, "dates": set()}
-        )
-
-        offset = 0
-        while offset < max(total, 1):
-            batch = self._col.get(limit=1000, offset=offset, include=["metadatas"])
-            if not batch["ids"]:
-                break
-            for meta in batch["metadatas"]:
-                room = meta.get("room", "")
-                wing = meta.get("wing", "")
-                hall = meta.get("hall", "")
-                dt = meta.get("date", "")
-                if room and room != "general" and wing:
-                    room_data[room]["wings"].add(wing)
-                    if hall:
-                        room_data[room]["halls"].add(hall)
-                    if dt:
-                        room_data[room]["dates"].add(dt)
-                    room_data[room]["count"] += 1
-            offset += len(batch["ids"])
-
-        edges = []
-        for room, data in room_data.items():
-            wings = sorted(data["wings"])
-            if len(wings) >= 2:
-                for i, wa in enumerate(wings):
-                    for wb in wings[i + 1 :]:
-                        for hall in data["halls"] or [""]:
-                            edges.append(
-                                {
-                                    "room": room,
-                                    "wing_a": wa,
-                                    "wing_b": wb,
-                                    "hall": hall,
-                                    "count": data["count"],
-                                }
-                            )
-
-        nodes = {}
-        for room, data in room_data.items():
-            nodes[room] = {
-                "wings": sorted(data["wings"]),
-                "halls": sorted(data["halls"]),
-                "count": data["count"],
-                "dates": sorted(data["dates"])[-5:] if data["dates"] else [],
-            }
-        return nodes, edges
-
-    def _get_graph_summary(self) -> tuple[dict, list[dict]]:
-        if self._graph_summary_cache is None:
-            self._graph_summary_cache = self._build_graph()
-        return self._graph_summary_cache
-
     def traverse(self, start_room: str, max_hops: int = 2) -> list[dict]:
-        nodes, edges = self._get_graph_summary()
-        if start_room not in nodes:
+        pg = self._get_palace_graph()
+        if start_room not in pg.nodes:
             return []
 
-        start = nodes[start_room]
+        start = pg.nodes[start_room]
         visited = {start_room}
         results = [
             {
                 "room": start_room,
-                "wings": start["wings"],
-                "halls": start["halls"],
-                "count": start["count"],
+                "wings": list(start.wings),
+                "halls": list(start.halls),
+                "count": start.count,
                 "hop": 0,
             }
         ]
@@ -190,19 +253,19 @@ class GraphService:
             current_room, depth = frontier.pop(0)
             if depth >= max_hops:
                 continue
-            current_wings = set(nodes.get(current_room, {}).get("wings", []))
-            for room, data in nodes.items():
+            current_wings = set(pg.nodes.get(current_room, _PalaceNode((), (), 0, ())).wings)
+            for room, node in pg.nodes.items():
                 if room in visited:
                     continue
-                shared = current_wings & set(data["wings"])
+                shared = current_wings & set(node.wings)
                 if shared:
                     visited.add(room)
                     results.append(
                         {
                             "room": room,
-                            "wings": data["wings"],
-                            "halls": data["halls"],
-                            "count": data["count"],
+                            "wings": list(node.wings),
+                            "halls": list(node.halls),
+                            "count": node.count,
                             "hop": depth + 1,
                             "connected_via": sorted(shared),
                         }
@@ -213,91 +276,26 @@ class GraphService:
         results.sort(key=lambda x: (x["hop"], -x["count"]))
         return results[:50]
 
-    def _curated_tunnels(self) -> list[dict]:
-        nodes, edges = self._get_graph_summary()
-        grouped: dict[tuple[str, tuple[str, str]], dict] = {}
-
-        for edge in edges:
-            wings = tuple(sorted((edge["wing_a"], edge["wing_b"])))
-            key = (edge["room"], wings)
-            item = grouped.setdefault(
-                key,
-                {
-                    "room": edge["room"],
-                    "wings": list(wings),
-                    "halls": set(),
-                    "count": edge["count"],
-                },
-            )
-            hall = edge.get("hall")
-            if hall:
-                item["halls"].add(hall)
-            item["count"] = max(item["count"], edge["count"])
-
-        if self._castle_path:
-            policy = load_tunnel_curation(self._castle_path)
-            denied = {rule.key() for rule in policy.deny}
-            boosted = {rule.key(): rule.weight for rule in policy.boost}
-
-            grouped = {key: value for key, value in grouped.items() if key not in denied}
-
-            for rule in policy.allow:
-                key = rule.key()
-                if key in denied:
-                    continue
-                entry = grouped.setdefault(
-                    key,
-                    {
-                        "room": rule.room,
-                        "wings": list(rule.normalized_wings()),
-                        "halls": set(),
-                        "count": 0,
-                        "policy": "allow",
-                    },
-                )
-                entry.setdefault("policy", "allow")
-
-            for key, weight in boosted.items():
-                if key in grouped:
-                    grouped[key]["boost"] = weight
-
-        tunnels = []
-        for tunnel in grouped.values():
-            item = dict(tunnel)
-            item["halls"] = sorted(item.get("halls", []))
-            tunnels.append(item)
-
-        tunnels.sort(
-            key=lambda item: (
-                -(item.get("count", 0) + item.get("boost", 0.0)),
-                item["room"],
-                item["wings"],
-            )
-        )
-        return tunnels
-
     def find_tunnels(self, wing_a: str | None = None, wing_b: str | None = None) -> list[dict]:
-        tunnels = []
-        for tunnel in self._curated_tunnels():
-            wings = tunnel["wings"]
-            if wing_a and wing_a not in wings:
-                continue
-            if wing_b and wing_b not in wings:
-                continue
-            tunnels.append(tunnel)
+        pg = self._get_palace_graph()
+        tunnels = pg.compute_curated_tunnels()
+        if wing_a:
+            tunnels = [t for t in tunnels if wing_a in t["wings"]]
+        if wing_b:
+            tunnels = [t for t in tunnels if wing_b in t["wings"]]
         return tunnels[:50]
 
     def graph_stats(self) -> dict:
-        nodes, edges = self._get_graph_summary()
-        curated_tunnels = self._curated_tunnels()
-        tunnel_rooms = len({(tunnel["room"], tuple(tunnel["wings"])) for tunnel in curated_tunnels})
+        pg = self._get_palace_graph()
+        curated_tunnels = pg.compute_curated_tunnels()
+        tunnel_rooms = len({(t["room"], tuple(t["wings"])) for t in curated_tunnels})
         wing_counts = Counter()
-        for data in nodes.values():
-            for w in data["wings"]:
+        for node in pg.nodes.values():
+            for w in node.wings:
                 wing_counts[w] += 1
         return {
-            "total_rooms": len(nodes),
+            "total_rooms": len(pg.nodes),
             "tunnel_rooms": tunnel_rooms,
-            "total_edges": len(curated_tunnels) or len(edges),
+            "total_edges": len(curated_tunnels) or len(pg.edges),
             "rooms_per_wing": dict(wing_counts.most_common()),
         }

@@ -197,6 +197,91 @@ class TestTunnelCuration:
         )
 
 
+class TestPalaceGraphDeepening:
+    def test_curation_loaded_at_construction_not_per_call(self, graph, wal, tmp_path):
+        """Tunnel curation must be loaded once at construction, not on every find_tunnels()."""
+        import yaml
+
+        col = InMemoryCollectionStore()
+        vault = VaultService(col, wal)
+        vault.add_drawer(AddDrawerCommand(wing="proj", room="auth", content="a"))
+        vault.add_drawer(AddDrawerCommand(wing="personal", room="auth", content="b"))
+
+        curation_dir = tmp_path / "castle" / ".swampcastle" / "curation"
+        curation_dir.mkdir(parents=True)
+        (curation_dir / "tunnels.yaml").write_text(
+            yaml.safe_dump({"deny": [{"wing_a": "proj", "wing_b": "personal", "room": "auth"}]}),
+            encoding="utf-8",
+        )
+
+        # Spy on load_tunnel_curation BEFORE creating GraphService
+        # Must patch the reference in the graph module where it's imported
+        import swampcastle.services.graph as graph_mod
+        original_load = graph_mod.load_tunnel_curation
+        call_count = 0
+        def counting_load(path):
+            nonlocal call_count
+            call_count += 1
+            return original_load(path)
+        graph_mod.load_tunnel_curation = counting_load
+
+        try:
+            svc = GraphService(graph, col, wal, castle_path=str(tmp_path / "castle"))
+            # PalaceGraph is lazy — no load yet
+            assert call_count == 0, f"Expected 0 curation loads before first query, got {call_count}"
+
+            # First query triggers PalaceGraph.build() which loads curation
+            svc.find_tunnels()
+            assert call_count == 1, f"Expected 1 curation load after first query, got {call_count}"
+
+            # Subsequent queries reuse the cached PalaceGraph
+            svc.find_tunnels()
+            svc.graph_stats()
+            assert call_count == 1, f"Expected 1 curation load total, got {call_count}"
+        finally:
+            graph_mod.load_tunnel_curation = original_load
+
+    def test_traverse_find_tunnels_graph_stats_share_palace_graph(self, graph, wal):
+        """All three query methods must use the same PalaceGraph instance."""
+        col = InMemoryCollectionStore()
+        vault = VaultService(col, wal)
+        for wing, room in [("proj", "auth"), ("personal", "auth"), ("proj", "billing")]:
+            vault.add_drawer(AddDrawerCommand(wing=wing, room=room, content=f"{wing}/{room}"))
+
+        svc = GraphService(graph, col, wal)
+
+        # After first query, _palace_graph is computed
+        svc.traverse("auth")
+        graph_id = id(svc._palace_graph)
+
+        # Subsequent queries must use the same instance
+        svc.find_tunnels()
+        assert id(svc._palace_graph) == graph_id
+        svc.graph_stats()
+        assert id(svc._palace_graph) == graph_id
+
+    def test_vault_write_invalidates_palace_graph(self, graph, wal):
+        """A drawer write must invalidate the PalaceGraph."""
+        col = InMemoryCollectionStore()
+        vault = VaultService(col, wal)
+        vault.add_drawer(AddDrawerCommand(wing="proj", room="auth", content="a"))
+
+        svc = GraphService(graph, col, wal)
+        # Wire invalidation: vault calls svc.invalidate_cache on writes
+        vault._graph_cache_invalidator = svc.invalidate_cache
+
+        svc.traverse("auth")
+        graph_id_before = id(svc._palace_graph)
+
+        # Cached — same instance
+        svc.traverse("auth")
+        assert id(svc._palace_graph) == graph_id_before
+
+        # Write invalidates via the callback
+        vault.add_drawer(AddDrawerCommand(wing="personal", room="auth", content="b"))
+        assert id(svc._palace_graph) != graph_id_before
+
+
 class TestGraphSummaryCaching:
     def test_read_only_calls_reuse_cached_graph_summary(self, graph, wal):
         """Repeated graph reads without collection mutations must not rescan.

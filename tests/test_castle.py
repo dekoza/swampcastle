@@ -90,26 +90,24 @@ class TestCastleRoundtrip:
         result = castle.graph.kg_query(entity="Kai")
         assert result.count == 1
 
-    def test_vault_write_invalidates_graph_cache(self, castle, monkeypatch):
-        calls = []
-        original = castle.graph._build_graph
-
-        def wrapped():
-            calls.append(True)
-            return original()
-
-        monkeypatch.setattr(castle.graph, "_build_graph", wrapped)
-
+    def test_vault_write_invalidates_graph_cache(self, castle):
+        """Vault write must invalidate the palace graph so the next query rebuilds it."""
         castle.vault.add_drawer(AddDrawerCommand(wing="proj", room="auth", content="a"))
         castle.graph.traverse("auth")
-        assert len(calls) == 1
+        graph_id_1 = id(castle.graph._palace_graph)
 
+        # Second read uses cached PalaceGraph
         castle.graph.traverse("auth")
-        assert len(calls) == 1, "Second read should use cached summary"
+        assert id(castle.graph._palace_graph) == graph_id_1
 
+        # Vault write invalidates the cache
         castle.vault.add_drawer(AddDrawerCommand(wing="personal", room="auth", content="b"))
+        assert castle.graph._palace_graph is None, "Cache should be cleared after vault write"
+
+        # Next query rebuilds
         castle.graph.traverse("auth")
-        assert len(calls) == 2, "Vault write must invalidate cached summary via Castle wiring"
+        assert castle.graph._palace_graph is not None
+        assert id(castle.graph._palace_graph) != graph_id_1, "New PalaceGraph instance after invalidation"
 
 
 class TestAsyncCastle:

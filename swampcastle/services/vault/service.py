@@ -37,10 +37,12 @@ class VaultService:
         collection: CollectionStore,
         wal: WalWriter,
         graph_cache_invalidator=None,
+        catalog_cache_invalidator=None,
     ):
         self._col = collection
         self._wal = wal
         self._graph_cache_invalidator = graph_cache_invalidator
+        self._catalog_cache_invalidator = catalog_cache_invalidator
         self._tombstone_targets: set[str] = set()
         self._load_tombstones()
 
@@ -59,6 +61,10 @@ class VaultService:
     def _invalidate_graph_cache(self) -> None:
         if self._graph_cache_invalidator is not None:
             self._graph_cache_invalidator()
+
+    def _invalidate_catalog_cache(self) -> None:
+        if self._catalog_cache_invalidator is not None:
+            self._catalog_cache_invalidator()
 
     # ── drawer operations ─────────────────────────────────────────────
 
@@ -99,6 +105,7 @@ class VaultService:
             ],
         )
         self._invalidate_graph_cache()
+        self._invalidate_catalog_cache()
         return DrawerResult(
             success=True,
             drawer_id=drawer_id,
@@ -115,6 +122,7 @@ class VaultService:
         """
         self._col.add_records([envelope])
         self._invalidate_graph_cache()
+        self._invalidate_catalog_cache()
         return {"record_id": envelope.record_id, "kind": envelope.kind}
 
     def get_drawers(
@@ -176,6 +184,7 @@ class VaultService:
             executed_at=datetime.now(timezone.utc),
         )
         self._invalidate_graph_cache()
+        self._invalidate_catalog_cache()
         return DeleteDrawerResult(success=True, drawer_id=cmd.drawer_id)
 
     # ── tombstone lifecycle ───────────────────────────────────────────
@@ -218,6 +227,7 @@ class VaultService:
         )
         self._tombstone_targets.add(record_id)
         self._invalidate_graph_cache()
+        self._invalidate_catalog_cache()
         return tombstone_id
 
     def is_tombstoned(self, record_id: str) -> bool:
@@ -263,6 +273,7 @@ class VaultService:
                 {"record_ids": deleted, "executed_at": executed_at.isoformat()},
             )
             self._invalidate_graph_cache()
+            self._invalidate_catalog_cache()
 
         return GCCollectResult(deleted_ids=deleted)
 
@@ -320,6 +331,7 @@ class VaultService:
             ],
         )
         self._invalidate_graph_cache()
+        self._invalidate_catalog_cache()
         return DiaryWriteResult(
             success=True,
             entry_id=entry_id,

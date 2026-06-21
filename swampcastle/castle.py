@@ -56,6 +56,7 @@ class Castle:
             self._collection,
             wal,
             graph_cache_invalidator=self.graph.invalidate_cache,
+            catalog_cache_invalidator=self.catalog._invalidate_view,
         )
         self.kg_proposals = KGProposalService(self._graph_store, self._collection, wal)
 

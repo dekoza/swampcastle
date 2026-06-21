@@ -79,10 +79,40 @@ When WRITING AAAK: use entity codes, mark emotions, keep structure tight."""
 BATCH_SIZE = 5000
 
 
+class _CatalogView:
+    """Immutable snapshot of catalog metadata from a single collection scan."""
+    __slots__ = ("wings", "rooms", "taxonomy")
+
+    def __init__(self, metas: list[dict]):
+        wings: dict[str, int] = {}
+        rooms: dict[str, int] = {}
+        taxonomy: dict[str, dict[str, int]] = {}
+        for m in metas:
+            w = m.get("wing", "unknown")
+            r = m.get("room", "unknown")
+            wings[w] = wings.get(w, 0) + 1
+            rooms[r] = rooms.get(r, 0) + 1
+            if w not in taxonomy:
+                taxonomy[w] = {}
+            taxonomy[w][r] = taxonomy[w].get(r, 0) + 1
+        self.wings = wings
+        self.rooms = rooms
+        self.taxonomy = taxonomy
+
+
 class CatalogService:
     def __init__(self, collection: CollectionStore, castle_path: str = ""):
         self._col = collection
         self._castle_path = castle_path
+        self._view_cache: _CatalogView | None = None
+
+    def _invalidate_view(self) -> None:
+        self._view_cache = None
+
+    def _get_view(self) -> _CatalogView:
+        if self._view_cache is None:
+            self._view_cache = _CatalogView(self._scan_all())
+        return self._view_cache
 
     def _scan_all(self, *, where: dict | None = None) -> list[dict]:
         """Fetch all metadata rows using offset pagination.
@@ -108,23 +138,17 @@ class CatalogService:
 
     def status(self) -> StatusResponse:
         count = self._col.count()
-        wings: dict[str, int] = {}
-        rooms: dict[str, int] = {}
         error_info = None
-
+        view = _CatalogView([])
         try:
-            for m in self._scan_all():
-                w = m.get("wing", "unknown")
-                r = m.get("room", "unknown")
-                wings[w] = wings.get(w, 0) + 1
-                rooms[r] = rooms.get(r, 0) + 1
+            view = self._get_view()
         except Exception as e:
             error_info = f"Partial result: {e}"
 
         return StatusResponse(
             total_drawers=count,
-            wings=wings,
-            rooms=rooms,
+            wings=view.wings,
+            rooms=view.rooms,
             castle_path=self._castle_path,
             protocol=CASTLE_PROTOCOL,
             aaak_dialect=AAAK_SPEC,
@@ -133,38 +157,29 @@ class CatalogService:
         )
 
     def list_wings(self) -> WingsResponse:
-        wings: dict[str, int] = {}
         try:
-            for m in self._scan_all():
-                w = m.get("wing", "unknown")
-                wings[w] = wings.get(w, 0) + 1
+            view = self._get_view()
+            return WingsResponse(wings=view.wings)
         except Exception as e:
-            return WingsResponse(wings=wings, error=str(e))
-        return WingsResponse(wings=wings)
+            return WingsResponse(wings={}, error=str(e))
 
     def list_rooms(self, wing: str | None = None) -> RoomsResponse:
-        rooms: dict[str, int] = {}
-        where = {"wing": wing} if wing else None
         try:
-            for m in self._scan_all(where=where):
-                r = m.get("room", "unknown")
-                rooms[r] = rooms.get(r, 0) + 1
+            view = self._get_view()
+            if wing:
+                rooms = dict(view.taxonomy.get(wing, {}))
+            else:
+                rooms = dict(view.rooms)
+            return RoomsResponse(wing=wing or "all", rooms=rooms)
         except Exception as e:
-            return RoomsResponse(wing=wing or "all", rooms=rooms, error=str(e))
-        return RoomsResponse(wing=wing or "all", rooms=rooms)
+            return RoomsResponse(wing=wing or "all", rooms={}, error=str(e))
 
     def get_taxonomy(self) -> TaxonomyResponse:
-        taxonomy: dict[str, dict[str, int]] = {}
         try:
-            for m in self._scan_all():
-                w = m.get("wing", "unknown")
-                r = m.get("room", "unknown")
-                if w not in taxonomy:
-                    taxonomy[w] = {}
-                taxonomy[w][r] = taxonomy[w].get(r, 0) + 1
+            view = self._get_view()
+            return TaxonomyResponse(taxonomy=view.taxonomy)
         except Exception as e:
-            return TaxonomyResponse(taxonomy=taxonomy, error=str(e))
-        return TaxonomyResponse(taxonomy=taxonomy)
+            return TaxonomyResponse(taxonomy={}, error=str(e))
 
     def brief(self, wing: str) -> WingBriefResponse:
         rooms: dict[str, int] = {}

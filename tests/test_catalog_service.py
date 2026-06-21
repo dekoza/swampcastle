@@ -18,6 +18,95 @@ def svc(col):
     return CatalogService(col, castle_path="/tmp/test")
 
 
+class TestCatalogScanConsolidation:
+    def test_status_list_wings_list_rooms_taxonomy_share_single_scan(self, col, svc):
+        """status(), list_wings(), list_rooms(), get_taxonomy() must share one scan."""
+        col.upsert(
+            documents=["a", "b", "c"],
+            ids=["1", "2", "3"],
+            metadatas=[
+                {"wing": "proj", "room": "auth"},
+                {"wing": "proj", "room": "billing"},
+                {"wing": "personal", "room": "diary"},
+            ],
+        )
+
+        original_get = col.get
+        get_call_count = 0
+        def counting_get(**kwargs):
+            nonlocal get_call_count
+            get_call_count += 1
+            return original_get(**kwargs)
+        col.get = counting_get
+
+        s = svc.status()
+        assert s.wings == {"proj": 2, "personal": 1}
+        assert s.rooms == {"auth": 1, "billing": 1, "diary": 1}
+
+        wings = svc.list_wings()
+        assert wings.wings == {"proj": 2, "personal": 1}
+
+        rooms = svc.list_rooms()
+        assert rooms.rooms == {"auth": 1, "billing": 1, "diary": 1}
+
+        tax = svc.get_taxonomy()
+        assert tax.taxonomy["proj"]["auth"] == 1
+        assert tax.taxonomy["personal"]["diary"] == 1
+
+        # All 4 calls should share a single _scan_all pass
+        assert get_call_count == 1, f"Expected 1 shared scan, got {get_call_count}"
+
+    def test_brief_does_own_scan(self, col, svc):
+        """brief() needs its own wing-scoped scan for contributors + source_files."""
+        col.upsert(
+            documents=["a", "b"],
+            ids=["1", "2"],
+            metadatas=[
+                {"wing": "proj", "room": "auth", "contributor": "dekoza", "source_file": "a.py"},
+                {"wing": "other", "room": "ops", "contributor": "sarah", "source_file": "b.py"},
+            ],
+        )
+
+        original_get = col.get
+        get_call_count = 0
+        def counting_get(**kwargs):
+            nonlocal get_call_count
+            get_call_count += 1
+            return original_get(**kwargs)
+        col.get = counting_get
+
+        svc.status()  # triggers initial scan
+        calls_after_status = get_call_count
+
+        brief = svc.brief("proj")
+        assert brief.total_drawers == 1
+        assert brief.contributors == {"dekoza": 1}
+        # brief() does its own wing-scoped scan
+        assert get_call_count > calls_after_status
+
+    def test_new_drawer_invalidates_catalog_cache(self, col, svc):
+        """Adding a drawer must invalidate the cached catalog view."""
+        col.upsert(
+            documents=["a"],
+            ids=["1"],
+            metadatas=[{"wing": "proj", "room": "auth"}],
+        )
+
+        s1 = svc.status()
+        assert s1.wings == {"proj": 1}
+
+        # Simulate what VaultService does: mutate collection + invalidate cache
+        col.upsert(
+            documents=["b"],
+            ids=["2"],
+            metadatas=[{"wing": "personal", "room": "diary"}],
+        )
+        svc._invalidate_view()
+
+        s2 = svc.status()
+        assert s2.wings == {"proj": 1, "personal": 1}
+
+
 class TestStatus:
     def test_empty(self, svc):
         s = svc.status()

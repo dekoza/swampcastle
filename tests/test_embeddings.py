@@ -378,6 +378,24 @@ def test_onnx_verification_report_unchanged_by_thread_tuning():
     assert default_report["probe_hash"] == tuned_report["probe_hash"]
 
 
+def test_onnx_fingerprint_excludes_library_versions():
+    """Fingerprint must be stable across onnxruntime/tokenizers patch updates.
+
+    Library versions do not affect vector output — only model weights,
+    dimension, and providers do. Including versions causes false-positive
+    fingerprint mismatches after dependency upgrades.
+    """
+    report = build_embedding_verification_report(OnnxEmbedder())
+    fp = report["embedder"]
+    assert "onnxruntime_version" not in fp
+    assert "tokenizers_version" not in fp
+    assert fp["model_name"] == "all-MiniLM-L6-v2"
+    assert fp["dimension"] == 384
+    from swampcastle.embeddings import _ONNX_SHA256
+
+    assert fp["asset_sha256"] == _ONNX_SHA256
+
+
 # ── embedding_model tracking in db.py ─────────────────────────────────
 
 

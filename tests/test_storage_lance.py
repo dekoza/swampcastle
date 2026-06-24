@@ -1,5 +1,8 @@
 """Tests for swampcastle.storage.lance — real LanceDB backend."""
 
+import json
+import os
+
 import pytest
 
 from swampcastle.storage.lance import LanceBackend
@@ -389,3 +392,54 @@ class TestLanceCollection:
         assert fp is not None
         assert fp["backend"] == "fake-b"
         assert fp["model_name"] == "new-model"
+
+    def test_stored_metadata_with_extra_fields_does_not_mismatch(self, tmp_path):
+        """Historical stored metadata may contain extra keys (e.g. library
+        versions) that the active fingerprint no longer includes. Opening the
+        collection must still succeed — only the keys present in the active
+        fingerprint are compared."""
+
+        class FakeEmbedder:
+            model_name = "stable-model"
+            dimension = 384
+            fingerprint = {
+                "backend": "onnx",
+                "model_name": "stable-model",
+                "dimension": 384,
+                "providers": ["CPUExecutionProvider"],
+                "asset_sha256": "abc123",
+            }
+
+            def embed(self, texts):
+                return [[0.1] * 384 for _ in texts]
+
+        backend = LanceBackend()
+        palace = str(tmp_path / "palace")
+        col = backend.get_collection(palace, "chests", embedder=FakeEmbedder())
+        col.upsert(
+            documents=["seed"],
+            ids=["s1"],
+            metadatas=[{"wing": "t", "room": "r", "source_file": ""}],
+        )
+
+        # Simulate historical metadata with extra version fields
+        meta_path = os.path.join(palace, ".swampcastle", "chests.embedder.json")
+        os.makedirs(os.path.dirname(meta_path), exist_ok=True)
+        historical = {
+            "embedding_model": "stable-model",
+            "embedding_fingerprint": {
+                "backend": "onnx",
+                "model_name": "stable-model",
+                "dimension": 384,
+                "providers": ["CPUExecutionProvider"],
+                "asset_sha256": "abc123",
+                "onnxruntime_version": "1.26.0",
+                "tokenizers_version": "0.23.1",
+            },
+        }
+        with open(meta_path, "w", encoding="utf-8") as f:
+            json.dump(historical, f)
+
+        # Reopen — must NOT raise despite extra version fields in stored metadata
+        col2 = backend.get_collection(palace, "chests", embedder=FakeEmbedder())
+        assert col2.count() == 1

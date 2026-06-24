@@ -241,8 +241,6 @@ class OnnxEmbedder:
                 "dimension": self.dimension,
                 "providers": list(self._providers),
                 "asset_sha256": _ONNX_SHA256,
-                "onnxruntime_version": _package_version("onnxruntime"),
-                "tokenizers_version": _package_version("tokenizers"),
             }
         )
 

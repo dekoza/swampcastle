@@ -206,18 +206,29 @@ class LanceCollection(CollectionStore):
 
         stored_fingerprint = stored.get("embedding_fingerprint")
         active_fingerprint = active["embedding_fingerprint"]
-        if stored_fingerprint and stored_fingerprint != active_fingerprint:
-            raise RuntimeError(
-                f"Embedder fingerprint mismatch: {source} for table '{self._table_name}' stores "
-                f"{fingerprint_sha256(stored_fingerprint)[:12]} but the active embedder is "
-                f"{fingerprint_sha256(active_fingerprint)[:12]}. "
-                "Run 'swampcastle reforge' to re-embed with the configured model."
-            )
+        if stored_fingerprint:
+            # Only compare keys present in the active fingerprint. Stored
+            # metadata may carry extra historical fields (e.g. library
+            # versions) that do not affect vector output.
+            filtered = {
+                k: stored_fingerprint[k] for k in active_fingerprint if k in stored_fingerprint
+            }
+            if filtered != active_fingerprint:
+                raise RuntimeError(
+                    f"Embedder fingerprint mismatch: {source} for table '{self._table_name}' stores "
+                    f"{fingerprint_sha256(stored_fingerprint)[:12]} but the active embedder is "
+                    f"{fingerprint_sha256(active_fingerprint)[:12]}. "
+                    "Run 'swampcastle reforge' to re-embed with the configured model."
+                )
 
     def _check_embedder_contract(self) -> None:
         stored = self._load_embedder_meta()
         if stored is not None:
             self._validate_embedder_contract(stored, source="collection metadata")
+            # Self-heal: rewrite metadata in the current canonical format.
+            # Strips obsolete fields (e.g. library versions) from stored
+            # fingerprints so future comparisons are clean.
+            self._write_embedder_meta()
             return
 
         try:

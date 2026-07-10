@@ -9,6 +9,7 @@ from swampcastle.mining.normalize import (
     _try_claude_code_jsonl,
     _try_codex_jsonl,
     _try_normalize_json,
+    _try_pi_jsonl,
     _try_slack_json,
     normalize,
 )
@@ -511,3 +512,147 @@ def test_normalize_rejects_large_file():
             assert False, "Should have raised IOError"
         except IOError as e:
             assert "too large" in str(e).lower()
+
+
+# ── Pi agent JSONL ─────────────────────────────────────────────────────
+
+
+def _pi_session_header():
+    return json.dumps(
+        {
+            "type": "session",
+            "version": "3",
+            "id": "019f30fb-f605-74b1-ae54-5c306ae2341c",
+            "timestamp": "2026-07-05T06:34:06.726Z",
+            "cwd": "/home/user/project",
+        }
+    )
+
+
+def _pi_message(role, content, uid="m1"):
+    return json.dumps(
+        {
+            "type": "message",
+            "id": uid,
+            "parentId": None,
+            "timestamp": "2026-07-05T06:35:00.000Z",
+            "message": {"role": role, "content": content},
+        }
+    )
+
+
+def test_pi_jsonl_valid():
+    lines = [
+        _pi_session_header(),
+        _pi_message("user", [{"type": "text", "text": "Q"}]),
+        _pi_message("assistant", [{"type": "text", "text": "A"}]),
+    ]
+    result = _try_pi_jsonl("\n".join(lines))
+    assert result is not None
+    assert "> Q" in result
+    assert "A" in result
+
+
+def test_pi_jsonl_string_content():
+    lines = [
+        _pi_session_header(),
+        _pi_message("user", "Q"),
+        _pi_message("assistant", [{"type": "text", "text": "A"}]),
+    ]
+    result = _try_pi_jsonl("\n".join(lines))
+    assert result is not None
+    assert "> Q" in result
+
+
+def test_pi_jsonl_no_session_header():
+    """Without the {type: session, version} header, pi parser returns None."""
+    lines = [
+        _pi_message("user", [{"type": "text", "text": "Q"}]),
+        _pi_message("assistant", [{"type": "text", "text": "A"}]),
+    ]
+    assert _try_pi_jsonl("\n".join(lines)) is None
+
+
+def test_pi_jsonl_too_few_messages():
+    lines = [
+        _pi_session_header(),
+        _pi_message("user", [{"type": "text", "text": "Q"}]),
+    ]
+    assert _try_pi_jsonl("\n".join(lines)) is None
+
+
+def test_pi_jsonl_skips_tool_results_and_events():
+    """toolResult messages and non-message event entries are operational, not conversation."""
+    lines = [
+        _pi_session_header(),
+        json.dumps({"type": "model_change", "provider": "local", "modelId": "m"}),
+        json.dumps({"type": "thinking_level_change", "thinkingLevel": "high"}),
+        json.dumps({"type": "custom_message", "content": "chrome"}),
+        json.dumps({"type": "compaction", "summary": "..."}),
+        _pi_message("user", [{"type": "text", "text": "Q"}]),
+        _pi_message("toolResult", [{"type": "text", "text": "tool output"}]),
+        _pi_message("assistant", [{"type": "text", "text": "A"}]),
+    ]
+    result = _try_pi_jsonl("\n".join(lines))
+    assert result is not None
+    assert "tool output" not in result
+    assert "chrome" not in result
+
+
+def test_pi_jsonl_skips_thinking_and_toolcall_blocks():
+    lines = [
+        _pi_session_header(),
+        _pi_message("user", [{"type": "text", "text": "Q"}]),
+        _pi_message(
+            "assistant",
+            [
+                {"type": "thinking", "thinking": "hmm"},
+                {"type": "toolCall", "id": "t1", "name": "bash", "arguments": {}},
+                {"type": "text", "text": "A"},
+            ],
+        ),
+    ]
+    result = _try_pi_jsonl("\n".join(lines))
+    assert result is not None
+    assert "A" in result
+    assert "hmm" not in result
+
+
+def test_pi_jsonl_non_dict_entries_and_bad_json():
+    lines = [
+        _pi_session_header(),
+        "not json",
+        json.dumps(["a", "list"]),
+        json.dumps({"type": "message", "message": "not a dict"}),
+        _pi_message("user", [{"type": "text", "text": "Q"}]),
+        _pi_message("assistant", [{"type": "text", "text": "A"}]),
+    ]
+    result = _try_pi_jsonl("\n".join(lines))
+    assert result is not None
+    assert "> Q" in result
+
+
+def test_pi_jsonl_fixture_via_normalize(tmp_path):
+    """End-to-end: a .jsonl file modeled on a real pi session normalizes via normalize()."""
+    import shutil
+    from pathlib import Path
+
+    fixture = Path(__file__).parent / "fixtures" / "pi_session.jsonl"
+    target = tmp_path / "2026-07-05T06-34-06-726Z_019f30fb.jsonl"
+    shutil.copy(fixture, target)
+    result = normalize(str(target))
+    assert "> " in result
+    assert "tool output" not in result
+
+
+def test_pi_jsonl_not_claimed_by_other_parsers():
+    """Pi content must fall through claude-code and codex parsers."""
+    lines = [
+        _pi_session_header(),
+        _pi_message("user", [{"type": "text", "text": "Q"}]),
+        _pi_message("assistant", [{"type": "text", "text": "A"}]),
+    ]
+    content = "\n".join(lines)
+    assert _try_claude_code_jsonl(content) is None
+    assert _try_codex_jsonl(content) is None
+    assert _try_normalize_json(content) is not None

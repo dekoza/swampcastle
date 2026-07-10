@@ -1,0 +1,10 @@
+{"type":"session","version":"3","id":"019f30fb-f605-74b1-ae54-5c306ae2341c","timestamp":"2026-07-05T06:34:06.726Z","cwd":"/home/user/project"}
+{"type":"model_change","id":"e1","parentId":null,"timestamp":"2026-07-05T06:34:07.813Z","provider":"local","modelId":"example-model"}
+{"type":"thinking_level_change","id":"e2","parentId":"e1","timestamp":"2026-07-05T06:34:07.813Z","thinkingLevel":"high"}
+{"type":"message","id":"m1","parentId":"e2","timestamp":"2026-07-05T06:35:00.000Z","message":{"role":"user","content":[{"type":"text","text":"How do I list files in a directory with Python?"}]}}
+{"type":"message","id":"m2","parentId":"m1","timestamp":"2026-07-05T06:35:05.000Z","message":{"role":"assistant","content":[{"type":"thinking","thinking":"The user wants a directory listing."},{"type":"toolCall","id":"t1","name":"bash","arguments":{"command":"ls"}}]}}
+{"type":"message","id":"m3","parentId":"m2","timestamp":"2026-07-05T06:35:06.000Z","message":{"role":"toolResult","content":[{"type":"text","text":"tool output: file_a.py file_b.py"}]}}
+{"type":"message","id":"m4","parentId":"m3","timestamp":"2026-07-05T06:35:10.000Z","message":{"role":"assistant","content":[{"type":"text","text":"Use pathlib: `Path('.').iterdir()` iterates entries in the directory."}]}}
+{"type":"custom_message","id":"e3","parentId":"m4","timestamp":"2026-07-05T06:35:11.000Z","content":"ui chrome line"}
+{"type":"message","id":"m5","parentId":"m4","timestamp":"2026-07-05T06:36:00.000Z","message":{"role":"user","content":"Thanks, and recursively?"}}
+{"type":"message","id":"m6","parentId":"m5","timestamp":"2026-07-05T06:36:05.000Z","message":{"role":"assistant","content":[{"type":"text","text":"Use `Path('.').rglob('*')` for a recursive walk."}]}}

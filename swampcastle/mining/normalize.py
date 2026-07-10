@@ -8,6 +8,7 @@ Supported:
     - ChatGPT conversations.json
     - Claude Code JSONL
     - OpenAI Codex CLI JSONL
+    - Pi agent JSONL
     - Slack JSON export
     - Plain text (pass through for paragraph chunking)
 
@@ -63,6 +64,10 @@ def _try_normalize_json(content: str) -> Optional[str]:
         return normalized
 
     normalized = _try_codex_jsonl(content)
+    if normalized:
+        return normalized
+
+    normalized = _try_pi_jsonl(content)
     if normalized:
         return normalized
 
@@ -149,6 +154,56 @@ def _try_codex_jsonl(content: str) -> Optional[str]:
             messages.append(("assistant", text))
 
     if len(messages) >= 2 and has_session_meta:
+        return _messages_to_transcript(messages)
+    return None
+
+
+def _try_pi_jsonl(content: str) -> Optional[str]:
+    """Pi agent sessions (~/.pi/agent/sessions/{escaped-cwd}/{timestamp}_{uuid}.jsonl).
+
+    Pi stores sessions as JSONL with a tree-structured message history.
+    Only {"type": "message"} entries are conversation; event entries
+    (model_change, thinking_level_change, custom_message, compaction, ...)
+    are operational and skipped, as are messages with role "toolResult".
+    Content is a string or a block list; _extract_content keeps only
+    "text" blocks, so thinking/toolCall/image blocks drop out.
+
+    Gated on the {"type": "session", "version": ...} header line so other
+    JSONL dialects never match. The parentId tree is read linearly, so
+    abandoned branches interleave — accepted, matching upstream MemPalace.
+    """
+    lines = [line.strip() for line in content.strip().split("\n") if line.strip()]
+    messages = []
+    has_session_header = False
+    for line in lines:
+        try:
+            entry = json.loads(line)
+        except json.JSONDecodeError:
+            continue
+        if not isinstance(entry, dict):
+            continue
+
+        entry_type = entry.get("type", "")
+        if entry_type == "session" and "version" in entry:
+            has_session_header = True
+            continue
+
+        if entry_type != "message":
+            continue
+
+        message = entry.get("message", {})
+        if not isinstance(message, dict):
+            continue
+
+        role = message.get("role", "")
+        text = _extract_content(message.get("content", ""))
+
+        if role == "user" and text:
+            messages.append(("user", text))
+        elif role == "assistant" and text:
+            messages.append(("assistant", text))
+
+    if len(messages) >= 2 and has_session_header:
         return _messages_to_transcript(messages)
     return None
 

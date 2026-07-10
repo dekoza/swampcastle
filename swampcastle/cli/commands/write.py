@@ -324,6 +324,13 @@ def cmd_deskeleton(args):
 
 
 def cmd_sweep(args):
+    # Line-buffer stdout so per-file progress reaches the systemd journal live.
+    # (PYTHONUNBUFFERED alone can't do it: pipx console scripts run python -E.)
+    try:
+        sys.stdout.reconfigure(line_buffering=True)
+    except (AttributeError, OSError):
+        pass
+
     settings = _settings(args)
     palace_path = str(settings.castle_path)
 

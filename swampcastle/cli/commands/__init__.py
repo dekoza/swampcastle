@@ -46,6 +46,7 @@ from swampcastle.cli.commands.write import (
     cmd_gather,
     cmd_project,
     cmd_reforge,
+    cmd_sweep,
 )
 
 __all__ = [
@@ -70,6 +71,7 @@ __all__ = [
     "cmd_gather",
     "cmd_project",
     "cmd_reforge",
+    "cmd_sweep",
     # KG
     "cmd_kg_accept",
     "cmd_kg_extract",

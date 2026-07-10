@@ -89,6 +89,17 @@ def main():
         "--explain", action="store_true", help="Print skip reasons for files during mining"
     )
 
+    # sweep
+    p = sub.add_parser(
+        "sweep", help="Idempotently sweep Claude Code + pi transcripts into the castle"
+    )
+    p.add_argument("--dry-run", action="store_true")
+    p.add_argument(
+        "--install-timer",
+        action="store_true",
+        help="Install and enable the systemd user timer (runs the sweep every 6h)",
+    )
+
     # seek (search)
     p = sub.add_parser("seek", aliases=["search"], help="Seek anything in the castle")
     p.add_argument("query", nargs="?", default="")
@@ -337,6 +348,7 @@ def main():
         "tune": cmd.cmd_tune,
         "gather": cmd.cmd_gather,
         "mine": cmd.cmd_gather,
+        "sweep": cmd.cmd_sweep,
         "seek": cmd.cmd_seek,
         "search": cmd.cmd_seek,
         "survey": cmd.cmd_survey,

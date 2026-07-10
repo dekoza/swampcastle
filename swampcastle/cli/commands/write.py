@@ -321,3 +321,48 @@ def cmd_deskeleton(args):
                     )
             finally:
                 target_store.close()
+
+
+def cmd_sweep(args):
+    settings = _settings(args)
+    palace_path = str(settings.castle_path)
+
+    if getattr(args, "install_timer", False):
+        from swampcastle.mining.sweep import install_timer
+
+        written = install_timer()
+        _print_section("Sweep timer")
+        for path in written:
+            _print_kv("Wrote", str(path))
+        print("  Enabled: swampcastle-sweep.timer (every 6h, persistent)")
+        return
+
+    storage_factory = None
+    if not args.dry_run:
+        from swampcastle.storage import factory_from_settings
+
+        storage_factory = factory_from_settings(settings)
+
+    from swampcastle.mining.sweep import sweep_transcripts
+
+    _print_section("Sweep")
+    _print_kv("Castle", palace_path)
+    if args.dry_run:
+        _print_kv("Mode", "dry run")
+
+    summary = sweep_transcripts(palace_path, storage_factory=storage_factory, dry_run=args.dry_run)
+
+    _print_kv("Projects swept", str(summary["projects_swept"]))
+    if summary["roots_missing"]:
+        _print_kv("Roots missing", ", ".join(summary["roots_missing"]))
+    if summary["oversize"]:
+        print(
+            f"  WARNING: {len(summary['oversize'])} oversize transcripts skipped (staleness gap):"
+        )
+        for path in summary["oversize"]:
+            print(f"    - {path}")
+    if summary["projects_failed"]:
+        print(f"  ERROR: {len(summary['projects_failed'])} project directories failed:")
+        for failure in summary["projects_failed"]:
+            print(f"    - {failure}")
+        sys.exit(1)

@@ -100,6 +100,24 @@ def main():
         help="Install and enable the systemd user timer (runs the sweep every 6h)",
     )
 
+    # tracker (wayfinder decision ingest)
+    p_tracker = sub.add_parser(
+        "tracker", help="Wayfinder tracker-memory adapter (decision ingest)"
+    )
+    tracker_sub = p_tracker.add_subparsers(dest="tracker_action")
+    p_ti = tracker_sub.add_parser("ingest", help="Ingest one repo's wayfinder maps now")
+    p_ti.add_argument("repo", help="owner/name")
+    p_ti.add_argument("--forge", choices=["gitea", "github"], default=None)
+    p_ti.add_argument("--label", default="wayfinder:map")
+    p_ti.add_argument("--dry-run", action="store_true")
+    p_treg = tracker_sub.add_parser(
+        "register", help="Detect a wayfinder map on a project's tracker and register it"
+    )
+    p_treg.add_argument("dir", nargs="?", default=".")
+    tracker_sub.add_parser("list", help="List registered tracker repos")
+    p_trm = tracker_sub.add_parser("remove", help="Deregister a tracker repo")
+    p_trm.add_argument("repo")
+
     # seek (search)
     p = sub.add_parser("seek", aliases=["search"], help="Seek anything in the castle")
     p.add_argument("query", nargs="?", default="")
@@ -329,6 +347,13 @@ def main():
             return
         if action == "rebuild":
             cmd.cmd_derived_rebuild(args)
+        return
+
+    if args.command == "tracker":
+        if not getattr(args, "tracker_action", None):
+            p_tracker.print_help()
+            return
+        cmd.cmd_tracker(args)
         return
 
     if args.command == "hook":

@@ -34,6 +34,20 @@ def cmd_project(args):
         team=getattr(args, "team", None),
     )
 
+    # Best-effort wayfinder-map autodetection — never breaks project setup.
+    try:
+        from swampcastle.mining import tracker
+
+        detected = tracker.detect_tracker_repo(project_dir)
+        if detected is not None:
+            forge, repo = detected
+            if tracker.probe_wayfinder_map(forge, repo) and tracker.register_tracker_repo(
+                forge, repo
+            ):
+                print(f"  Wayfinder map found on {forge}:{repo} — registered for tracker sweep.")
+    except Exception as exc:
+        logger.debug("Tracker autodetection skipped: %s", exc)
+
 
 def cmd_gather(args):
     settings = _settings(args)
@@ -368,10 +382,34 @@ def cmd_sweep(args):
         )
         for path in summary["oversize"]:
             print(f"    - {path}")
+
+    tracker_failed = False
+    if not args.dry_run:
+        from swampcastle.mining.tracker import sweep_trackers
+
+        collection = storage_factory.open_collection("swampcastle_chests")
+        tracker_summary = sweep_trackers(collection=collection)
+        _print_kv(
+            "Trackers swept",
+            f"{tracker_summary['swept']} (+{tracker_summary['drawers']} drawers)",
+        )
+        if tracker_summary["stale"]:
+            print(
+                f"  WARNING: stale tracker entries skipped: {', '.join(tracker_summary['stale'])}"
+            )
+        if tracker_summary["auth_failed"]:
+            print("  ERROR: forge auth failed — tracker ingest paused; refresh tea/gh credentials.")
+        if tracker_summary["failed"]:
+            print(f"  ERROR: {len(tracker_summary['failed'])} tracker repos failed:")
+            for failure in tracker_summary["failed"]:
+                print(f"    - {failure}")
+        tracker_failed = bool(tracker_summary["failed"]) or tracker_summary["auth_failed"]
+
     if summary["projects_failed"]:
         print(f"  ERROR: {len(summary['projects_failed'])} project directories failed:")
         for failure in summary["projects_failed"]:
             print(f"    - {failure}")
+    if summary["projects_failed"] or tracker_failed:
         sys.exit(1)
 
 
@@ -389,3 +427,72 @@ def cmd_install_hooks(args):
     )
     _print_kv("pi", str(result["pi_extension"]))
     print("  Restart running sessions (or /reload in pi) to activate.")
+
+
+def cmd_tracker(args):
+    from swampcastle.mining import tracker
+
+    action = getattr(args, "tracker_action", None)
+
+    if action == "list":
+        entries = tracker.list_tracker_repos()
+        _print_section("Tracker repos")
+        if not entries:
+            print("  (none registered)")
+        for e in entries:
+            print(
+                f"  {e.get('forge')}:{e.get('repo')} [{e.get('state')}] "
+                f"label={e.get('label')} last_ok={e.get('last_ok') or 'never'} "
+                f"failures={e.get('consecutive_failures', 0)}"
+            )
+        return
+
+    if action == "remove":
+        removed = tracker.remove_tracker_repo(args.repo)
+        print(f"  {'Removed' if removed else 'Not registered:'} {args.repo}")
+        return
+
+    if action == "register":
+        detected = tracker.detect_tracker_repo(os.path.expanduser(args.dir))
+        if detected is None:
+            print("  No known forge remote found in that directory.")
+            sys.exit(1)
+        forge, repo = detected
+        try:
+            has_map = tracker.probe_wayfinder_map(forge, repo)
+        except tracker.TrackerError as exc:
+            print(f"  Probe of {forge}:{repo} failed: {exc}")
+            sys.exit(1)
+        if not has_map:
+            print(f"  No {tracker.DEFAULT_LABEL} issues on {forge}:{repo} — not registering.")
+            return
+        added = tracker.register_tracker_repo(forge, repo)
+        print(
+            f"  {'Registered' if added else 'Already registered:'} {forge}:{repo} "
+            f"(label {tracker.DEFAULT_LABEL})"
+        )
+        return
+
+    if action == "ingest":
+        forge = args.forge
+        if forge is None:
+            entry = next(
+                (e for e in tracker.list_tracker_repos() if e.get("repo") == args.repo),
+                None,
+            )
+            forge = entry["forge"] if entry else "gitea"
+
+        collection = None
+        if not args.dry_run:
+            from swampcastle.storage import factory_from_settings
+
+            settings = _settings(args)
+            collection = factory_from_settings(settings).open_collection("swampcastle_chests")
+
+        _print_section("Tracker ingest")
+        _print_kv("Repo", f"{forge}:{args.repo}")
+        result = tracker.ingest_tracker_repo(
+            forge, args.repo, collection=collection, label=args.label, dry_run=args.dry_run
+        )
+        _print_kv("Drawers filed", str(result["drawers"]))
+        _print_kv("Unchanged", str(result["skipped"]))

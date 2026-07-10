@@ -384,12 +384,12 @@ def test_stop_hook_oserror_on_write(tmp_path):
 # --- hook_precompact with MEMPAL_DIR ---
 
 
-def test_precompact_with_transcript_path_runs_sync_convo_ingest(tmp_path):
+def test_precompact_with_transcript_path_backgrounds_convo_ingest(tmp_path):
     transcript = tmp_path / "session.jsonl"
     transcript.write_text('{"message": {"role": "user", "content": "hello"}}\n')
 
     with patch.dict("os.environ", {}, clear=True):
-        with patch("swampcastle.hooks_cli.subprocess.run") as mock_run:
+        with patch("swampcastle.hooks_cli.subprocess.Popen") as mock_run:
             result = _capture_hook_output(
                 hook_precompact,
                 {"session_id": "test", "transcript_path": str(transcript)},
@@ -414,7 +414,7 @@ def test_precompact_with_mempal_dir(tmp_path):
     mempal_dir = tmp_path / "project"
     mempal_dir.mkdir()
     with patch.dict("os.environ", {"MEMPAL_DIR": str(mempal_dir)}):
-        with patch("swampcastle.hooks_cli.subprocess.run") as mock_run:
+        with patch("swampcastle.hooks_cli.subprocess.Popen") as mock_run:
             result = _capture_hook_output(
                 hook_precompact,
                 {"session_id": "test"},
@@ -431,7 +431,7 @@ def test_precompact_transcript_and_mempal_dir_are_additive(tmp_path):
     mempal_dir.mkdir()
 
     with patch.dict("os.environ", {"MEMPAL_DIR": str(mempal_dir)}):
-        with patch("swampcastle.hooks_cli.subprocess.run") as mock_run:
+        with patch("swampcastle.hooks_cli.subprocess.Popen") as mock_run:
             result = _capture_hook_output(
                 hook_precompact,
                 {"session_id": "test", "transcript_path": str(transcript)},
@@ -457,7 +457,7 @@ def test_precompact_with_mempal_dir_oserror(tmp_path):
     mempal_dir = tmp_path / "project"
     mempal_dir.mkdir()
     with patch.dict("os.environ", {"MEMPAL_DIR": str(mempal_dir)}):
-        with patch("swampcastle.hooks_cli.subprocess.run", side_effect=OSError("fail")):
+        with patch("swampcastle.hooks_cli.subprocess.Popen", side_effect=OSError("fail")):
             result = _capture_hook_output(
                 hook_precompact,
                 {"session_id": "test"},
@@ -477,6 +477,25 @@ def test_run_hook_dispatches_session_start(tmp_path):
             with patch("swampcastle.hooks_cli._output") as mock_output:
                 run_hook("session-start", "claude-code")
     mock_output.assert_called_once_with({})
+
+
+def test_run_hook_crashing_handler_emits_empty_json(tmp_path):
+    """A hook crash must never surface a traceback into the client (field
+    regression: a synchronous ingest raised TimeoutExpired into Claude Code,
+    failing the PreCompact hook)."""
+    import subprocess as _subprocess
+
+    def boom(data, harness):
+        raise _subprocess.TimeoutExpired(cmd="mine", timeout=60)
+
+    stdin_data = json.dumps({"session_id": "run-test"})
+    with patch("sys.stdin", io.StringIO(stdin_data)):
+        with patch("swampcastle.hooks_cli.STATE_DIR", tmp_path):
+            with patch("swampcastle.hooks_cli.hook_precompact", boom):
+                with patch("swampcastle.hooks_cli._output") as mock_output:
+                    run_hook("precompact", "claude-code")
+    mock_output.assert_called_once_with({})
+    assert "crashed" in (tmp_path / "hook.log").read_text()
 
 
 def test_run_hook_dispatches_stop(tmp_path):

@@ -11,6 +11,7 @@ import os
 import re
 import subprocess
 import sys
+import traceback
 from datetime import datetime
 from pathlib import Path
 
@@ -135,22 +136,6 @@ def _maybe_auto_ingest(transcript_path: str = ""):
         pass
 
 
-def _run_auto_ingest_sync(transcript_path: str = ""):
-    """Run optional synchronous ingest before compaction."""
-    commands = _auto_ingest_commands(transcript_path)
-    if not commands:
-        return
-
-    try:
-        STATE_DIR.mkdir(parents=True, exist_ok=True)
-        log_path = STATE_DIR / "hook.log"
-        with open(log_path, "a") as log_f:
-            for command in commands:
-                subprocess.run(command, stdout=log_f, stderr=log_f, timeout=60)
-    except OSError:
-        pass
-
-
 SUPPORTED_HARNESSES = {"claude-code", "codex", "pi"}
 
 
@@ -227,12 +212,16 @@ def hook_session_start(data: dict, harness: str):
 
 
 def hook_precompact(data: dict, harness: str):
-    """Precompact hook: ingest the transcript, then let compaction proceed.
+    """Precompact hook: fire-and-forget thin ingest, then let compaction proceed.
 
     Never blocks — in Claude Code a blocking PreCompact hook prevents
     compaction outright (there is no save-then-retry cycle), holding the
-    session hostage. The save-nudge instruction belongs to the protocol
-    adherence milestone, not the ingest path.
+    session hostage. The ingest is backgrounded, not synchronous: the
+    transcript file on disk survives compaction, so nothing is lost, and a
+    synchronous mine makes /compact wait on embedding (and raised
+    TimeoutExpired into the client when mining outran its 60s budget).
+    The save-nudge instruction belongs to the protocol adherence milestone,
+    not the ingest path.
     """
     parsed = _parse_harness_input(data, harness)
     session_id = parsed["session_id"]
@@ -240,8 +229,7 @@ def hook_precompact(data: dict, harness: str):
 
     _log(f"PRE-COMPACT triggered for session {session_id}")
 
-    # Ingest synchronously before compaction so memories land first.
-    _run_auto_ingest_sync(transcript_path)
+    _maybe_auto_ingest(transcript_path)
 
     _output({})
 
@@ -283,4 +271,10 @@ def run_hook(hook_name: str, harness: str):
         print(f"Unknown hook: {hook_name}", file=sys.stderr)
         sys.exit(1)
 
-    handler(data, harness)
+    try:
+        handler(data, harness)
+    except Exception:
+        # A hook must never surface a traceback into the client. Log the
+        # failure and pass through so the harness proceeds.
+        _log(f"ERROR: hook {hook_name} crashed:\n{traceback.format_exc()}")
+        _output({})

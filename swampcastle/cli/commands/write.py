@@ -373,3 +373,19 @@ def cmd_sweep(args):
         for failure in summary["projects_failed"]:
             print(f"    - {failure}")
         sys.exit(1)
+
+
+def cmd_install_hooks(args):
+    from swampcastle.hooks_install import install_all
+
+    result = install_all()
+    _print_section("Install hooks")
+    _print_kv("Launcher", str(result["wrapper"]))
+    _print_kv(
+        "Claude Code",
+        "hooks added to ~/.claude/settings.json"
+        if result["claude_settings_changed"]
+        else "already installed",
+    )
+    _print_kv("pi", str(result["pi_extension"]))
+    print("  Restart running sessions (or /reload in pi) to activate.")

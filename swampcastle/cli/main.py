@@ -171,8 +171,18 @@ def main():
     p_hook = sub.add_parser("hook", help=argparse.SUPPRESS)
     hook_sub = p_hook.add_subparsers(dest="hook_action")
     p_hr = hook_sub.add_parser("run")
-    p_hr.add_argument("--hook", required=True, choices=["session-start", "stop", "precompact"])
-    p_hr.add_argument("--harness", required=True, choices=["claude-code", "codex"])
+    p_hr.add_argument(
+        "--hook",
+        required=True,
+        choices=["session-start", "stop", "precompact", "session-end"],
+    )
+    p_hr.add_argument("--harness", required=True, choices=["claude-code", "codex", "pi"])
+
+    # install-hooks
+    sub.add_parser(
+        "install-hooks",
+        help="Install session-end/precompact ingest hooks for Claude Code and pi",
+    )
 
     # instructions (internal)
     p_instr = sub.add_parser("instructions", help=argparse.SUPPRESS)
@@ -349,6 +359,7 @@ def main():
         "gather": cmd.cmd_gather,
         "mine": cmd.cmd_gather,
         "sweep": cmd.cmd_sweep,
+        "install-hooks": cmd.cmd_install_hooks,
         "seek": cmd.cmd_seek,
         "search": cmd.cmd_seek,
         "survey": cmd.cmd_survey,

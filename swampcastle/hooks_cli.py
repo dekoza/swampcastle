@@ -2,8 +2,8 @@
 Hook logic for SwampCastle — Python implementation of session-start, stop, and precompact hooks.
 
 Reads JSON from stdin, outputs JSON to stdout.
-Supported hooks: session-start, stop, precompact
-Supported harnesses: claude-code, codex (extensible to cursor, gemini, etc.)
+Supported hooks: session-start, stop, precompact, session-end
+Supported harnesses: claude-code, codex, pi (extensible to cursor, gemini, etc.)
 """
 
 import json
@@ -151,7 +151,7 @@ def _run_auto_ingest_sync(transcript_path: str = ""):
         pass
 
 
-SUPPORTED_HARNESSES = {"claude-code", "codex"}
+SUPPORTED_HARNESSES = {"claude-code", "codex", "pi"}
 
 
 def _parse_harness_input(data: dict, harness: str) -> dict:
@@ -241,6 +241,23 @@ def hook_precompact(data: dict, harness: str):
     _output({"decision": "block", "reason": PRECOMPACT_BLOCK_REASON})
 
 
+def hook_session_end(data: dict, harness: str):
+    """Session end hook: fire-and-forget thin ingest of the final transcript.
+
+    Never blocks — the harness is shutting down; output {} immediately and
+    let the backgrounded mine catch the tail exchanges (upstream #1814).
+    """
+    parsed = _parse_harness_input(data, harness)
+    session_id = parsed["session_id"]
+    transcript_path = parsed["transcript_path"]
+
+    _log(f"SESSION END for session {session_id} ({harness})")
+
+    _maybe_auto_ingest(transcript_path)
+
+    _output({})
+
+
 def run_hook(hook_name: str, harness: str):
     """Main entry point: read stdin JSON, dispatch to hook handler."""
     try:
@@ -253,6 +270,7 @@ def run_hook(hook_name: str, harness: str):
         "session-start": hook_session_start,
         "stop": hook_stop,
         "precompact": hook_precompact,
+        "session-end": hook_session_end,
     }
 
     handler = hooks.get(hook_name)

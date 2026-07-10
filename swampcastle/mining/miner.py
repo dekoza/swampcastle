@@ -121,7 +121,9 @@ SKIP_FILENAMES = {
 CHUNK_SIZE = 800  # chars per drawer
 CHUNK_OVERLAP = 100  # overlap between chunks
 MIN_CHUNK_SIZE = 50  # skip tiny chunks
-MAX_FILE_SIZE = 10 * 1024 * 1024  # 10 MB — skip files larger than this
+# 500 MB — a hard sanity cap only. Generated/minified junk is filtered by the
+# heuristics below, not by size; a 10 MB cap silently dropped real files (#998).
+MAX_FILE_SIZE = 500 * 1024 * 1024
 
 # Heuristic thresholds
 LONGEST_LINE_REJECT = 500  # unconditional reject if any line longer than this
@@ -455,6 +457,29 @@ def load_config(project_dir: str) -> dict:
 # =============================================================================
 
 
+_TOKEN_SPLIT = re.compile(r"[-_./ ]+")
+
+
+def _tokens(value: str) -> set:
+    """Split ``value`` into lowercased tokens bounded by ``-``, ``_``, ``.``, ``/`` or space."""
+    return {t for t in _TOKEN_SPLIT.split(value.lower()) if t}
+
+
+def _name_matches(a: str, b: str) -> bool:
+    """Return True when ``a`` and ``b`` match as equal strings or as
+    separator-bounded tokens of each other.
+
+    Prevents incidental substring collisions (e.g., ``"views" in "interviews"``)
+    that a raw ``in`` check would produce (upstream #1004), while preserving
+    the intended match for real tokens (e.g., ``"frontend"`` in ``"frontend-app"``).
+    """
+    a = a.lower()
+    b = b.lower()
+    if a == b:
+        return True
+    return b in _tokens(a) or a in _tokens(b)
+
+
 def detect_room(filepath: Path, content: str, rooms: list, project_path: Path) -> str:
     """
     Route a file to the right room.
@@ -473,12 +498,12 @@ def detect_room(filepath: Path, content: str, rooms: list, project_path: Path) -
     for part in path_parts[:-1]:  # skip filename itself
         for room in rooms:
             candidates = [room["name"].lower()] + [k.lower() for k in room.get("keywords", [])]
-            if any(part == c or c in part or part in c for c in candidates):
+            if any(_name_matches(part, c) for c in candidates):
                 return room["name"]
 
     # Priority 2: filename matches room name
     for room in rooms:
-        if room["name"].lower() in filename or filename in room["name"].lower():
+        if _name_matches(filename, room["name"]):
             return room["name"]
 
     # Priority 3: keyword scoring from room keywords + name
@@ -717,6 +742,7 @@ def add_drawer(
             "chunk_index": chunk_index,
             "added_by": agent,
             "filed_at": datetime.now().isoformat(),
+            "ingest_mode": "registry",
         }
         if contributor:
             metadata["contributor"] = contributor
@@ -837,6 +863,7 @@ def process_file(
             "chunk_index": chunk["chunk_index"],
             "added_by": agent,
             "filed_at": datetime.now().isoformat(),
+            "ingest_mode": "registry",
         }
         if is_skeleton:
             metadata["is_skeleton"] = True

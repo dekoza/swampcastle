@@ -17,8 +17,96 @@ No API key. No internet. Everything local.
 
 import json
 import os
+import re
 from pathlib import Path
 from typing import Optional
+
+# =============================================================================
+# NOISE STRIPPING (upstream #785)
+#
+# Harness-injected chrome must not become memories: system tags, hook output,
+# and Claude Code TUI markers are removed per message, never across message
+# boundaries. Every pattern is line-anchored and the tag body refuses to cross
+# blank lines, so a stray unclosed tag in one message can never eat content
+# from neighboring messages. When in doubt, leave text alone.
+# =============================================================================
+
+_NOISE_TAGS = (
+    "system-reminder",
+    "command-message",
+    "command-name",
+    "task-notification",
+    "user-prompt-submit-hook",
+    "hook_output",
+    "local-command-caveat",
+    "local-command-stdout",
+)
+
+
+def _tag_pattern(name: str) -> "re.Pattern[str]":
+    # Opening tag must begin a line (optionally after a `> ` blockquote marker,
+    # since _messages_to_transcript prefixes user turns with `> `). Body is lazy
+    # but forbidden from crossing a blank line, so a dangling open tag can't
+    # span multiple messages. Closing tag eats optional trailing whitespace.
+    return re.compile(
+        rf"(?m)^(?:> )?<{name}(?:\s[^>]*)?>" rf"(?:(?!\n\s*\n)[\s\S])*?" rf"</{name}>[ \t]*\n?"
+    )
+
+
+_NOISE_TAG_PATTERNS = [_tag_pattern(t) for t in _NOISE_TAGS]
+
+# Strings that identify an entire noise line when found at its start.
+# Matched case-sensitively and anchored to line-start so user prose mentioning
+# e.g. "current time:" in a sentence is untouched. The MemPalace-era prefixes
+# stay: this machine's transcript history predates the fork.
+_NOISE_LINE_PREFIXES = (
+    "CURRENT TIME:",
+    "VERIFIED FACTS (do not contradict)",
+    "AGENT SPECIALIZATION:",
+    "Checking verified facts...",
+    "Injecting timestamp...",
+    "Starting background pipeline...",
+    "Checking emotional weights...",
+    "Auto-save reminder...",
+    "Checking pipeline...",
+    "MemPalace auto-save checkpoint.",
+)
+
+_NOISE_LINE_PATTERNS = [
+    re.compile(rf"(?m)^(?:> )?{re.escape(p)}.*\n?") for p in _NOISE_LINE_PREFIXES
+]
+
+# Claude Code TUI hook-run chrome, e.g. "Ran 2 Stop hooks". Line-anchored,
+# case-sensitive, explicit hook names — prose like "our CI has a stop hook"
+# stays intact.
+_HOOK_LINE_RE = re.compile(
+    r"(?m)^(?:> )?Ran \d+ (?:Stop|PreCompact|PreToolUse|PostToolUse|UserPromptSubmit|Notification|SessionStart|SessionEnd) hook[s]?.*\n?"
+)
+
+# "… +N lines" collapsed-output marker, line-anchored.
+_COLLAPSED_LINES_RE = re.compile(r"(?m)^(?:> )?…\s*\+\d+ lines.*\n?")
+
+# Claude Code collapsed-output chrome "[N tokens] (ctrl+o to expand)".
+# Narrow shape — a bare "(ctrl+o to expand)" in user prose stays intact.
+_TOKEN_CHROME_RE = re.compile(r"\s*\[\d+\s+tokens?\]\s*\(ctrl\+o to expand\)")
+
+
+def strip_noise(text: str) -> str:
+    """Remove system tags, hook output, and harness UI chrome from text.
+
+    All patterns are line-anchored. User prose that happens to mention these
+    strings inline (e.g., documenting them) is preserved verbatim.
+    """
+    for pat in _NOISE_TAG_PATTERNS:
+        text = pat.sub("", text)
+    for pat in _NOISE_LINE_PATTERNS:
+        text = pat.sub("", text)
+    text = _HOOK_LINE_RE.sub("", text)
+    text = _COLLAPSED_LINES_RE.sub("", text)
+    text = _TOKEN_CHROME_RE.sub("", text)
+    # Collapse runs of blank lines created by the removals
+    text = re.sub(r"\n{4,}", "\n\n\n", text)
+    return text.strip()
 
 
 def normalize(filepath: str) -> str:
@@ -99,10 +187,16 @@ def _try_claude_code_jsonl(content: str) -> Optional[str]:
         message = entry.get("message", {})
         if msg_type in ("human", "user"):
             text = _extract_content(message.get("content", ""))
+            # Strip harness-injected noise per message, never across message
+            # boundaries — prevents span-eating (#785).
+            if text:
+                text = strip_noise(text)
             if text:
                 messages.append(("user", text))
         elif msg_type == "assistant":
             text = _extract_content(message.get("content", ""))
+            if text:
+                text = strip_noise(text)
             if text:
                 messages.append(("assistant", text))
     if len(messages) >= 2:
@@ -197,6 +291,10 @@ def _try_pi_jsonl(content: str) -> Optional[str]:
 
         role = message.get("role", "")
         text = _extract_content(message.get("content", ""))
+        # Pi transcripts carry the same harness-injected tags (verified on
+        # real sessions) — strip per message here too (#785).
+        if text:
+            text = strip_noise(text)
 
         if role == "user" and text:
             messages.append(("user", text))

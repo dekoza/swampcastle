@@ -41,15 +41,23 @@ SKIP_DIRS = {
 
 
 def _file_already_mined(collection, source_file: str, *, check_mtime: bool = False) -> bool:
+    # Scoped to ingest_mode="convos" so registry-mined drawers for the same
+    # path never block conversation mining (upstream #1528). Every convo
+    # drawer has carried the stamp since the first mining commit. The scoping
+    # happens client-side: ingest_mode is not a filter column on every backend
+    # (Lance keeps it inside metadata_json, and a where clause on an unknown
+    # column fails silently as an empty result).
     try:
-        results = collection.get(where={"source_file": source_file}, limit=1)
-        if not results.get("ids"):
+        results = collection.get(where={"source_file": source_file}, limit=500)
+        convo_metas = [
+            m for m in results.get("metadatas", []) if (m or {}).get("ingest_mode") == "convos"
+        ]
+        if not convo_metas:
             return False
         if not check_mtime:
             return True
 
-        stored_meta = results.get("metadatas", [{}])[0]
-        stored_mtime = stored_meta.get("source_mtime")
+        stored_mtime = convo_metas[0].get("source_mtime")
         if stored_mtime is None:
             return False
 
@@ -60,12 +68,16 @@ def _file_already_mined(collection, source_file: str, *, check_mtime: bool = Fal
 
 
 def _purge_source_file(collection, source_file: str, *, batch_size: int = 500) -> None:
-    while True:
-        rows = collection.get(where={"source_file": source_file}, limit=batch_size)
-        ids = rows.get("ids", [])
-        if not ids:
-            return
-        collection.delete(ids=ids)
+    # Unbounded fetch (one file's drawers), then delete only the convo-mode
+    # ones in batches — registry drawers for the same path survive (#1528).
+    rows = collection.get(where={"source_file": source_file}, include=["metadatas"])
+    ids = [
+        id_
+        for id_, meta in zip(rows.get("ids", []), rows.get("metadatas", []))
+        if (meta or {}).get("ingest_mode") == "convos"
+    ]
+    for i in range(0, len(ids), batch_size):
+        collection.delete(ids=ids[i : i + batch_size])
 
 
 # File types that might contain conversations
@@ -77,7 +89,11 @@ CONVO_EXTENSIONS = {
 }
 
 MIN_CHUNK_SIZE = 30
-MAX_FILE_SIZE = 10 * 1024 * 1024  # 10 MB — skip files larger than this
+CHUNK_SIZE = 800  # chars per drawer — align with miner.py and the embedder window
+# 500 MB — matches normalize()'s hard safety limit. Real transcript files
+# routinely exceed 10 MB (14 local pi sessions do); skipping them silently
+# dropped whole sessions (upstream #998).
+MAX_FILE_SIZE = 500 * 1024 * 1024
 
 
 # =============================================================================
@@ -100,7 +116,12 @@ def chunk_exchanges(content: str) -> list:
 
 
 def _chunk_by_exchange(lines: list) -> list:
-    """One user turn (>) + the AI response that follows = one chunk."""
+    """One user turn (>) + the AI response that follows = one or more chunks.
+
+    The full AI response is preserved verbatim (upstream #708/#695). When the
+    combined user-turn + response exceeds CHUNK_SIZE the response is split
+    across consecutive drawers so nothing is silently discarded.
+    """
     chunks = []
     i = 0
 
@@ -115,24 +136,35 @@ def _chunk_by_exchange(lines: list) -> list:
                 next_line = lines[i]
                 if next_line.strip().startswith(">") or next_line.strip().startswith("---"):
                     break
-                if next_line.strip():
-                    ai_lines.append(next_line.strip())
+                # Preserve the line as-is — blank lines and indentation carry
+                # meaning (paragraph breaks, list/code structure).
+                ai_lines.append(next_line)
                 i += 1
 
-            ai_response = " ".join(ai_lines[:8])
+            # Join on newline (not space) so line structure survives. Trim only
+            # trailing blank lines produced by the loop stopping at the next turn.
+            ai_response = "\n".join(ai_lines).rstrip("\n")
             content = f"{user_turn}\n{ai_response}" if ai_response else user_turn
 
-            if len(content.strip()) > MIN_CHUNK_SIZE:
-                chunks.append(
-                    {
-                        "content": content,
-                        "chunk_index": len(chunks),
-                    }
-                )
+            _emit_bounded(chunks, content)
         else:
             i += 1
 
     return chunks
+
+
+def _emit_bounded(chunks: list, content: str) -> None:
+    """Append ``content`` as one or more drawers, none exceeding CHUNK_SIZE.
+
+    The MIN_CHUNK_SIZE floor gates the WHOLE call (drops the input if its
+    stripped length is at or below the floor, treated as noise). Once the
+    input passes the floor, every slice is emitted verbatim so a small
+    trailing remainder is preserved instead of silently dropped (#1538).
+    """
+    if len(content.strip()) <= MIN_CHUNK_SIZE:
+        return
+    for i in range(0, len(content), CHUNK_SIZE):
+        chunks.append({"content": content[i : i + CHUNK_SIZE], "chunk_index": len(chunks)})
 
 
 def _chunk_by_paragraph(content: str) -> list:
@@ -145,13 +177,11 @@ def _chunk_by_paragraph(content: str) -> list:
         lines = content.split("\n")
         for i in range(0, len(lines), 25):
             group = "\n".join(lines[i : i + 25]).strip()
-            if len(group) > MIN_CHUNK_SIZE:
-                chunks.append({"content": group, "chunk_index": len(chunks)})
+            _emit_bounded(chunks, group)
         return chunks
 
     for para in paragraphs:
-        if len(para) > MIN_CHUNK_SIZE:
-            chunks.append({"content": para, "chunk_index": len(chunks)})
+        _emit_bounded(chunks, para)
 
     return chunks
 

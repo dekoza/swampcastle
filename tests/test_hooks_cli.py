@@ -10,7 +10,6 @@ import pytest
 from swampcastle.hooks_cli import (
     SAVE_INTERVAL,
     STOP_BLOCK_REASON,
-    PRECOMPACT_BLOCK_REASON,
     _count_human_messages,
     _log,
     _maybe_auto_ingest,
@@ -209,14 +208,14 @@ def test_session_start_passes_through(tmp_path):
 # --- hook_precompact ---
 
 
-def test_precompact_always_blocks(tmp_path):
+def test_precompact_never_blocks(tmp_path):
+    """A blocking PreCompact hook holds Claude Code compaction hostage."""
     result = _capture_hook_output(
         hook_precompact,
         {"session_id": "test"},
         state_dir=tmp_path,
     )
-    assert result["decision"] == "block"
-    assert result["reason"] == PRECOMPACT_BLOCK_REASON
+    assert result == {}
 
 
 # --- _log ---
@@ -396,7 +395,7 @@ def test_precompact_with_transcript_path_runs_sync_convo_ingest(tmp_path):
                 {"session_id": "test", "transcript_path": str(transcript)},
                 state_dir=tmp_path,
             )
-    assert result["decision"] == "block"
+    assert result == {}
     mock_run.assert_called_once()
     command = mock_run.call_args.args[0]
     assert command == [
@@ -421,7 +420,7 @@ def test_precompact_with_mempal_dir(tmp_path):
                 {"session_id": "test"},
                 state_dir=tmp_path,
             )
-    assert result["decision"] == "block"
+    assert result == {}
     mock_run.assert_called_once()
 
 
@@ -438,7 +437,7 @@ def test_precompact_transcript_and_mempal_dir_are_additive(tmp_path):
                 {"session_id": "test", "transcript_path": str(transcript)},
                 state_dir=tmp_path,
             )
-    assert result["decision"] == "block"
+    assert result == {}
     assert mock_run.call_count == 2
     commands = [call.args[0] for call in mock_run.call_args_list]
     assert [
@@ -464,7 +463,7 @@ def test_precompact_with_mempal_dir_oserror(tmp_path):
                 {"session_id": "test"},
                 state_dir=tmp_path,
             )
-    assert result["decision"] == "block"
+    assert result == {}
 
 
 # --- run_hook ---
@@ -506,8 +505,7 @@ def test_run_hook_dispatches_precompact(tmp_path):
             with patch("swampcastle.hooks_cli._output") as mock_output:
                 run_hook("precompact", "claude-code")
     mock_output.assert_called_once()
-    call_args = mock_output.call_args[0][0]
-    assert call_args["decision"] == "block"
+    assert mock_output.call_args[0][0] == {}
 
 
 def test_run_hook_unknown_hook():

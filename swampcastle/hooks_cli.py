@@ -227,18 +227,23 @@ def hook_session_start(data: dict, harness: str):
 
 
 def hook_precompact(data: dict, harness: str):
-    """Precompact hook: always block with comprehensive save instruction."""
+    """Precompact hook: ingest the transcript, then let compaction proceed.
+
+    Never blocks — in Claude Code a blocking PreCompact hook prevents
+    compaction outright (there is no save-then-retry cycle), holding the
+    session hostage. The save-nudge instruction belongs to the protocol
+    adherence milestone, not the ingest path.
+    """
     parsed = _parse_harness_input(data, harness)
     session_id = parsed["session_id"]
     transcript_path = parsed["transcript_path"]
 
     _log(f"PRE-COMPACT triggered for session {session_id}")
 
-    # Optional: auto-ingest synchronously before compaction (so memories land first)
+    # Ingest synchronously before compaction so memories land first.
     _run_auto_ingest_sync(transcript_path)
 
-    # Always block -- compaction = save everything
-    _output({"decision": "block", "reason": PRECOMPACT_BLOCK_REASON})
+    _output({})
 
 
 def hook_session_end(data: dict, harness: str):

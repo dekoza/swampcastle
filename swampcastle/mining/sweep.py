@@ -32,6 +32,9 @@ ExecStart=%h/.local/bin/swampcastle sweep
 Environment=PYTHONUNBUFFERED=1
 Nice=10
 IOSchedulingClass=idle
+# Nice only yields under contention — on an idle machine ONNX embedding still
+# bursts across every core. Hard-cap at 4 cores so the sweep never hogs.
+CPUQuota=400%
 """
 
 TIMER_UNIT = """\

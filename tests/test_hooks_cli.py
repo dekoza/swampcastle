@@ -22,6 +22,16 @@ from swampcastle.hooks_cli import (
 )
 
 
+@pytest.fixture(autouse=True)
+def _no_real_ingest_subprocesses():
+    """Hook handlers fire-and-forget real mine subprocesses; a test must never
+    let one escape (leaked processes would mine pytest tmp fixtures into the
+    real palace). Tests that assert on Popen re-patch inside their own scope.
+    """
+    with patch("swampcastle.hooks_cli.subprocess.Popen"):
+        yield
+
+
 # --- _sanitize_session_id ---
 
 

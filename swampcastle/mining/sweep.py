@@ -29,6 +29,7 @@ Description=SwampCastle transcript sweep (thin ingest)
 [Service]
 Type=oneshot
 ExecStart=%h/.local/bin/swampcastle sweep
+Environment=PYTHONUNBUFFERED=1
 Nice=10
 IOSchedulingClass=idle
 """

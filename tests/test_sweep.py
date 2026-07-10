@@ -79,6 +79,7 @@ def test_sweep_dry_run_passes_through(roots, tmp_path, monkeypatch):
 def test_service_unit_shape():
     assert "Type=oneshot" in SERVICE_UNIT
     assert "ExecStart=%h/.local/bin/swampcastle sweep" in SERVICE_UNIT
+    assert "Environment=PYTHONUNBUFFERED=1" in SERVICE_UNIT
 
 
 def test_timer_unit_shape():

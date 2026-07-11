@@ -90,6 +90,7 @@ CONVO_EXTENSIONS = {
 
 MIN_CHUNK_SIZE = 30
 CHUNK_SIZE = 800  # chars per drawer — align with miner.py and the embedder window
+UPSERT_BATCH = 500  # chunks per storage write — see the batching note in mine_convos
 # 500 MB — matches normalize()'s hard safety limit. Real transcript files
 # routinely exceed 10 MB (14 local pi sessions do); skipping them silently
 # dropped whole sessions (upstream #998).
@@ -527,34 +528,43 @@ def mine_convos(
         if extract_mode != "general":
             room_counts[room] += 1
 
-        # File each chunk
-        drawers_added = 0
+        # File the chunks in batches — one upsert per batch, never per chunk.
+        # On LanceDB every upsert commits a new table version; thousands of
+        # single-row writes bloat the manifest until writes slow down and
+        # memory balloons (observed: 24K versions, multi-GB RSS, OOM kill).
+        docs, ids_, metas = [], [], []
         for chunk in chunks:
             chunk_room = chunk.get("memory_type", room) if extract_mode == "general" else room
             if extract_mode == "general":
                 room_counts[chunk_room] += 1
             drawer_id = f"drawer_{wing}_{chunk_room}_{hashlib.sha256((source_file + str(chunk['chunk_index'])).encode()).hexdigest()[:24]}"
+            docs.append(chunk["content"])
+            ids_.append(drawer_id)
+            metas.append(
+                {
+                    "wing": wing,
+                    "room": chunk_room,
+                    "source_file": source_file,
+                    "chunk_index": chunk["chunk_index"],
+                    "added_by": agent,
+                    "filed_at": datetime.now().isoformat(),
+                    "ingest_mode": "convos",
+                    "extract_mode": extract_mode,
+                    **({"source_mtime": source_mtime} if source_mtime is not None else {}),
+                    **origin_metadata(origin),
+                    **({"contributor": contributor} if contributor else {}),
+                }
+            )
+
+        drawers_added = 0
+        for i in range(0, len(docs), UPSERT_BATCH):
             try:
                 collection.upsert(
-                    documents=[chunk["content"]],
-                    ids=[drawer_id],
-                    metadatas=[
-                        {
-                            "wing": wing,
-                            "room": chunk_room,
-                            "source_file": source_file,
-                            "chunk_index": chunk["chunk_index"],
-                            "added_by": agent,
-                            "filed_at": datetime.now().isoformat(),
-                            "ingest_mode": "convos",
-                            "extract_mode": extract_mode,
-                            **({"source_mtime": source_mtime} if source_mtime is not None else {}),
-                            **origin_metadata(origin),
-                            **({"contributor": contributor} if contributor else {}),
-                        }
-                    ],
+                    documents=docs[i : i + UPSERT_BATCH],
+                    ids=ids_[i : i + UPSERT_BATCH],
+                    metadatas=metas[i : i + UPSERT_BATCH],
                 )
-                drawers_added += 1
+                drawers_added += len(docs[i : i + UPSERT_BATCH])
             except Exception as e:
                 if "already exists" not in str(e).lower():
                     raise

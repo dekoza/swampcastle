@@ -254,3 +254,34 @@ def test_convo_mining_uses_curation_wing_hint_when_wing_is_unspecified(tmp_path)
     rows = col.get(where={"source_file": str(transcript)}, include=["metadatas"])
     assert rows["metadatas"]
     assert all(meta.get("wing") == "hinted_wing" for meta in rows["metadatas"])
+
+
+def test_convo_mining_batches_upserts():
+    """One upsert per batch, not per chunk — on LanceDB every upsert commits a
+    new table version; thousands of single-row writes bloat the manifest until
+    writes slow down and memory balloons (observed 24K versions / OOM)."""
+    tmpdir = tempfile.mkdtemp()
+    exchanges = "".join(
+        f"> Question number {i}?\nAnswer number {i} is long enough to pass the chunk floor easily.\n\n"
+        for i in range(1200)
+    )
+    with open(os.path.join(tmpdir, "chat.txt"), "w") as f:
+        f.write(exchanges)
+
+    factory = InMemoryStorageFactory()
+    real_collection = factory.open_collection("swampcastle_chests")
+    calls = []
+    original_upsert = real_collection.upsert
+
+    def counting_upsert(*args, **kwargs):
+        calls.append(len(kwargs.get("ids", [])))
+        return original_upsert(*args, **kwargs)
+
+    real_collection.upsert = counting_upsert
+    mine_convos(tmpdir, os.path.join(tmpdir, "palace"), wing="test_convos", storage_factory=factory)
+
+    total = sum(calls)
+    assert total >= 1200
+    assert len(calls) <= (total // 500) + 2, f"{len(calls)} upsert calls for {total} chunks"
+
+    shutil.rmtree(tmpdir, ignore_errors=True)

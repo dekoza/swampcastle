@@ -93,6 +93,17 @@ def test_run_hook_dispatches_session_end(tmp_path):
 # --- wrapper script ---
 
 
+def test_wrapper_detaches_passthrough_hooks():
+    """session-end/precompact must answer {} instantly and detach the work —
+    client shutdown reaps the hook's process group (observed: Claude Code
+    "Hook cancelled" killed the SessionEnd mine before it filed anything)."""
+    assert "setsid" in WRAPPER_SCRIPT
+    assert "disown" in WRAPPER_SCRIPT
+    assert "session-end" in WRAPPER_SCRIPT
+    assert "precompact" in WRAPPER_SCRIPT
+    assert "printf '{}" in WRAPPER_SCRIPT
+
+
 def test_wrapper_script_ladder():
     assert "SWAMPCASTLE_PYTHON" in WRAPPER_SCRIPT
     assert "command -v swampcastle" in WRAPPER_SCRIPT

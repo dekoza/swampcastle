@@ -131,7 +131,10 @@ def _maybe_auto_ingest(transcript_path: str = ""):
         log_path = STATE_DIR / "hook.log"
         with open(log_path, "a") as log_f:
             for command in commands:
-                subprocess.Popen(command, stdout=log_f, stderr=log_f)
+                # start_new_session: the harness reaps the hook's process
+                # group on cancellation/shutdown — a mine in the same group
+                # dies with it before filing anything.
+                subprocess.Popen(command, stdout=log_f, stderr=log_f, start_new_session=True)
     except OSError:
         pass
 

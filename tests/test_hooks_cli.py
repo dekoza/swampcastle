@@ -250,6 +250,18 @@ def test_log_oserror_is_silenced(tmp_path):
 # --- _maybe_auto_ingest ---
 
 
+def test_maybe_auto_ingest_detaches_children(tmp_path):
+    """Ingest children must start in a new session — the harness reaps the
+    hook's process group on cancellation and an attached child dies unfiled."""
+    transcript = tmp_path / "session.jsonl"
+    transcript.write_text('{"message": {"role": "user", "content": "hello"}}\n')
+    with patch.dict("os.environ", {}, clear=True):
+        with patch("swampcastle.hooks_cli.STATE_DIR", tmp_path):
+            with patch("swampcastle.hooks_cli.subprocess.Popen") as mock_popen:
+                _maybe_auto_ingest(str(transcript))
+    assert mock_popen.call_args.kwargs.get("start_new_session") is True
+
+
 def test_maybe_auto_ingest_no_env(tmp_path):
     """Without transcript path or MEMPAL_DIR set, does nothing."""
     with patch.dict("os.environ", {}, clear=True):

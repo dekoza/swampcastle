@@ -204,6 +204,44 @@ class TestProjectSection:
         assert "## Project" not in digest
 
 
+class TestCap:
+    def test_huge_castle_stays_under_cap(self, castle, tmp_path):
+        project = tmp_path / "huge"
+        project.mkdir()
+        (project / ".swampcastle.yaml").write_text("wing: huge\n")
+
+        rows = []
+        # 120 wings with long names, some stale, some fresh
+        for w in range(120):
+            wing = f"wing_with_a_rather_long_descriptive_name_{w:03d}"
+            ts = _months_ago(9) if w % 2 else _months_ago(1)
+            rows.append((wing, f"room_{w}", ts, "long doc " * 500))
+        # project wing with 40 rooms and huge single-line documents
+        for r in range(40):
+            rows.append(("huge", f"proj_room_{r:02d}", _months_ago(1), "z" * 5000))
+        _fill(castle, rows)
+
+        result = build_digest(castle, project_dir=str(project))
+
+        assert len(result.digest.splitlines()) <= DIGEST_MAX_LINES
+        assert len(result.digest.encode("utf-8")) <= DIGEST_MAX_BYTES
+        # The gist and marker survive whatever the data volume is
+        assert "query first" in result.digest.lower()
+        assert "<!-- extension point: core-memory blocks" in result.digest
+
+
+    def test_pathological_wing_names_hit_the_byte_backstop(self, castle):
+        # 15 wings whose names alone exceed 25KB would blow the byte cap
+        # without the defensive trim
+        rows = [(f"wing_{'x' * 2500}_{w:02d}", "r", _months_ago(1), "doc") for w in range(15)]
+        _fill(castle, rows)
+
+        result = build_digest(castle)
+
+        assert len(result.digest.encode("utf-8")) <= DIGEST_MAX_BYTES
+        assert "[digest truncated]" in result.digest
+
+
 def _months_ago(months: int) -> str:
     return (datetime.now() - timedelta(days=months * 31)).isoformat()
 

@@ -216,6 +216,25 @@ def _stale_section(castle: "Castle") -> str | None:
     return "\n".join(lines)
 
 
+def _trim(digest: str) -> str:
+    """Backstop for the hard cap — section budgets keep normal castles far
+    below it, so reaching this means pathological data (e.g. multi-KB wing
+    names)."""
+    marker = "\n\n[digest truncated]"
+    budget_bytes = DIGEST_MAX_BYTES - len(marker.encode("utf-8"))
+    lines = digest.splitlines()
+
+    if len(lines) <= DIGEST_MAX_LINES and len(digest.encode("utf-8")) <= DIGEST_MAX_BYTES:
+        return digest
+
+    lines = lines[: DIGEST_MAX_LINES - 2]
+    trimmed = "\n".join(lines)
+    while len(trimmed.encode("utf-8")) > budget_bytes and lines:
+        lines.pop()
+        trimmed = "\n".join(lines)
+    return trimmed + marker
+
+
 def build_digest(castle: "Castle", project_dir: str | None = None) -> StatusDigest:
     """Render the session digest for this castle."""
     error: str | None = None
@@ -234,7 +253,7 @@ def build_digest(castle: "Castle", project_dir: str | None = None) -> StatusDige
         error = f"Partial digest: {e}"
 
     sections.append(_EXTENSION_POINT)
-    digest = "\n\n".join(sections)
+    digest = _trim("\n\n".join(sections))
     return StatusDigest(
         digest=digest,
         castle_path=str(castle.settings.castle_path),

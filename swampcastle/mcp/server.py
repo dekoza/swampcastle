@@ -17,6 +17,31 @@ logger = logging.getLogger("swampcastle.mcp")
 SUPPORTED_PROTOCOL_VERSIONS = ["2025-03-26", "2024-11-05"]
 
 
+def _logging_handlers(log_dir=None) -> list:
+    """Stderr plus a file the client can't drop.
+
+    Claude Code discards MCP server stderr, so a tool traceback logged only
+    there is lost — every -32603 the client shows is then undiagnosable
+    (observed 2026-07-12). The file handler keeps the evidence.
+    """
+    from pathlib import Path
+
+    handlers: list = [logging.StreamHandler(sys.stderr)]
+    if log_dir is None:
+        log_dir = Path.home() / ".swampcastle" / "hook_state"
+    try:
+        log_dir = Path(log_dir)
+        log_dir.mkdir(parents=True, exist_ok=True)
+        file_handler = logging.FileHandler(log_dir / "mcp-server.log")
+        file_handler.setFormatter(
+            logging.Formatter("%(asctime)s [%(process)d] %(levelname)s %(name)s: %(message)s")
+        )
+        handlers.append(file_handler)
+    except OSError:
+        pass  # a read-only home must not stop the server
+    return handlers
+
+
 def create_handler(castle: Castle):
     """Create a JSON-RPC request handler bound to a Castle instance."""
     tools = register_tools(castle)
@@ -127,7 +152,7 @@ def main():
     from swampcastle.settings import CastleSettings
     from swampcastle.storage import factory_from_settings
 
-    logging.basicConfig(level=logging.INFO, format="%(message)s", stream=sys.stderr)
+    logging.basicConfig(level=logging.INFO, format="%(message)s", handlers=_logging_handlers())
 
     settings = CastleSettings(_env_file=None)
     factory = factory_from_settings(settings)

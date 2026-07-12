@@ -61,9 +61,7 @@ class TestAddDrawerCommand:
         # Sweep/ingest slugifies Claude Code transcript dirs
         # (-home-minder-projekty-indyq) into leading-underscore wings;
         # writes must accept the wings reads and the digest advertise (#31).
-        cmd = AddDrawerCommand(
-            wing="_home_minder_projekty_indyq", room="planning", content="x"
-        )
+        cmd = AddDrawerCommand(wing="_home_minder_projekty_indyq", room="planning", content="x")
         assert cmd.wing == "_home_minder_projekty_indyq"
 
     def test_wing_accepts_double_underscore_slug(self):

@@ -16,6 +16,53 @@ logger = logging.getLogger("swampcastle.mcp")
 
 SUPPORTED_PROTOCOL_VERSIONS = ["2025-03-26", "2024-11-05"]
 
+# Modules the write path resolves lazily. pipx reinstall deletes and
+# recreates the venv under a live server; imports already resolved keep
+# working (deleted-inode mappings), but a lazy import after the swap reads
+# the mismatched new tree and throws (observed 2026-07-12, issue #29).
+# Everything here gets imported at startup so a deploy can't break a
+# running server mid-flight.
+WRITE_PATH_MODULES = (
+    "concurrent.futures",  # vault distill parallel path
+    "lancedb",  # storage open (usually resolved at startup already)
+    "numpy",  # embedder encode
+    "onnxruntime",  # default embedder backend
+    "pyarrow",  # lance upsert / dimension check
+    "tokenizers",  # default embedder tokenizer
+    "yaml",  # digest project-config resolution
+    "swampcastle.dialect",  # vault distill
+    "swampcastle.embeddings",  # embedder factory
+    "swampcastle.sync_meta",  # lance sync-meta injection
+)
+
+
+def preload_write_path(castle=None, extra_modules: list[str] | None = None) -> list[str]:
+    """Resolve every write-path import now; optionally warm the embedder.
+
+    Returns a list of failure descriptions (empty on full success) — a
+    partially broken preload must never take the server down, only narrow
+    the protection.
+    """
+    import importlib
+
+    failures: list[str] = []
+    for module_name in (*WRITE_PATH_MODULES, *(extra_modules or [])):
+        try:
+            importlib.import_module(module_name)
+        except Exception as e:
+            failures.append(f"{module_name}: {e}")
+
+    embedder = getattr(getattr(castle, "_collection", None), "_embedder", None)
+    if embedder is not None:
+        try:
+            embedder.embed(["warmup"])
+        except Exception as e:
+            failures.append(f"embedder warmup: {e}")
+
+    for failure in failures:
+        logger.warning("write-path preload failed: %s", failure)
+    return failures
+
 
 def _logging_handlers(log_dir=None) -> list:
     """Stderr plus a file the client can't drop.

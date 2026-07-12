@@ -58,7 +58,24 @@ class TestToolRegistry:
 class TestToolDispatch:
     def test_status_empty(self, tools):
         result = tools["status"].handler()
-        assert result.total_drawers == 0
+        assert "0 drawers" in result.digest
+        assert "query first" in result.digest.lower()
+
+    def test_status_accepts_project_dir(self, tools, castle, tmp_path):
+        from swampcastle.models.catalog import StatusInput
+
+        project = tmp_path / "proj"
+        project.mkdir()
+        (project / ".swampcastle.yaml").write_text("wing: proj\n")
+        castle._collection.upsert(
+            documents=["doc"],
+            ids=["d1"],
+            metadatas=[{"wing": "proj", "room": "r", "created_at": "2026-06-01T10:00:00"}],
+        )
+        castle.catalog._invalidate_view()
+
+        result = tools["status"].handler(StatusInput(project_dir=str(project)))
+        assert "## Project" in result.digest
 
     def test_search_empty(self, tools):
         result = tools["search"].handler(SearchQuery(query="anything"))
@@ -268,7 +285,7 @@ class TestJsonRpcHandler:
         }
         resp = handler(req)
         content = json.loads(resp["result"]["content"][0]["text"])
-        assert "total_drawers" in content
+        assert "digest" in content
 
     def test_tool_call_legacy_alias_still_works(self, handler):
         handler(
@@ -287,7 +304,7 @@ class TestJsonRpcHandler:
         }
         resp = handler(req)
         content = json.loads(resp["result"]["content"][0]["text"])
-        assert "total_drawers" in content
+        assert "digest" in content
 
     def test_unknown_tool(self, handler):
         handler(

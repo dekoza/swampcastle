@@ -9,13 +9,14 @@ def cmd_survey(args):
 
     settings = _settings(args)
     with Castle(settings, factory_from_settings(settings)) as castle:
-        s = castle.catalog.status()
+        wings = castle.catalog.list_wings().wings
+        rooms = castle.catalog.list_rooms().rooms
         _print_section("Survey")
-        _print_kv("Drawers", s.total_drawers)
-        if s.wings:
-            _print_kv("Wings", ", ".join(sorted(s.wings.keys())))
-        if s.rooms:
-            _print_kv("Rooms", ", ".join(sorted(s.rooms.keys())))
+        _print_kv("Drawers", sum(wings.values()))
+        if wings:
+            _print_kv("Wings", ", ".join(sorted(wings.keys())))
+        if rooms:
+            _print_kv("Rooms", ", ".join(sorted(rooms.keys())))
 
 
 def cmd_curation_check(args):

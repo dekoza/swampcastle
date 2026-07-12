@@ -10,7 +10,8 @@ from .audit import (
 )
 from .catalog import (
     RoomsResponse,
-    StatusResponse,
+    StatusDigest,
+    StatusInput,
     TaxonomyResponse,
     WingBriefResponse,
     WingsResponse,
@@ -92,7 +93,8 @@ __all__ = [
     "SearchHit",
     "SearchQuery",
     "SearchResponse",
-    "StatusResponse",
+    "StatusDigest",
+    "StatusInput",
     "SearchTrace",
     "SyncRecord",
     "SyncStatus",

@@ -31,9 +31,11 @@ class TestCastleIntegration:
         castle.vault.add_drawer(
             AddDrawerCommand(wing="proj", room="auth", content="jwt token rotation")
         )
-        s = castle.catalog.status()
-        assert s.total_drawers == 1
-        assert "proj" in s.wings
+        from swampcastle.services.digest import build_digest
+
+        s = build_digest(castle)
+        assert "1 drawers" in s.digest
+        assert "proj" in s.digest
 
     def test_kg_roundtrip(self, castle):
         castle.graph.kg_add(subject="Kai", predicate="works_on", obj="Orion")

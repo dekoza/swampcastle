@@ -19,8 +19,8 @@ def svc(col):
 
 
 class TestCatalogScanConsolidation:
-    def test_status_list_wings_list_rooms_taxonomy_share_single_scan(self, col, svc):
-        """status(), list_wings(), list_rooms(), get_taxonomy() must share one scan."""
+    def test_list_wings_list_rooms_taxonomy_activity_share_single_scan(self, col, svc):
+        """list_wings(), list_rooms(), get_taxonomy(), wing_activity() must share one scan."""
         col.upsert(
             documents=["a", "b", "c"],
             ids=["1", "2", "3"],
@@ -39,10 +39,6 @@ class TestCatalogScanConsolidation:
             return original_get(**kwargs)
         col.get = counting_get
 
-        s = svc.status()
-        assert s.wings == {"proj": 2, "personal": 1}
-        assert s.rooms == {"auth": 1, "billing": 1, "diary": 1}
-
         wings = svc.list_wings()
         assert wings.wings == {"proj": 2, "personal": 1}
 
@@ -52,6 +48,9 @@ class TestCatalogScanConsolidation:
         tax = svc.get_taxonomy()
         assert tax.taxonomy["proj"]["auth"] == 1
         assert tax.taxonomy["personal"]["diary"] == 1
+
+        activity = svc.wing_activity()
+        assert set(activity) == {"proj", "personal"}
 
         # All 4 calls should share a single _scan_all pass
         assert get_call_count == 1, f"Expected 1 shared scan, got {get_call_count}"
@@ -75,7 +74,7 @@ class TestCatalogScanConsolidation:
             return original_get(**kwargs)
         col.get = counting_get
 
-        svc.status()  # triggers initial scan
+        svc.list_wings()  # triggers initial scan
         calls_after_status = get_call_count
 
         brief = svc.brief("proj")
@@ -92,8 +91,7 @@ class TestCatalogScanConsolidation:
             metadatas=[{"wing": "proj", "room": "auth"}],
         )
 
-        s1 = svc.status()
-        assert s1.wings == {"proj": 1}
+        assert svc.list_wings().wings == {"proj": 1}
 
         # Simulate what VaultService does: mutate collection + invalidate cache
         col.upsert(
@@ -103,36 +101,31 @@ class TestCatalogScanConsolidation:
         )
         svc._invalidate_view()
 
-        s2 = svc.status()
-        assert s2.wings == {"proj": 1, "personal": 1}
+        assert svc.list_wings().wings == {"proj": 1, "personal": 1}
 
 
-class TestStatus:
-    def test_empty(self, svc):
-        s = svc.status()
-        assert s.total_drawers == 0
-        assert s.wings == {}
-        assert s.rooms == {}
-
-    def test_populated(self, col, svc):
+class TestWingActivity:
+    def test_tracks_newest_timestamp_per_wing(self, col, svc):
         col.upsert(
             documents=["d1", "d2", "d3"],
             ids=["1", "2", "3"],
             metadatas=[
-                {"wing": "proj", "room": "auth"},
-                {"wing": "proj", "room": "billing"},
+                {"wing": "proj", "room": "auth", "created_at": "2026-01-01T10:00:00"},
+                {"wing": "proj", "room": "billing", "filed_at": "2026-03-01T10:00:00"},
                 {"wing": "personal", "room": "journal"},
             ],
         )
-        s = svc.status()
-        assert s.total_drawers == 3
-        assert s.wings == {"proj": 2, "personal": 1}
-        assert s.rooms == {"auth": 1, "billing": 1, "journal": 1}
-        assert s.castle_path == "/tmp/test"
-        assert "SwampCastle protocol" in s.protocol
+        activity = svc.wing_activity()
+        assert activity["proj"] == "2026-03-01T10:00:00"
+        assert activity["personal"] is None
+
+
+class TestCastleProtocolText:
+    """The full protocol text lives on as a constant until it migrates into
+    the MCP server instructions field."""
 
     def test_protocol_is_compact_and_operational(self, svc):
-        protocol = svc.status().protocol
+        from swampcastle.services.catalog import CASTLE_PROTOCOL as protocol
         assert "Never state project history, past decisions, people, or prior work" in protocol
         assert "swampcastle_search" in protocol
         assert "swampcastle_kg_query" in protocol
@@ -145,8 +138,8 @@ class TestStatus:
     def test_protocol_documents_every_canonical_tool(self, svc):
         """Every registered MCP tool must appear in the herald protocol."""
         from swampcastle.mcp.tools import CANONICAL_TOOL_NAMES
+        from swampcastle.services.catalog import CASTLE_PROTOCOL as protocol
 
-        protocol = svc.status().protocol
         found = set(re.findall(r"swampcastle_(\w+)", protocol))
         missing = set(CANONICAL_TOOL_NAMES) - found
         assert not missing, f"Missing from CASTLE_PROTOCOL: {sorted(missing)}"

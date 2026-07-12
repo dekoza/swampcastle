@@ -12,6 +12,7 @@ from swampcastle.models.audit import (
     CurationQuery,
     OriginLookupQuery,
 )
+from swampcastle.models.catalog import StatusInput
 from swampcastle.models.diary import DiaryWriteCommand
 from swampcastle.models.drawer import (
     AddDrawerCommand,
@@ -26,6 +27,7 @@ from swampcastle.models.kg import (
     TimelineQuery,
 )
 from swampcastle.models.record import RecordEnvelope, RecordKind
+from swampcastle.services.digest import build_digest
 from swampcastle.services.vault import DiaryReadQuery
 
 
@@ -111,9 +113,15 @@ def resolve_tool_name(name: str) -> str:
 def register_tools(castle: Castle) -> dict[str, ToolDef]:
     return {
         "status": ToolDef(
-            description="Castle overview: drawers, wings, rooms, strict memory-use protocol, AAAK spec.",
-            input_model=None,
-            handler=lambda: castle.catalog.status(),
+            description=(
+                "Session digest: current project's memory (wings, rooms, recent "
+                "activity), castle totals, stale wings, protocol gist. Call at "
+                "session start; pass project_dir to scope it to your working directory."
+            ),
+            input_model=StatusInput,
+            handler=lambda params=None: build_digest(
+                castle, params.project_dir if params else None
+            ),
         ),
         "list_wings": ToolDef(
             description="List all wings with drawer counts.",

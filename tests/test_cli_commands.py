@@ -35,7 +35,11 @@ class DummyCastle:
         skip_embedder_check=False,
         **kwargs,
     ):
-        self.catalog = SimpleNamespace(status=lambda: status)
+        self.catalog = SimpleNamespace(
+            status=lambda: status,
+            list_wings=lambda: SimpleNamespace(wings=status.wings if status else {}),
+            list_rooms=lambda: SimpleNamespace(rooms=status.rooms if status else {}),
+        )
         self.search = SimpleNamespace(search=lambda query: search)
         self.vault = SimpleNamespace(
             distill=lambda **kwargs: distill_count,
@@ -59,7 +63,7 @@ def test_settings_uses_palace_and_backend(tmp_path):
 
 
 def test_cmd_survey_prints_status(capsys):
-    status = SimpleNamespace(total_drawers=3, wings={"a": 1}, rooms={"r": 1})
+    status = SimpleNamespace(wings={"a": 3}, rooms={"r": 1})
 
     with patch("swampcastle.castle.Castle", lambda s, f, **kw: DummyCastle(s, f, status=status)):
         with patch("swampcastle.cli.commands.factory_from_settings", return_value=object()):

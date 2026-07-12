@@ -2,7 +2,6 @@
 
 from swampcastle.models.catalog import (
     RoomsResponse,
-    StatusResponse,
     TaxonomyResponse,
     WingBriefResponse,
     WingsResponse,
@@ -145,26 +144,6 @@ class CatalogService:
                 break
             offset += len(metas)
         return rows
-
-    def status(self) -> StatusResponse:
-        count = self._col.count()
-        error_info = None
-        view = _CatalogView([])
-        try:
-            view = self._get_view()
-        except Exception as e:
-            error_info = f"Partial result: {e}"
-
-        return StatusResponse(
-            total_drawers=count,
-            wings=view.wings,
-            rooms=view.rooms,
-            castle_path=self._castle_path,
-            protocol=CASTLE_PROTOCOL,
-            aaak_dialect=AAAK_SPEC,
-            error=error_info,
-            partial=error_info is not None,
-        )
 
     def list_wings(self) -> WingsResponse:
         try:

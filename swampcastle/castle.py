@@ -10,7 +10,7 @@ AsyncCastle wraps a sync Castle for async surfaces (FastAPI, future async MCP).
 
 import anyio
 
-from swampcastle.models.catalog import StatusResponse
+from swampcastle.models.catalog import StatusDigest
 from swampcastle.models.drawer import SearchQuery, SearchResponse
 from swampcastle.services.audit import AuditService
 from swampcastle.services.catalog import CatalogService
@@ -84,5 +84,7 @@ class AsyncCastle:
     async def search(self, query: SearchQuery) -> SearchResponse:
         return await anyio.to_thread.run_sync(lambda: self._castle.search.search(query))
 
-    async def status(self) -> StatusResponse:
-        return await anyio.to_thread.run_sync(lambda: self._castle.catalog.status())
+    async def status(self, project_dir: str | None = None) -> StatusDigest:
+        from swampcastle.services.digest import build_digest
+
+        return await anyio.to_thread.run_sync(lambda: build_digest(self._castle, project_dir))

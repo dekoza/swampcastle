@@ -76,10 +76,12 @@ class TestCastleRoundtrip:
         assert "postgres" in result.results[0].text.lower()
 
     def test_add_then_status(self, castle):
+        from swampcastle.services.digest import build_digest
+
         castle.vault.add_drawer(AddDrawerCommand(wing="proj", room="auth", content="jwt decision"))
-        status = castle.catalog.status()
-        assert status.total_drawers == 1
-        assert "proj" in status.wings
+        status = build_digest(castle)
+        assert "1 drawers" in status.digest
+        assert "proj" in status.digest
 
     def test_kg_roundtrip(self, castle):
         castle.graph.kg_add(
@@ -135,4 +137,4 @@ class TestAsyncCastle:
             return await async_castle.status()
 
         result = anyio.run(_status)
-        assert result.total_drawers == 0
+        assert "0 drawers" in result.digest

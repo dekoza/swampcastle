@@ -11,7 +11,7 @@ from swampcastle.models import (
     SearchQuery,
     SearchResponse,
     SearchHit,
-    StatusResponse,
+    StatusDigest,
     VersionVector,
 )
 
@@ -154,18 +154,11 @@ class TestSerialization:
         restored = SearchResponse(**data)
         assert restored.results[0].text == "found"
 
-    def test_status_response_roundtrip(self):
-        resp = StatusResponse(
-            total_drawers=42,
-            wings={"w": 42},
-            rooms={"r": 42},
-            castle_path="/tmp",
-            protocol="proto",
-            aaak_dialect="aaak",
-        )
+    def test_status_digest_roundtrip(self):
+        resp = StatusDigest(digest="# SwampCastle — session digest", castle_path="/tmp")
         data = resp.model_dump()
-        restored = StatusResponse(**data)
-        assert restored.total_drawers == 42
+        restored = StatusDigest(**data)
+        assert restored.digest.startswith("# SwampCastle")
 
 
 class TestJsonSchema:

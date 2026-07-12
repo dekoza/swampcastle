@@ -5,22 +5,15 @@ from typing import Optional
 from pydantic import BaseModel
 
 
+class StatusInput(BaseModel):
+    project_dir: Optional[str] = None
+
+
 class StatusDigest(BaseModel):
     """Rendered session digest — the `status` tool's payload (#24)."""
 
     digest: str
     castle_path: str
-    error: Optional[str] = None
-    partial: bool = False
-
-
-class StatusResponse(BaseModel):
-    total_drawers: int
-    wings: dict[str, int]
-    rooms: dict[str, int]
-    castle_path: str
-    protocol: str
-    aaak_dialect: str
     error: Optional[str] = None
     partial: bool = False
 

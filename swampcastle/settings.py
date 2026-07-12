@@ -53,6 +53,11 @@ class CastleSettings(BaseSettings):
     embedder_device: Optional[str] = None
     embedder_options: dict[str, Any] = Field(default_factory=dict)
     embed_batch_size: Optional[int] = Field(default=None, ge=1)
+    staleness_months: int = Field(
+        default=6,
+        ge=1,
+        description="Wings whose newest drawer is older than this get flagged in the status digest.",
+    )
     onnx_intra_op_threads: Optional[int] = Field(default=None, ge=1)
     onnx_inter_op_threads: Optional[int] = Field(default=None, ge=1)
     sync_api_key: Optional[str] = Field(

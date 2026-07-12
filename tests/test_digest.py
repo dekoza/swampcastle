@@ -1,5 +1,7 @@
 """Tests for the session digest — the capped payload `status` returns (#24)."""
 
+from datetime import datetime, timedelta
+
 import pytest
 
 from swampcastle.castle import Castle
@@ -200,3 +202,53 @@ class TestProjectSection:
 
         digest = build_digest(castle, project_dir=str(empty_dir)).digest
         assert "## Project" not in digest
+
+
+def _months_ago(months: int) -> str:
+    return (datetime.now() - timedelta(days=months * 31)).isoformat()
+
+
+class TestStaleness:
+    def test_flags_wings_older_than_threshold(self, castle):
+        _fill(
+            castle,
+            [
+                ("dusty", "r", _months_ago(7), "doc"),
+                ("fresh", "r", _months_ago(1), "doc"),
+                ("undated", "r", None, "doc"),
+            ],
+        )
+
+        digest = build_digest(castle).digest
+
+        assert "## Stale" in digest
+        stale_part = digest.split("## Stale")[1].split("<!--")[0]
+        assert "dusty" in stale_part
+        assert "fresh" not in stale_part
+        # Undated wings can't be called stale
+        assert "undated" not in stale_part
+
+    def test_no_stale_section_when_all_fresh(self, castle):
+        _fill(castle, [("fresh", "r", _months_ago(1), "doc")])
+        assert "## Stale" not in build_digest(castle).digest
+
+    def test_threshold_from_settings(self, tmp_path):
+        settings = CastleSettings(
+            castle_path=tmp_path / "castle", staleness_months=1, _env_file=None
+        )
+        with Castle(settings, InMemoryStorageFactory()) as castle:
+            _fill(castle, [("two_months_old", "r", _months_ago(2), "doc")])
+            digest = build_digest(castle).digest
+        assert "## Stale" in digest
+        assert "two_months_old" in digest.split("## Stale")[1]
+
+    def test_stale_list_capped_at_ten(self, castle):
+        _fill(
+            castle,
+            [(f"stale_{i:02d}", "r", _months_ago(8), "doc") for i in range(12)],
+        )
+
+        stale_part = build_digest(castle).digest.split("## Stale")[1].split("<!--")[0]
+        flagged = [line for line in stale_part.splitlines() if line.startswith("- ")]
+        assert len(flagged) == 10
+        assert "+2 more" in stale_part

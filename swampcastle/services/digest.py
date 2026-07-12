@@ -10,6 +10,7 @@ per-section budgets, with a defensive trim as the final backstop.
 from __future__ import annotations
 
 import re
+from datetime import datetime, timedelta
 from pathlib import Path
 from typing import TYPE_CHECKING
 
@@ -28,6 +29,7 @@ TOP_WINGS = 15
 TOP_ROOMS = 10
 RECENT_DRAWERS = 5
 GIST_CHARS = 80
+TOP_STALE = 10
 
 _SCAN_BATCH = 5000
 
@@ -193,6 +195,27 @@ def _global_section(castle: "Castle") -> str:
     return "\n".join(lines)
 
 
+def _stale_section(castle: "Castle") -> str | None:
+    threshold = datetime.now() - timedelta(days=castle.settings.staleness_months * 30)
+    cutoff = threshold.isoformat()
+
+    activity = castle.catalog.wing_activity()
+    # Undated wings can't be called stale — skip them.
+    stale = sorted(
+        (ts, wing) for wing, ts in activity.items() if ts is not None and ts < cutoff
+    )
+    if not stale:
+        return None
+
+    lines = ["## Stale wings", "", f"No new memories in >{castle.settings.staleness_months} months:"]
+    for ts, wing in stale[:TOP_STALE]:
+        lines.append(f"- {wing} — last {_date(ts)}")
+    overflow = len(stale) - TOP_STALE
+    if overflow > 0:
+        lines.append(f"(+{overflow} more)")
+    return "\n".join(lines)
+
+
 def build_digest(castle: "Castle", project_dir: str | None = None) -> StatusDigest:
     """Render the session digest for this castle."""
     error: str | None = None
@@ -204,6 +227,9 @@ def build_digest(castle: "Castle", project_dir: str | None = None) -> StatusDige
             if project:
                 sections.append(project)
         sections.append(_global_section(castle))
+        stale = _stale_section(castle)
+        if stale:
+            sections.append(stale)
     except Exception as e:
         error = f"Partial digest: {e}"
 

@@ -78,6 +78,48 @@ class TestPreloadWritePath:
 
         assert preload_write_path(castle=BareCastle()) == []
 
+    def test_main_preloads_in_background_thread(self, monkeypatch):
+        """Server startup must kick off the preload without blocking the
+        stdin loop — a slow ONNX load can't delay `initialize`."""
+        import io
+        import threading
+
+        from swampcastle.mcp import server
+
+        preloaded = {}
+        done = threading.Event()
+
+        class DummyCastle:
+            def __init__(self, settings, factory):
+                pass
+
+            def __enter__(self):
+                return self
+
+            def __exit__(self, *exc):
+                return None
+
+        def spy_preload(castle=None, extra_modules=None):
+            preloaded["castle"] = castle
+            preloaded["thread"] = threading.current_thread()
+            done.set()
+            return []
+
+        monkeypatch.setattr(server, "Castle", DummyCastle)
+        monkeypatch.setattr(server, "create_handler", lambda castle: lambda request: None)
+        monkeypatch.setattr(server, "preload_write_path", spy_preload)
+        monkeypatch.setattr(
+            "swampcastle.storage.factory_from_settings", lambda settings: object()
+        )
+        monkeypatch.setattr("sys.stdin", io.StringIO(""))
+
+        server.main()
+
+        assert done.wait(timeout=5), "preload never ran"
+        assert isinstance(preloaded["castle"], DummyCastle)
+        assert preloaded["thread"] is not threading.main_thread()
+        assert preloaded["thread"].daemon
+
     def test_embedder_warm_failure_is_reported_not_raised(self):
         class BrokenEmbedder:
             def embed(self, texts):

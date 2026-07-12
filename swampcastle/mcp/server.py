@@ -206,6 +206,14 @@ def main():
 
     with Castle(settings, factory) as castle:
         handler = create_handler(castle)
+        # Resolve write-path imports off the startup path: a venv-swap
+        # deploy (#29) can't break what's already imported, and a slow
+        # ONNX load must not delay `initialize`.
+        import threading
+
+        threading.Thread(
+            target=preload_write_path, args=(castle,), name="preload", daemon=True
+        ).start()
         for line in sys.stdin:
             line = line.strip()
             if not line:

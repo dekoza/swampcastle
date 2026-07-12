@@ -1,6 +1,5 @@
 """Tests for CatalogService."""
 
-import re
 
 import pytest
 

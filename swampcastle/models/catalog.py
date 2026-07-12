@@ -5,6 +5,15 @@ from typing import Optional
 from pydantic import BaseModel
 
 
+class StatusDigest(BaseModel):
+    """Rendered session digest — the `status` tool's payload (#24)."""
+
+    digest: str
+    castle_path: str
+    error: Optional[str] = None
+    partial: bool = False
+
+
 class StatusResponse(BaseModel):
     total_drawers: int
     wings: dict[str, int]

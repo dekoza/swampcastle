@@ -37,3 +37,24 @@ class TestServerInstructions:
     def test_compact_enough_for_client_context(self):
         """Instructions land in every session's context — keep them lean."""
         assert len(SERVER_INSTRUCTIONS.encode("utf-8")) <= 4096
+
+
+class TestInitializeCarriesInstructions:
+    def test_initialize_result_has_instructions(self, tmp_path):
+        from swampcastle.castle import Castle
+        from swampcastle.mcp.server import create_handler
+        from swampcastle.settings import CastleSettings
+        from swampcastle.storage.memory import InMemoryStorageFactory
+
+        settings = CastleSettings(castle_path=tmp_path / "castle", _env_file=None)
+        with Castle(settings, InMemoryStorageFactory()) as castle:
+            handler = create_handler(castle)
+            resp = handler(
+                {
+                    "jsonrpc": "2.0",
+                    "id": 1,
+                    "method": "initialize",
+                    "params": {"protocolVersion": "2024-11-05"},
+                }
+            )
+        assert resp["result"]["instructions"] == SERVER_INSTRUCTIONS

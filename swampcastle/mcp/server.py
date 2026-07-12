@@ -9,6 +9,7 @@ from pydantic import BaseModel
 
 from swampcastle.castle import Castle
 from swampcastle.errors import CastleError
+from swampcastle.mcp.protocol import SERVER_INSTRUCTIONS
 from swampcastle.mcp.tools import ToolDef, register_tools, resolve_tool_name
 from swampcastle.version import __version__
 
@@ -113,6 +114,7 @@ def create_handler(castle: Castle):
                     "protocolVersion": version,
                     "capabilities": {"tools": {"listChanged": False}},
                     "serverInfo": {"name": "swampcastle", "version": __version__},
+                    "instructions": SERVER_INSTRUCTIONS,
                 },
             )
 

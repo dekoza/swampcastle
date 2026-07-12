@@ -271,8 +271,7 @@ def register_tools(castle: Castle) -> dict[str, ToolDef]:
             description=(
                 "Write a diary entry for an agent — file one at session end "
                 "when the session produced durable learnings. For a "
-                "whole-session save (drawers + diary), prefer checkpoint. "
-                + WRITE_TRIGGERS
+                "whole-session save (drawers + diary), prefer checkpoint. " + WRITE_TRIGGERS
             ),
             input_model=DiaryWriteCommand,
             handler=lambda cmd: castle.vault.diary_write(cmd),
@@ -286,9 +285,7 @@ def register_tools(castle: Castle) -> dict[str, ToolDef]:
         "record_add": ToolDef(
             description="Create a typed canonical record.",
             input_model=RecordAddInput,
-            handler=lambda inp: castle.vault.add_record(
-                RecordEnvelope(**inp.model_dump())
-            ),
+            handler=lambda inp: castle.vault.add_record(RecordEnvelope(**inp.model_dump())),
         ),
         "record_get": ToolDef(
             description="Fetch records by ID or kind filter.",

@@ -193,7 +193,7 @@ When `explain=true`, returned search hits may also include:
 The full protocol text (`SERVER_INSTRUCTIONS` in `swampcastle/mcp/protocol.py`) reaches the model through a delivery ladder:
 
 1. **Primary — MCP `instructions`**: the `initialize` result carries the protocol; clients (Claude Code included) put it in the model's context automatically. Tool descriptions reinforce the ordering ("call status first, before any task work"; read-before-write pointers on the write tools).
-2. **Secondary — the `status` digest**: a 5–10-line protocol gist inside the session digest, plus the staleness/activity data that makes querying worthwhile.
+2. **Secondary — the `status` digest**: a 5–10-line protocol gist inside the session digest, plus the staleness/activity data that makes querying worthwhile. For hooked clients (`swampcastle install-hooks`) the digest arrives automatically at session start — Claude Code via a `SessionStart` hook (`additionalContext`), pi via the extension's `before_agent_start` message (see docs/hooks.md).
 3. **Tertiary — hook-less fallback**: `swampcastle herald` prints the same text for clients with no instructions surface; a one-line CLAUDE.md/AGENTS.md pointer ("call status at session start") is all that should live in static agent config — the protocol itself must not be duplicated there.
 
 The discipline the text encodes:

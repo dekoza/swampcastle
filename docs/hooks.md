@@ -50,8 +50,15 @@ echo '{"session_id":"abc","stop_hook_active":false,"transcript_path":"/tmp/sessi
 
 ### session-start
 
-- initializes state
-- does not block
+- injects the `status` digest into the session as `additionalContext`
+  (Claude Code `SessionStart`, matcher `startup|resume|clear|compact`; the
+  pi extension injects the same text as a persistent message on the first
+  `before_agent_start`)
+- passes the harness `cwd` as the digest's `project_dir` scope
+- serves a per-project cached digest from
+  `~/.swampcastle/hook_state/digest/`; a cache older than 5 minutes is
+  still served, with a detached `hook refresh-digest` rebuild for the next
+  session; a cold cache builds synchronously once (~20s on a large castle)
 
 ## Hook state
 
@@ -104,6 +111,7 @@ The hook parser looks for:
 | `session_id` | unique session identifier |
 | `stop_hook_active` | loop-prevention flag |
 | `transcript_path` | path to the transcript file |
+| `cwd` | working directory; scopes the session-start digest |
 
 ## Debugging
 

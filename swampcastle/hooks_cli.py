@@ -18,6 +18,10 @@ from pathlib import Path
 SAVE_INTERVAL = 15
 STATE_DIR = Path.home() / ".swampcastle" / "hook_state"
 
+# A cached digest younger than this is served without spawning a refresh —
+# concurrent session starts must not pile up 20s rebuild subprocesses.
+DIGEST_REFRESH_SECONDS = 300
+
 STOP_BLOCK_REASON = (
     "AUTO-SAVE checkpoint. Save key topics, decisions, quotes, and code "
     "from this session to your memory system. Organize into appropriate "
@@ -151,6 +155,7 @@ def _parse_harness_input(data: dict, harness: str) -> dict:
         "session_id": _sanitize_session_id(str(data.get("session_id", "unknown"))),
         "stop_hook_active": data.get("stop_hook_active", False),
         "transcript_path": str(data.get("transcript_path", "")),
+        "cwd": str(data.get("cwd", "")),
     }
 
 
@@ -200,18 +205,66 @@ def hook_stop(data: dict, harness: str):
         _output({})
 
 
+def _digest_cache_path(project_dir: str) -> Path:
+    """Per-project digest cache file under the hook state directory."""
+    slug = re.sub(r"[^a-z0-9]+", "_", project_dir.lower()).strip("_") or "global"
+    return STATE_DIR / "digest" / f"{slug}.md"
+
+
+def _build_digest_text(project_dir: str) -> str:
+    """Build the status digest against the castle. Heavy imports stay local —
+    the stop/session-end hook paths must not pay for them."""
+    from swampcastle.castle import Castle
+    from swampcastle.services.digest import build_digest
+    from swampcastle.settings import CastleSettings
+    from swampcastle.storage import factory_from_settings
+
+    settings = CastleSettings()
+    with Castle(settings, factory_from_settings(settings), skip_embedder_check=True) as castle:
+        return build_digest(castle, project_dir or None).digest
+
+
+def refresh_digest_cache(project_dir: str) -> str:
+    """Rebuild the per-project digest cache; returns the digest text."""
+    digest = _build_digest_text(project_dir)
+    cache = _digest_cache_path(project_dir)
+    cache.parent.mkdir(parents=True, exist_ok=True)
+    tmp = cache.with_suffix(".tmp")
+    tmp.write_text(digest, encoding="utf-8")
+    tmp.replace(cache)
+    return digest
+
+
 def hook_session_start(data: dict, harness: str):
-    """Session start hook: initialize session tracking state."""
+    """Session start hook: inject the status digest as session context.
+
+    Serves the per-project cached digest (instant); a cold cache is built
+    synchronously once (~20s against the production castle — within Claude
+    Code's hook budget).
+    """
     parsed = _parse_harness_input(data, harness)
     session_id = parsed["session_id"]
+    project_dir = parsed["cwd"]
 
     _log(f"SESSION START for session {session_id}")
 
-    # Initialize session state directory
     STATE_DIR.mkdir(parents=True, exist_ok=True)
 
-    # Pass through — no blocking on session start
-    _output({})
+    cache = _digest_cache_path(project_dir)
+    if cache.is_file():
+        digest = cache.read_text(encoding="utf-8")
+    else:
+        _log(f"digest cache miss for {cache.name}; building synchronously")
+        digest = refresh_digest_cache(project_dir)
+
+    _output(
+        {
+            "hookSpecificOutput": {
+                "hookEventName": "SessionStart",
+                "additionalContext": digest,
+            }
+        }
+    )
 
 
 def hook_precompact(data: dict, harness: str):

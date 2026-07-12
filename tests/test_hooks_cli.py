@@ -206,13 +206,38 @@ def test_stop_hook_tracks_save_point(tmp_path):
 # --- hook_session_start ---
 
 
-def test_session_start_passes_through(tmp_path):
+def test_session_start_injects_fresh_cached_digest(tmp_path):
+    from swampcastle.hooks_cli import _digest_cache_path
+
+    with patch("swampcastle.hooks_cli.STATE_DIR", tmp_path):
+        cache = _digest_cache_path("/home/user/proj")
+        cache.parent.mkdir(parents=True, exist_ok=True)
+        cache.write_text("## Memory protocol\n\ndigest body")
+
     result = _capture_hook_output(
         hook_session_start,
-        {"session_id": "test"},
+        {"session_id": "test", "cwd": "/home/user/proj"},
         state_dir=tmp_path,
     )
-    assert result == {}
+    assert result["hookSpecificOutput"]["hookEventName"] == "SessionStart"
+    assert result["hookSpecificOutput"]["additionalContext"] == "## Memory protocol\n\ndigest body"
+
+
+def test_session_start_cold_cache_builds_synchronously(tmp_path):
+    from swampcastle.hooks_cli import _digest_cache_path
+
+    with patch(
+        "swampcastle.hooks_cli._build_digest_text", return_value="fresh digest"
+    ) as mock_build:
+        result = _capture_hook_output(
+            hook_session_start,
+            {"session_id": "test", "cwd": "/home/user/proj"},
+            state_dir=tmp_path,
+        )
+    mock_build.assert_called_once_with("/home/user/proj")
+    assert result["hookSpecificOutput"]["additionalContext"] == "fresh digest"
+    with patch("swampcastle.hooks_cli.STATE_DIR", tmp_path):
+        assert _digest_cache_path("/home/user/proj").read_text() == "fresh digest"
 
 
 # --- hook_precompact ---
@@ -493,12 +518,20 @@ def test_precompact_with_mempal_dir_oserror(tmp_path):
 
 def test_run_hook_dispatches_session_start(tmp_path):
     """run_hook reads stdin JSON and dispatches to correct handler."""
-    stdin_data = json.dumps({"session_id": "run-test"})
+    stdin_data = json.dumps({"session_id": "run-test", "cwd": "/proj"})
     with patch("sys.stdin", io.StringIO(stdin_data)):
         with patch("swampcastle.hooks_cli.STATE_DIR", tmp_path):
-            with patch("swampcastle.hooks_cli._output") as mock_output:
-                run_hook("session-start", "claude-code")
-    mock_output.assert_called_once_with({})
+            with patch("swampcastle.hooks_cli._build_digest_text", return_value="digest"):
+                with patch("swampcastle.hooks_cli._output") as mock_output:
+                    run_hook("session-start", "claude-code")
+    mock_output.assert_called_once_with(
+        {
+            "hookSpecificOutput": {
+                "hookEventName": "SessionStart",
+                "additionalContext": "digest",
+            }
+        }
+    )
 
 
 def test_run_hook_crashing_handler_emits_empty_json(tmp_path):
@@ -561,6 +594,8 @@ def test_run_hook_invalid_json(tmp_path):
     """Invalid stdin JSON should not crash — falls back to empty dict."""
     with patch("sys.stdin", io.StringIO("not valid json")):
         with patch("swampcastle.hooks_cli.STATE_DIR", tmp_path):
-            with patch("swampcastle.hooks_cli._output") as mock_output:
-                run_hook("session-start", "claude-code")
-    mock_output.assert_called_once_with({})
+            with patch("swampcastle.hooks_cli._build_digest_text", return_value="digest"):
+                with patch("swampcastle.hooks_cli._output") as mock_output:
+                    run_hook("session-start", "claude-code")
+    mock_output.assert_called_once()
+    assert "hookSpecificOutput" in mock_output.call_args[0][0]

@@ -39,9 +39,7 @@ def test_parse_harness_input_pi():
 
 def _capture(hook_fn, data, harness):
     buf = io.StringIO()
-    with patch(
-        "swampcastle.hooks_cli._output", side_effect=lambda d: buf.write(json.dumps(d))
-    ):
+    with patch("swampcastle.hooks_cli._output", side_effect=lambda d: buf.write(json.dumps(d))):
         hook_fn(data, harness)
     return json.loads(buf.getvalue())
 
@@ -50,9 +48,7 @@ def test_session_end_outputs_empty_and_ingests(tmp_path):
     transcript = tmp_path / "s.jsonl"
     transcript.write_text("{}\n")
     calls = []
-    with patch(
-        "swampcastle.hooks_cli._maybe_auto_ingest", side_effect=lambda p: calls.append(p)
-    ):
+    with patch("swampcastle.hooks_cli._maybe_auto_ingest", side_effect=lambda p: calls.append(p)):
         result = _capture(
             hook_session_end,
             {"session_id": "s1", "transcript_path": str(transcript)},
@@ -66,9 +62,7 @@ def test_session_end_pi_harness(tmp_path):
     transcript = tmp_path / "s.jsonl"
     transcript.write_text("{}\n")
     calls = []
-    with patch(
-        "swampcastle.hooks_cli._maybe_auto_ingest", side_effect=lambda p: calls.append(p)
-    ):
+    with patch("swampcastle.hooks_cli._maybe_auto_ingest", side_effect=lambda p: calls.append(p)):
         result = _capture(
             hook_session_end,
             {"session_id": "s1", "transcript_path": str(transcript)},
@@ -150,9 +144,7 @@ def test_install_claude_hooks_preserves_existing(tmp_path):
             {
                 "model": "opus",
                 "hooks": {
-                    "SessionEnd": [
-                        {"hooks": [{"type": "command", "command": "other-tool run"}]}
-                    ]
+                    "SessionEnd": [{"hooks": [{"type": "command", "command": "other-tool run"}]}]
                 },
             }
         )
@@ -161,11 +153,53 @@ def test_install_claude_hooks_preserves_existing(tmp_path):
     install_claude_hooks(settings_path=settings, wrapper_path=wrapper)
     data = json.loads(settings.read_text())
     assert data["model"] == "opus"
-    commands = [
-        h["command"] for e in data["hooks"]["SessionEnd"] for h in e["hooks"]
-    ]
+    commands = [h["command"] for e in data["hooks"]["SessionEnd"] for h in e["hooks"]]
     assert "other-tool run" in commands
     assert any(str(wrapper) in c for c in commands)
+
+
+def test_install_claude_hooks_session_start_matcher(tmp_path):
+    """SessionStart re-injects the digest on every context reset — startup,
+    resume, clear, and post-compact."""
+    settings = tmp_path / "settings.json"
+    wrapper = tmp_path / "wrapper.sh"
+    install_claude_hooks(settings_path=settings, wrapper_path=wrapper)
+    data = json.loads(settings.read_text())
+    entries = data["hooks"]["SessionStart"]
+    ours = [e for e in entries if any(str(wrapper) in h["command"] for h in e["hooks"])]
+    assert len(ours) == 1
+    assert ours[0]["matcher"] == "startup|resume|clear|compact"
+    assert "--hook session-start" in ours[0]["hooks"][0]["command"]
+
+
+def test_install_claude_hooks_adds_session_start_to_existing_install(tmp_path):
+    """A settings file from a pre-#26 install (SessionEnd/PreCompact already
+    wired) still gains the SessionStart entry."""
+    settings = tmp_path / "settings.json"
+    wrapper = tmp_path / "wrapper.sh"
+    settings.write_text(
+        json.dumps(
+            {
+                "hooks": {
+                    "SessionEnd": [
+                        {
+                            "hooks": [
+                                {
+                                    "type": "command",
+                                    "command": f"{wrapper} --hook session-end --harness claude-code",
+                                }
+                            ]
+                        }
+                    ]
+                }
+            }
+        )
+    )
+    changed = install_claude_hooks(settings_path=settings, wrapper_path=wrapper)
+    assert changed
+    data = json.loads(settings.read_text())
+    assert "SessionStart" in data["hooks"]
+    assert len(data["hooks"]["SessionEnd"]) == 1
 
 
 # --- pi extension ---
@@ -179,3 +213,18 @@ def test_install_pi_extension_writes_ts(tmp_path):
     assert "session_shutdown" in content
     assert str(wrapper) in content
     assert "--harness" in content and "pi" in content
+
+
+def test_install_pi_extension_injects_digest(tmp_path):
+    """pi has no additionalContext analogue — the extension fetches the digest
+    through the same session-start hook and injects it as a persistent message
+    on the first before_agent_start after each session_start."""
+    wrapper = tmp_path / "wrapper.sh"
+    path = install_pi_extension(extensions_dir=tmp_path / "ext", wrapper_path=wrapper)
+    content = path.read_text()
+    assert '"session_start"' in content
+    assert '"before_agent_start"' in content
+    assert "session-start" in content
+    assert "additionalContext" in content
+    # digest fetch starts at session_start; injection must not repeat per turn
+    assert "digestInjected" in content

@@ -1,6 +1,5 @@
 """CLI internal / hidden command handlers: hook, instructions, ni."""
 
-from swampcastle.cli.commands.shared import _settings
 
 
 def cmd_hook(args):

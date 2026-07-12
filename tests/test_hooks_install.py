@@ -228,3 +228,14 @@ def test_install_pi_extension_injects_digest(tmp_path):
     assert "additionalContext" in content
     # digest fetch starts at session_start; injection must not repeat per turn
     assert "digestInjected" in content
+
+
+def test_install_claude_hooks_wires_stop_nudge(tmp_path):
+    """Stop is decision-carrying: it must go through the wrapper's
+    synchronous path, not the detached pass-through."""
+    settings = tmp_path / "settings.json"
+    wrapper = tmp_path / "wrapper.sh"
+    install_claude_hooks(settings_path=settings, wrapper_path=wrapper)
+    data = json.loads(settings.read_text())
+    commands = [h["command"] for e in data["hooks"]["Stop"] for h in e["hooks"]]
+    assert any("--hook stop" in c for c in commands)

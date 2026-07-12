@@ -197,6 +197,8 @@ CLAUDE_HOOK_EVENTS = {
     "PreCompact": {"hook": "precompact", "matcher": None},
     # Digest injection on every context reset, including post-compact.
     "SessionStart": {"hook": "session-start", "matcher": "startup|resume|clear|compact"},
+    # Threshold block-once checkpoint nudge (synchronous wrapper path).
+    "Stop": {"hook": "stop", "matcher": None},
 }
 
 

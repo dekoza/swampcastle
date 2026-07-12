@@ -17,6 +17,7 @@ The hook parser does **not** currently accept `gemini` as a built-in harness nam
 - `session-start`
 - `stop`
 - `precompact`
+- `session-end`
 
 ## Internal CLI bridge
 
@@ -38,9 +39,15 @@ echo '{"session_id":"abc","stop_hook_active":false,"transcript_path":"/tmp/sessi
 ### stop
 
 - counts human messages in the transcript
-- blocks every `SAVE_INTERVAL` messages
+- blocks once every `SAVE_INTERVAL` messages (`stop_hook_active` guards
+  against loops; the save point is tracked per session so the block does
+  not repeat until the next threshold)
 - starts a background conversation ingest for the active `transcript_path` when it exists
-- returns a reason instructing the assistant to save key context
+- returns a reason nudging the assistant to file durable learnings with
+  one `checkpoint` call — conditional: a session with nothing durable is
+  told to say so and continue
+- wired for Claude Code by `swampcastle install-hooks` (synchronous
+  wrapper path)
 
 ### precompact
 

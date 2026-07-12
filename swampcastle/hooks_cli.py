@@ -23,10 +23,12 @@ STATE_DIR = Path.home() / ".swampcastle" / "hook_state"
 DIGEST_REFRESH_SECONDS = 300
 
 STOP_BLOCK_REASON = (
-    "AUTO-SAVE checkpoint. Save key topics, decisions, quotes, and code "
-    "from this session to your memory system. Organize into appropriate "
-    "categories. Use verbatim quotes where possible. Continue conversation "
-    "after saving."
+    "SwampCastle save point. If this session produced durable learnings — "
+    "a user correction, a command or fix that worked, a debugging insight, "
+    "a decision and its rationale, a stated preference — file them now "
+    "with one `checkpoint` call (verbatim items + one diary entry). If "
+    "nothing durable happened, say so and continue. Then continue the "
+    "conversation."
 )
 
 PRECOMPACT_BLOCK_REASON = (

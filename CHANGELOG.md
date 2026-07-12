@@ -7,6 +7,8 @@ This project follows a simple versioned changelog format.
 ## [Unreleased]
 
 ### Added
+- `checkpoint` MCP batch tool: one "file this session" call dedups and files N drawers plus one diary entry, replacing separate `check_duplicate`/`add_drawer`/`diary_write` sequences. Write-trigger taxonomy (corrections, working fixes, insights, decisions, preferences) now rides on all write-tool descriptions and the server instructions.
+- Stop-hook checkpoint nudge: `install-hooks` wires a Claude Code `Stop` hook that blocks once every `SAVE_INTERVAL` exchanges with a conditional nudge to file durable learnings via `checkpoint`.
 - Session-start digest injection: `swampcastle install-hooks` now wires a Claude Code `SessionStart` hook (matcher `startup|resume|clear|compact`) and a pi `before_agent_start` message so every session opens with the `status` digest in context, scoped to the session's working directory. Digests are cached per project under `~/.swampcastle/hook_state/digest/` and refreshed by a detached `hook refresh-digest` subprocess.
 
 ### Changed

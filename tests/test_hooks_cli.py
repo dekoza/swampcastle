@@ -643,3 +643,17 @@ def test_run_hook_invalid_json(tmp_path):
                     run_hook("session-start", "claude-code")
     mock_output.assert_called_once()
     assert "hookSpecificOutput" in mock_output.call_args[0][0]
+
+
+# --- stop nudge phrasing (#27) ---
+
+
+def test_stop_block_reason_instructs_checkpoint():
+    """The nudge is phrased to the checkpoint batch tool (charting decision
+    on the map: threshold block-once, phrased to `checkpoint`)."""
+    assert "`checkpoint`" in STOP_BLOCK_REASON
+    # conditional nudge — a session with nothing durable must not be
+    # forced into a save
+    assert "if" in STOP_BLOCK_REASON.lower()
+    # the enumerated triggers give the model a recognizable save moment
+    assert "correction" in STOP_BLOCK_REASON

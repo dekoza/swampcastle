@@ -11,6 +11,8 @@ This project follows a simple versioned changelog format.
 - Stop-hook checkpoint nudge: `install-hooks` wires a Claude Code `Stop` hook that blocks once every `SAVE_INTERVAL` exchanges with a conditional nudge to file durable learnings via `checkpoint`.
 - Session-start digest injection: `swampcastle install-hooks` now wires a Claude Code `SessionStart` hook (matcher `startup|resume|clear|compact`) and a pi `before_agent_start` message so every session opens with the `status` digest in context, scoped to the session's working directory. Digests are cached per project under `~/.swampcastle/hook_state/digest/` and refreshed by a detached `hook refresh-digest` subprocess.
 
+- Per-session adherence metrics: the MCP server records every session's tool-call activity (client, project, call sequence) to `<castle>/.swampcastle/adherence/sessions/`, server-side with zero client cooperation. `swampcastle adherence` (or `AuditService.adherence_sessions()`) reports derived metrics per session: status/search consulted, read-before-write ordering, checkpoint-at-end, per-tool call counts.
+
 ### Changed
 - MCP discovery now exposes short server tool names such as `status` and `search` instead of redundant `swampcastle_*` names.
 - Legacy `swampcastle_*` MCP tool names remain callable as hidden compatibility aliases for one release and are no longer listed by discovery.

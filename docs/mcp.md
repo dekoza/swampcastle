@@ -53,6 +53,25 @@ At startup the server:
 5. kicks off a background preload of the write path (see "Deploying while servers are live")
 6. serves JSON-RPC over stdin/stdout
 
+## Adherence metrics
+
+Every MCP session is instrumented server-side, with zero client cooperation: `initialize` opens a session record (client name/version from `clientInfo`), every `tools/call` appends to its call sequence, and stdin EOF stamps `ended_at`. The record is atomically rewritten on each call, so a killed server loses nothing but the end stamp. Records live under `<castle>/.swampcastle/adherence/sessions/`, one JSON file per session; `project_dir` is captured from the first `status` call. Recording is fail-open — an unwritable castle degrades to a log warning, never a broken tool call.
+
+Query on demand:
+
+```bash
+swampcastle adherence            # last 10 sessions, human-readable
+swampcastle adherence --limit 50 --json
+```
+
+Derived metrics per session (semantics in `swampcastle/audit/adherence.py`):
+- `status_called` / `search_called` — was memory consulted at all
+- `read_before_write` — did any read-tool call precede the first write (`null` if the session never wrote)
+- `checkpoint_at_end` — was the session's *last* write a session-filing write (`checkpoint`/`diary_write`)
+- per-tool call counts and `last_tool`
+
+The same data is available programmatically via `AuditService.adherence_sessions()`. The nightly adherence report rollup is milestone D's; this surface is for ad-hoc inspection.
+
 ## Deploying while servers are live
 
 The release act is `pipx reinstall swampcastle`, which **deletes and recreates the venv underneath any running MCP server**. On Linux the server keeps working for everything it has already imported (the deleted files stay mapped), but any import that resolves *after* the swap reads the mismatched new tree and throws — historically this broke `add_drawer`/`diary_write` mid-session with opaque `-32603` errors.

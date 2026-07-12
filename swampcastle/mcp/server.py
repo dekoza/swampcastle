@@ -5,7 +5,7 @@ import logging
 import sys
 from typing import Any
 
-from pydantic import BaseModel
+from pydantic import BaseModel, ValidationError
 
 from swampcastle.audit.adherence import AdherenceRecorder
 from swampcastle.castle import Castle
@@ -185,6 +185,23 @@ def _call_tool(req_id, tools: dict[str, ToolDef], name: str, args: dict) -> dict
             },
         )
 
+    except ValidationError as e:
+        # Bad arguments, not a server fault: return readable isError content
+        # so the calling model can fix its arguments and retry (#31).
+        problems = "; ".join(
+            f"{'.'.join(str(loc) for loc in err['loc']) or 'arguments'}: {err['msg']}"
+            for err in e.errors()
+        )
+        error_body = json.dumps(
+            {"error": f"Invalid arguments for {name} — {problems}", "code": "invalid_arguments"}
+        )
+        return _result(
+            req_id,
+            {
+                "content": [{"type": "text", "text": error_body}],
+                "isError": True,
+            },
+        )
     except CastleError as e:
         error_body = json.dumps({"error": str(e), "code": e.code})
         return _result(

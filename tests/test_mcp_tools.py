@@ -329,6 +329,55 @@ class TestJsonRpcHandler:
         resp = handler(req)
         assert "error" in resp
 
+    def test_invalid_arguments_surface_as_readable_is_error(self, handler):
+        # Pydantic validation failures must come back as isError content the
+        # model can act on, not an opaque -32603 Internal error (#31).
+        handler(
+            {
+                "jsonrpc": "2.0",
+                "id": 1,
+                "method": "initialize",
+                "params": {"protocolVersion": "2024-11-05"},
+            }
+        )
+        req = {
+            "jsonrpc": "2.0",
+            "id": 7,
+            "method": "tools/call",
+            "params": {
+                "name": "add_drawer",
+                "arguments": {"wing": "a/b", "room": "r", "content": "x"},
+            },
+        }
+        resp = handler(req)
+        assert "error" not in resp
+        assert resp["result"]["isError"] is True
+        text = resp["result"]["content"][0]["text"]
+        assert "wing" in text
+        assert "path" in text.lower() or "invalid" in text.lower()
+
+    def test_missing_required_argument_surfaces_as_readable_is_error(self, handler):
+        handler(
+            {
+                "jsonrpc": "2.0",
+                "id": 1,
+                "method": "initialize",
+                "params": {"protocolVersion": "2024-11-05"},
+            }
+        )
+        req = {
+            "jsonrpc": "2.0",
+            "id": 8,
+            "method": "tools/call",
+            "params": {"name": "add_drawer", "arguments": {"wing": "w"}},
+        }
+        resp = handler(req)
+        assert "error" not in resp
+        assert resp["result"]["isError"] is True
+        text = resp["result"]["content"][0]["text"]
+        assert "room" in text
+        assert "content" in text
+
     def test_tool_call_get_origin(self, handler, castle):
         origin = SourceOrigin(
             origin_id="origin_test_789",

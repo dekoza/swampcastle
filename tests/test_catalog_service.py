@@ -120,31 +120,6 @@ class TestWingActivity:
         assert activity["personal"] is None
 
 
-class TestCastleProtocolText:
-    """The full protocol text lives on as a constant until it migrates into
-    the MCP server instructions field."""
-
-    def test_protocol_is_compact_and_operational(self, svc):
-        from swampcastle.services.catalog import CASTLE_PROTOCOL as protocol
-        assert "Never state project history, past decisions, people, or prior work" in protocol
-        assert "swampcastle_search" in protocol
-        assert "swampcastle_kg_query" in protocol
-        assert "do not guess." in protocol
-        assert "swampcastle_check_duplicate" in protocol
-        assert "swampcastle_kg_invalidate" in protocol
-        assert "ON WAKE-UP" not in protocol
-        assert "This protocol ensures" not in protocol
-
-    def test_protocol_documents_every_canonical_tool(self, svc):
-        """Every registered MCP tool must appear in the herald protocol."""
-        from swampcastle.mcp.tools import CANONICAL_TOOL_NAMES
-        from swampcastle.services.catalog import CASTLE_PROTOCOL as protocol
-
-        found = set(re.findall(r"swampcastle_(\w+)", protocol))
-        missing = set(CANONICAL_TOOL_NAMES) - found
-        assert not missing, f"Missing from CASTLE_PROTOCOL: {sorted(missing)}"
-
-
 class TestListWings:
     def test_empty(self, svc):
         r = svc.list_wings()

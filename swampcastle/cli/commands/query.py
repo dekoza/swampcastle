@@ -186,9 +186,9 @@ def cmd_seek(args):
 
 def cmd_herald(args):
     """Print the stable SwampCastle protocol for agent wake-up."""
-    from swampcastle.services.catalog import CASTLE_PROTOCOL
+    from swampcastle.mcp.protocol import SERVER_INSTRUCTIONS
 
-    print(CASTLE_PROTOCOL)
+    print(SERVER_INSTRUCTIONS)
 
 
 def cmd_brief(args):

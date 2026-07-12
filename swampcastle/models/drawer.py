@@ -7,7 +7,9 @@ from typing import Literal, Optional
 from pydantic import BaseModel, Field, field_validator
 
 MAX_NAME_LENGTH = 128
-_SAFE_NAME_RE = re.compile(r"^[a-zA-Z0-9][a-zA-Z0-9_ .'\-]{0,126}[a-zA-Z0-9]?$")
+# Leading underscores are legitimate: sweep/ingest slugifies project cwds
+# into wings like _home_minder_projekty_indyq (see #31).
+_SAFE_NAME_RE = re.compile(r"^[a-zA-Z0-9_][a-zA-Z0-9_ .'\-]{0,127}$")
 
 
 def _validate_name(value: str, field_name: str) -> str:

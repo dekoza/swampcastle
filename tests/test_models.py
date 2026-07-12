@@ -57,6 +57,21 @@ class TestAddDrawerCommand:
         b = AddDrawerCommand(wing="w", room="r", content="bbb")
         assert a.drawer_id() != b.drawer_id()
 
+    def test_wing_accepts_leading_underscore_slug(self):
+        # Sweep/ingest slugifies Claude Code transcript dirs
+        # (-home-minder-projekty-indyq) into leading-underscore wings;
+        # writes must accept the wings reads and the digest advertise (#31).
+        cmd = AddDrawerCommand(
+            wing="_home_minder_projekty_indyq", room="planning", content="x"
+        )
+        assert cmd.wing == "_home_minder_projekty_indyq"
+
+    def test_wing_accepts_double_underscore_slug(self):
+        cmd = AddDrawerCommand(
+            wing="__home_minder_projekty_ai_swampcastle__", room="planning", content="x"
+        )
+        assert cmd.wing == "__home_minder_projekty_ai_swampcastle__"
+
     def test_wing_validation_rejects_path_traversal(self):
         with pytest.raises(Exception):
             AddDrawerCommand(wing="../etc", room="r", content="x")

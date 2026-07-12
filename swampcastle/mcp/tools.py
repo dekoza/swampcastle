@@ -13,6 +13,7 @@ from swampcastle.models.audit import (
     OriginLookupQuery,
 )
 from swampcastle.models.catalog import StatusInput
+from swampcastle.models.checkpoint import CheckpointCommand, CheckpointResult
 from swampcastle.models.diary import DiaryWriteCommand
 from swampcastle.models.drawer import (
     AddDrawerCommand,
@@ -59,8 +60,18 @@ class RecordGCCollectInput(BaseModel):
     record_ids: list[str] = Field(min_length=1)
 
 
+# Enumerated write-trigger taxonomy (#9 design anchor): the same list on
+# every write surface, so agents recognize a save moment regardless of
+# which tool description they read.
+WRITE_TRIGGERS = (
+    "Save when the session produced: a user correction; a command or fix "
+    "that worked; a debugging insight; a decision and its rationale; a "
+    "stated preference; a durable fact about a project or person."
+)
+
 CANONICAL_TOOL_NAMES = (
     "status",
+    "checkpoint",
     "list_wings",
     "list_rooms",
     "get_taxonomy",
@@ -172,10 +183,23 @@ def register_tools(castle: Castle) -> dict[str, ToolDef]:
             input_model=DuplicateCheckQuery,
             handler=lambda q: castle.search.check_duplicate(q),
         ),
+        "checkpoint": ToolDef(
+            description=(
+                "File this session in one call: semantic-dedups each item, "
+                "files the non-duplicates as drawers, then writes one diary "
+                "entry. Preferred at session end over separate "
+                "check_duplicate/add_drawer/diary_write calls. "
+                + WRITE_TRIGGERS
+                + " Content is verbatim — exact words, never summarized."
+            ),
+            input_model=CheckpointCommand,
+            handler=lambda cmd: _checkpoint(castle, cmd),
+        ),
         "add_drawer": ToolDef(
             description=(
                 "File verbatim content into a wing/room. Call check_duplicate "
-                "first — near-duplicates pollute search."
+                "first — near-duplicates pollute search. For a whole-session "
+                "save, prefer checkpoint. " + WRITE_TRIGGERS
             ),
             input_model=AddDrawerCommand,
             handler=lambda cmd: castle.vault.add_drawer(cmd),
@@ -246,7 +270,9 @@ def register_tools(castle: Castle) -> dict[str, ToolDef]:
         "diary_write": ToolDef(
             description=(
                 "Write a diary entry for an agent — file one at session end "
-                "when the session produced durable learnings."
+                "when the session produced durable learnings. For a "
+                "whole-session save (drawers + diary), prefer checkpoint. "
+                + WRITE_TRIGGERS
             ),
             input_model=DiaryWriteCommand,
             handler=lambda cmd: castle.vault.diary_write(cmd),
@@ -285,6 +311,52 @@ def register_tools(castle: Castle) -> dict[str, ToolDef]:
             handler=lambda inp: _record_gc_collect(castle, inp),
         ),
     }
+
+
+def _checkpoint(castle: Castle, cmd: CheckpointCommand) -> CheckpointResult:
+    """Batch session save (upstream MemPalace #1851).
+
+    Composes the existing single-item handlers, so dedup/idempotency/WAL
+    behaviour is identical to calling them directly; the batch shape only
+    collapses the MCP round-trips. Item validation happened in
+    CheckpointCommand, so a malformed batch is rejected before anything
+    is filed — no partial writes to lose from the response.
+    """
+    result = CheckpointResult()
+    for item in cmd.items:
+        try:
+            dup = castle.search.check_duplicate(
+                DuplicateCheckQuery(content=item.content, threshold=cmd.dedup_threshold)
+            )
+            if dup.is_duplicate:
+                result.duplicates.append({"room": item.room, "matches": dup.matches})
+                continue
+        except Exception:
+            # A dedup index failure must not drop the memory — verbatim
+            # recall wins; add_drawer's own idempotency blocks exact dupes.
+            pass
+        res = castle.vault.add_drawer(
+            AddDrawerCommand(
+                wing=item.wing,
+                room=item.room,
+                content=item.content,
+                added_by="checkpoint",
+            )
+        )
+        if res.success:
+            result.added.append({"drawer_id": res.drawer_id, "reason": res.reason})
+        else:
+            result.errors.append({"room": item.room, "error": res.reason})
+    if cmd.diary is not None:
+        diary_res = castle.vault.diary_write(
+            DiaryWriteCommand(
+                agent_name=cmd.diary.agent_name,
+                entry=cmd.diary.entry,
+                topic=cmd.diary.topic,
+            )
+        )
+        result.diary = diary_res.model_dump() if hasattr(diary_res, "model_dump") else diary_res
+    return result
 
 
 # ── Typed-record MCP handler helpers ────────────────────────────────────

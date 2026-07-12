@@ -40,19 +40,22 @@ Reading
 
 Writing
 
-Read before you write; persist what future sessions will need.
+Read before you write; persist what future sessions will need. Save when the session produced: a user correction; a command or fix that worked; a debugging insight; a decision and its rationale; a stated preference; a durable fact about a project or person.
 
 | Tool | What to store |
 |---|---|
-| add_drawer | Long-form content: decisions, discussions, specs |
+| checkpoint | End-of-session save in one call: items (drawers) + one diary entry, deduped |
+| add_drawer | Single targeted write of long-form content: a decision, discussion, spec |
 | delete_drawer | Remove a drawer by ID |
 | kg_add | Structured facts (subject → predicate → object) |
 | kg_invalidate | Mark a fact as no longer true |
-| diary_write | Session notes and reflections, at session end |
+| diary_write | A lone session note when there is nothing else to file |
 | record_add | Typed canonical records |
 
+At session end, file the session with one checkpoint call instead of many separate check_duplicate/add_drawer/diary_write calls.
+
 Before writing:
-- Duplicates: call check_duplicate before add_drawer.
+- Duplicates: call check_duplicate before add_drawer (checkpoint dedups internally).
 - Stale facts: call kg_invalidate before adding the replacement via kg_add.
 - Logical deletion: record_tombstone (grace period applies); permanent: record_gc_collect after the grace period.
 

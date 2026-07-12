@@ -30,7 +30,7 @@ def tools(castle):
 
 class TestToolRegistry:
     def test_22_tools_registered(self, tools):
-        assert len(tools) == 27
+        assert len(tools) == 28
 
     def test_all_have_schemas(self, tools):
         for name, tool in tools.items():
@@ -266,7 +266,7 @@ class TestJsonRpcHandler:
         assert "search" in tool_names
         assert "get_origin" in tool_names
         assert "swampcastle_search" not in tool_names
-        assert len(tool_names) == 27
+        assert len(tool_names) == 28
 
     def test_tool_call_uses_canonical_name(self, handler):
         handler(
@@ -359,3 +359,71 @@ class TestJsonRpcHandler:
         content = json.loads(resp["result"]["content"][0]["text"])
         assert content["found"] is True
         assert content["origin"]["origin_id"] == "origin_test_789"
+
+
+class TestCheckpoint:
+    def test_checkpoint_files_items_and_diary(self, tools, castle):
+        from swampcastle.models.checkpoint import CheckpointCommand
+
+        cmd = CheckpointCommand(
+            items=[
+                {"wing": "proj", "room": "decisions", "content": "We chose LanceDB."},
+                {"wing": "proj", "room": "fixes", "content": "pipx reinstall preserves servers."},
+            ],
+            diary={"agent_name": "claude-code", "entry": "Session summary."},
+        )
+        result = tools["checkpoint"].handler(cmd)
+
+        assert len(result.added) == 2
+        assert result.duplicates == []
+        assert result.errors == []
+        assert result.diary is not None
+
+        stored = castle._collection.get(ids=[a["drawer_id"] for a in result.added])
+        assert len(stored["ids"]) == 2
+
+    def test_checkpoint_dedups_items(self, tools):
+        from swampcastle.models.checkpoint import CheckpointCommand
+
+        first = CheckpointCommand(
+            items=[{"wing": "proj", "room": "decisions", "content": "We chose LanceDB."}]
+        )
+        tools["checkpoint"].handler(first)
+
+        again = CheckpointCommand(
+            items=[{"wing": "proj", "room": "decisions", "content": "We chose LanceDB."}]
+        )
+        result = tools["checkpoint"].handler(again)
+        assert result.added == []
+        assert len(result.duplicates) == 1
+        assert result.duplicates[0]["room"] == "decisions"
+
+    def test_checkpoint_requires_items_or_diary(self):
+        from pydantic import ValidationError
+
+        from swampcastle.models.checkpoint import CheckpointCommand
+
+        with pytest.raises(ValidationError):
+            CheckpointCommand(items=[])
+
+        # diary-only sessions are a valid checkpoint
+        CheckpointCommand(items=[], diary={"agent_name": "claude-code", "entry": "note"})
+
+    def test_checkpoint_dedup_failure_still_files(self, tools, castle):
+        """A dedup index failure must not drop the memory — verbatim recall
+        wins; add_drawer's own idempotency blocks exact duplicates."""
+        from unittest.mock import patch
+
+        from swampcastle.models.checkpoint import CheckpointCommand
+
+        cmd = CheckpointCommand(
+            items=[{"wing": "proj", "room": "notes", "content": "Survives dedup outage."}]
+        )
+        with patch.object(castle.search, "check_duplicate", side_effect=RuntimeError("index")):
+            result = tools["checkpoint"].handler(cmd)
+        assert len(result.added) == 1
+
+    def test_checkpoint_registered_with_taxonomy(self, tools):
+        assert "checkpoint" in tools
+        desc = tools["checkpoint"].description
+        assert "Save when" in desc

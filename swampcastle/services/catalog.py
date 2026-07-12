@@ -81,12 +81,13 @@ BATCH_SIZE = 5000
 
 class _CatalogView:
     """Immutable snapshot of catalog metadata from a single collection scan."""
-    __slots__ = ("wings", "rooms", "taxonomy")
+    __slots__ = ("wings", "rooms", "taxonomy", "wing_last")
 
     def __init__(self, metas: list[dict]):
         wings: dict[str, int] = {}
         rooms: dict[str, int] = {}
         taxonomy: dict[str, dict[str, int]] = {}
+        wing_last: dict[str, str | None] = {}
         for m in metas:
             w = m.get("wing", "unknown")
             r = m.get("room", "unknown")
@@ -95,9 +96,18 @@ class _CatalogView:
             if w not in taxonomy:
                 taxonomy[w] = {}
             taxonomy[w][r] = taxonomy[w].get(r, 0) + 1
+            # ISO timestamps compare lexicographically; vault writes
+            # created_at, mining/diary write filed_at
+            ts = m.get("created_at") or m.get("filed_at") or None
+            prev = wing_last.get(w)
+            if ts and (prev is None or ts > prev):
+                wing_last[w] = ts
+            elif w not in wing_last:
+                wing_last[w] = None
         self.wings = wings
         self.rooms = rooms
         self.taxonomy = taxonomy
+        self.wing_last = wing_last
 
 
 class CatalogService:
@@ -173,6 +183,10 @@ class CatalogService:
             return RoomsResponse(wing=wing or "all", rooms=rooms)
         except Exception as e:
             return RoomsResponse(wing=wing or "all", rooms={}, error=str(e))
+
+    def wing_activity(self) -> dict[str, str | None]:
+        """Newest drawer timestamp per wing (ISO string), None when undated."""
+        return dict(self._get_view().wing_last)
 
     def get_taxonomy(self) -> TaxonomyResponse:
         try:

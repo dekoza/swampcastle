@@ -223,6 +223,50 @@ def test_session_start_injects_fresh_cached_digest(tmp_path):
     assert result["hookSpecificOutput"]["additionalContext"] == "## Memory protocol\n\ndigest body"
 
 
+def test_session_start_stale_cache_spawns_detached_refresh(tmp_path):
+    import os
+
+    from swampcastle.hooks_cli import DIGEST_REFRESH_SECONDS, _digest_cache_path
+
+    with patch("swampcastle.hooks_cli.STATE_DIR", tmp_path):
+        cache = _digest_cache_path("/home/user/proj")
+        cache.parent.mkdir(parents=True, exist_ok=True)
+        cache.write_text("stale digest")
+        old = os.path.getmtime(cache) - DIGEST_REFRESH_SECONDS - 1
+        os.utime(cache, (old, old))
+
+    with patch("swampcastle.hooks_cli.subprocess.Popen") as mock_popen:
+        result = _capture_hook_output(
+            hook_session_start,
+            {"session_id": "test", "cwd": "/home/user/proj"},
+            state_dir=tmp_path,
+        )
+    # The stale text is still served — refresh benefits the NEXT session.
+    assert result["hookSpecificOutput"]["additionalContext"] == "stale digest"
+    mock_popen.assert_called_once()
+    argv = mock_popen.call_args[0][0]
+    assert "refresh-digest" in argv
+    assert "/home/user/proj" in argv
+    assert mock_popen.call_args.kwargs.get("start_new_session") is True
+
+
+def test_session_start_fresh_cache_skips_refresh(tmp_path):
+    from swampcastle.hooks_cli import _digest_cache_path
+
+    with patch("swampcastle.hooks_cli.STATE_DIR", tmp_path):
+        cache = _digest_cache_path("/home/user/proj")
+        cache.parent.mkdir(parents=True, exist_ok=True)
+        cache.write_text("fresh digest")
+
+    with patch("swampcastle.hooks_cli.subprocess.Popen") as mock_popen:
+        _capture_hook_output(
+            hook_session_start,
+            {"session_id": "test", "cwd": "/home/user/proj"},
+            state_dir=tmp_path,
+        )
+    mock_popen.assert_not_called()
+
+
 def test_session_start_cold_cache_builds_synchronously(tmp_path):
     from swampcastle.hooks_cli import _digest_cache_path
 

@@ -195,6 +195,8 @@ def main():
         choices=["session-start", "stop", "precompact", "session-end"],
     )
     p_hr.add_argument("--harness", required=True, choices=["claude-code", "codex", "pi"])
+    p_hrd = hook_sub.add_parser("refresh-digest")
+    p_hrd.add_argument("--project-dir", default="")
 
     # install-hooks
     sub.add_parser(

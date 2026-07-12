@@ -224,6 +224,32 @@ def _build_digest_text(project_dir: str) -> str:
         return build_digest(castle, project_dir or None).digest
 
 
+def _spawn_digest_refresh(cache: Path, project_dir: str):
+    """Detach a cache rebuild if the served copy has gone stale — the current
+    session already has its digest; the refresh benefits the next one."""
+    try:
+        import time
+
+        if time.time() - cache.stat().st_mtime < DIGEST_REFRESH_SECONDS:
+            return
+        STATE_DIR.mkdir(parents=True, exist_ok=True)
+        log_path = STATE_DIR / "hook.log"
+        command = [
+            sys.executable,
+            "-m",
+            "swampcastle",
+            "hook",
+            "refresh-digest",
+            "--project-dir",
+            project_dir,
+        ]
+        with open(log_path, "a") as log_f:
+            # start_new_session: same reaping hazard as _maybe_auto_ingest.
+            subprocess.Popen(command, stdout=log_f, stderr=log_f, start_new_session=True)
+    except OSError:
+        pass
+
+
 def refresh_digest_cache(project_dir: str) -> str:
     """Rebuild the per-project digest cache; returns the digest text."""
     digest = _build_digest_text(project_dir)
@@ -253,6 +279,7 @@ def hook_session_start(data: dict, harness: str):
     cache = _digest_cache_path(project_dir)
     if cache.is_file():
         digest = cache.read_text(encoding="utf-8")
+        _spawn_digest_refresh(cache, project_dir)
     else:
         _log(f"digest cache miss for {cache.name}; building synchronously")
         digest = refresh_digest_cache(project_dir)

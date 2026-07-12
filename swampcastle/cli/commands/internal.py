@@ -4,6 +4,12 @@ from swampcastle.cli.commands.shared import _settings
 
 
 def cmd_hook(args):
+    if getattr(args, "hook_action", "run") == "refresh-digest":
+        from swampcastle.hooks_cli import refresh_digest_cache
+
+        refresh_digest_cache(args.project_dir)
+        return
+
     from swampcastle.hooks_cli import run_hook
 
     run_hook(args.hook, args.harness)

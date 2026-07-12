@@ -302,6 +302,25 @@ class TestInternalCommandHandlers:
 
         mock.assert_called_once_with("stop", "claude-code")
 
+    def test_cmd_hook_refresh_digest_rebuilds_cache(self):
+        from swampcastle.cli.commands import cmd_hook
+
+        args = SimpleNamespace(hook_action="refresh-digest", project_dir="/proj")
+        with patch("swampcastle.hooks_cli.refresh_digest_cache") as mock:
+            cmd_hook(args)
+
+        mock.assert_called_once_with("/proj")
+
+    def test_hook_refresh_digest_parses(self, monkeypatch):
+        monkeypatch.setenv("SWAMPCASTLE_INTERNAL", "1")
+        argv = ["swampcastle", "hook", "refresh-digest", "--project-dir", "/proj"]
+        with patch("sys.argv", argv):
+            with patch("swampcastle.cli.commands.cmd_hook") as mock:
+                main()
+        args = mock.call_args[0][0]
+        assert args.hook_action == "refresh-digest"
+        assert args.project_dir == "/proj"
+
     def test_cmd_instructions_calls_run_instructions_with_name(self):
         from swampcastle.cli.commands import cmd_instructions
 

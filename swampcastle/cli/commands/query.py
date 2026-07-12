@@ -83,6 +83,61 @@ def cmd_derived_rebuild(args):
             _print_kv(f"Catalog[{wing}]", count)
 
 
+def cmd_adherence(args):
+    import json
+
+    from swampcastle.audit.adherence import derive_metrics, load_sessions
+
+    settings = _settings(args)
+    records = load_sessions(str(settings.castle_path), limit=getattr(args, "limit", 20))
+    sessions = [{**record, "metrics": derive_metrics(record)} for record in records]
+
+    if getattr(args, "json", False):
+        print(json.dumps(sessions, indent=2))
+        return
+
+    _print_section("Adherence")
+    _print_kv("Castle", settings.castle_path)
+    if not sessions:
+        print("  No adherence sessions recorded yet.")
+        return
+    for session in sessions:
+        metrics = session["metrics"]
+        client = session.get("client_name") or "unknown"
+        if session.get("client_version"):
+            client += f" {session['client_version']}"
+        print()
+        _print_kv("Session", session["session_id"])
+        _print_kv("Client", client)
+        _print_kv("Started", session.get("started_at"))
+        _print_kv("Ended", session.get("ended_at") or "(still open or killed)")
+        if session.get("project_dir"):
+            _print_kv("Project", session["project_dir"])
+        counts = session.get("counts", {})
+        top = ", ".join(f"{tool} x{n}" for tool, n in sorted(counts.items(), key=lambda i: -i[1]))
+        _print_kv("Calls", f"{metrics['total_calls']} ({top})" if top else "0")
+        _print_kv(
+            "Metrics",
+            "  ".join(
+                f"{key}={_fmt_metric(metrics[key])}"
+                for key in (
+                    "status_called",
+                    "search_called",
+                    "read_before_write",
+                    "checkpoint_at_end",
+                )
+            ),
+        )
+        if metrics["last_tool"]:
+            _print_kv("Last tool", metrics["last_tool"])
+
+
+def _fmt_metric(value) -> str:
+    if value is None:
+        return "n/a"
+    return "yes" if value else "NO"
+
+
 def _coerce_search_response(result, query: str):
     from swampcastle.models import SearchHit, SearchResponse
 

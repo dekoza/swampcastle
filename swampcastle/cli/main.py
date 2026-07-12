@@ -162,6 +162,11 @@ def main():
     # herald (wake-up)
     sub.add_parser("herald", aliases=["wake-up"], help="Sound the herald — protocol")
 
+    # adherence
+    p = sub.add_parser("adherence", help="Per-session MCP protocol-adherence metrics")
+    p.add_argument("--limit", type=int, default=10, help="Number of recent sessions to show")
+    p.add_argument("--json", action="store_true", help="Raw JSON output")
+
     # brief (minstrel)
     p = sub.add_parser("brief", aliases=["minstrel"], help="Tell the story of a wing")
     p.add_argument("--wing", required=True)
@@ -393,6 +398,7 @@ def main():
         "status": cmd.cmd_survey,
         "herald": cmd.cmd_herald,
         "wake-up": cmd.cmd_herald,
+        "adherence": cmd.cmd_adherence,
         "brief": cmd.cmd_brief,
         "minstrel": cmd.cmd_brief,
         "cleave": cmd.cmd_cleave,

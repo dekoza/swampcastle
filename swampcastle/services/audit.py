@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
+from swampcastle.audit.adherence import derive_metrics, load_sessions
 from swampcastle.audit.curation import (
     list_wing_notes,
     load_alias_curation,
@@ -88,6 +89,11 @@ class AuditService:
             available_wing_notes=[note.wing for note in notes],
             wing_note=wing_note.model_dump() if wing_note is not None else None,
         )
+
+    def adherence_sessions(self, *, limit: int = 20) -> list[dict]:
+        """Recent MCP session records, each with derived adherence metrics."""
+        sessions = load_sessions(self._castle_path, limit=limit)
+        return [{**record, "metrics": derive_metrics(record)} for record in sessions]
 
     def list_catalog_cards(self, *, wing: str) -> CatalogCardsResponse:
         cards = load_catalog_cards(self._castle_path, wing)

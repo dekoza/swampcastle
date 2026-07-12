@@ -31,6 +31,7 @@ from swampcastle.cli.commands.ops import (
     cmd_raise,
 )
 from swampcastle.cli.commands.query import (
+    cmd_adherence,
     cmd_brief,
     cmd_curation_check,
     cmd_derived_rebuild,
@@ -60,6 +61,7 @@ __all__ = [
     "_print_section",
     "_settings",
     # Query
+    "cmd_adherence",
     "cmd_brief",
     "cmd_curation_check",
     "cmd_derived_rebuild",

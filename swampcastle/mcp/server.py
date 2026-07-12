@@ -7,6 +7,7 @@ from typing import Any
 
 from pydantic import BaseModel
 
+from swampcastle.audit.adherence import AdherenceRecorder
 from swampcastle.castle import Castle
 from swampcastle.errors import CastleError
 from swampcastle.mcp.protocol import SERVER_INSTRUCTIONS
@@ -90,10 +91,17 @@ def _logging_handlers(log_dir=None) -> list:
     return handlers
 
 
-def create_handler(castle: Castle):
-    """Create a JSON-RPC request handler bound to a Castle instance."""
+def create_handler(castle: Castle, recorder: AdherenceRecorder | None = None):
+    """Create a JSON-RPC request handler bound to a Castle instance.
+
+    The adherence recorder rides on the returned handler as `.recorder`
+    (instead of a parameter in main()'s call) so tests that monkeypatch
+    create_handler with a single-argument lambda keep working.
+    """
     tools = register_tools(castle)
     initialized = False
+    if recorder is None:
+        recorder = AdherenceRecorder.for_castle(str(castle.settings.castle_path))
 
     def handle(request: dict) -> dict | None:
         nonlocal initialized
@@ -103,6 +111,7 @@ def create_handler(castle: Castle):
 
         if method == "initialize":
             initialized = True
+            recorder.session_started((params or {}).get("clientInfo"))
             client_version = (params or {}).get("protocolVersion", SUPPORTED_PROTOCOL_VERSIONS[-1])
             if client_version in SUPPORTED_PROTOCOL_VERSIONS:
                 version = client_version
@@ -139,10 +148,12 @@ def create_handler(castle: Castle):
         if method == "tools/call":
             tool_name = resolve_tool_name((params or {}).get("name", ""))
             arguments = (params or {}).get("arguments") or {}
+            recorder.record_call(tool_name, arguments)
             return _call_tool(req_id, tools, tool_name, arguments)
 
         return _error(req_id, -32601, f"Unknown method: {method}")
 
+    handle.recorder = recorder
     return handle
 
 
@@ -228,3 +239,8 @@ def main():
             if response is not None:
                 sys.stdout.write(json.dumps(response) + "\n")
                 sys.stdout.flush()
+        # stdin EOF = client disconnected; stamp the session record.
+        # (getattr: tests monkeypatch create_handler with bare lambdas.)
+        recorder = getattr(handler, "recorder", None)
+        if recorder is not None:
+            recorder.session_ended()

@@ -126,11 +126,72 @@ class TestProjectSection:
 
         digest = build_digest(castle, project_dir=str(project)).digest
         project_part = digest.split("## Project")[1].split("## Castle")[0]
+        rooms_block = project_part.split("Rooms:")[1].split("Recent:")[0]
 
-        assert "room_09" in project_part
-        assert "room_10" not in project_part
-        assert "+3 more" in project_part
-        assert "list_rooms" in project_part
+        assert "room_09" in rooms_block
+        assert "room_10" not in rooms_block
+        assert "+3 more" in rooms_block
+        assert "list_rooms" in rooms_block
+
+    def test_recent_activity_lists_five_newest_drawers_with_gists(self, castle, tmp_path):
+        project = tmp_path / "active"
+        project.mkdir()
+        (project / ".swampcastle.yaml").write_text("wing: active\n")
+
+        rows = [
+            ("active", "roomA", f"2026-07-{day:02d}T09:00:00", f"note from day {day}: " + "x" * 200)
+            for day in range(1, 8)  # 7 drawers, days 1..7
+        ]
+        _fill(castle, rows)
+
+        digest = build_digest(castle, project_dir=str(project)).digest
+        project_part = digest.split("## Project")[1].split("## Castle")[0]
+
+        # 5 newest (days 3..7) present, oldest two absent
+        for day in range(3, 8):
+            assert f"2026-07-{day:02d}" in project_part
+            assert f"note from day {day}" in project_part
+        assert "2026-07-01" not in project_part
+        assert "2026-07-02" not in project_part
+        # Gist is the first line, truncated
+        for line in project_part.splitlines():
+            if "note from day" in line:
+                assert len(line) <= 120  # date + room + 80-char gist
+
+    def test_last_diary_entry_pointer(self, castle, tmp_path):
+        project = tmp_path / "diaryproj"
+        project.mkdir()
+        (project / ".swampcastle.yaml").write_text("wing: diaryproj\n")
+        _fill(castle, [("diaryproj", "planning", "2026-06-01T10:00:00", "doc")])
+
+        castle._collection.upsert(
+            documents=["Session notes: shipped the digest.", "Older entry."],
+            ids=["diary_1", "diary_2"],
+            metadatas=[
+                {
+                    "wing": "wing_claude",
+                    "room": "diary",
+                    "filed_at": "2026-07-10T20:00:00",
+                    "topic": "digest shipped",
+                    "date": "2026-07-10",
+                },
+                {
+                    "wing": "wing_claude",
+                    "room": "diary",
+                    "filed_at": "2026-05-01T20:00:00",
+                    "topic": "old topic",
+                    "date": "2026-05-01",
+                },
+            ],
+        )
+        castle.catalog._invalidate_view()
+
+        digest = build_digest(castle, project_dir=str(project)).digest
+
+        assert "Last diary entry" in digest
+        assert "digest shipped" in digest
+        assert "2026-07-10" in digest
+        assert "old topic" not in digest
 
     def test_no_project_section_without_resolution(self, castle, tmp_path):
         _fill(castle, [("somewing", "r", "2026-05-01T10:00:00", "doc")])

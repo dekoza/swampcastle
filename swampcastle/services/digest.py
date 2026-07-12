@@ -26,6 +26,10 @@ DIGEST_MAX_BYTES = 25 * 1024
 # decision on #24), the final trim in build_digest is only a backstop.
 TOP_WINGS = 15
 TOP_ROOMS = 10
+RECENT_DRAWERS = 5
+GIST_CHARS = 80
+
+_SCAN_BATCH = 5000
 
 # Tool names written client-agnostically: clients prefix them differently
 # (Claude Code: mcp__swampcastle__search), so the digest never hardcodes one.
@@ -79,6 +83,56 @@ def _resolve_project_wings(project_dir: str, all_wings: dict[str, int]) -> list[
     return wings
 
 
+def _scan_meta(collection, where: dict) -> list[tuple[str, dict]]:
+    """Paginated (id, metadata) scan for a where filter."""
+    rows: list[tuple[str, dict]] = []
+    offset = 0
+    while True:
+        batch = collection.get(
+            include=["metadatas"], limit=_SCAN_BATCH, offset=offset, where=where
+        )
+        metas = batch.get("metadatas", [])
+        rows.extend(zip(batch.get("ids", []), metas))
+        if len(metas) < _SCAN_BATCH:
+            break
+        offset += len(metas)
+    return rows
+
+
+def _recent_drawer_lines(castle: "Castle", project_wings: list[str]) -> list[str]:
+    candidates: list[tuple[str, str, str]] = []  # (ts, id, room)
+    for wing in project_wings:
+        for drawer_id, meta in _scan_meta(castle._collection, {"wing": wing}):
+            ts = meta.get("created_at") or meta.get("filed_at")
+            if ts:
+                candidates.append((ts, drawer_id, meta.get("room", "unknown")))
+    top = sorted(candidates, reverse=True)[:RECENT_DRAWERS]
+    if not top:
+        return []
+
+    docs = castle._collection.get(ids=[c[1] for c in top], include=["documents"])
+    doc_by_id = dict(zip(docs.get("ids", []), docs.get("documents", [])))
+
+    lines = ["Recent:"]
+    for ts, drawer_id, room in top:
+        doc = (doc_by_id.get(drawer_id) or "").strip()
+        gist = doc.splitlines()[0][:GIST_CHARS] if doc else ""
+        lines.append(f"- {_date(ts)} · {room} — {gist}")
+    return lines
+
+
+def _diary_tail_line(castle: "Castle") -> str | None:
+    newest_ts, newest_topic = "", ""
+    for _, meta in _scan_meta(castle._collection, {"room": "diary"}):
+        ts = meta.get("filed_at") or meta.get("created_at") or ""
+        if ts > newest_ts:
+            newest_ts = ts
+            newest_topic = meta.get("topic", "")
+    if not newest_ts:
+        return None
+    return f"Last diary entry: {_date(newest_ts)} — {newest_topic} (zoom: diary_read)"
+
+
 def _project_section(castle: "Castle", project_dir: str) -> str | None:
     wings = castle.catalog.list_wings().wings
     project_wings = _resolve_project_wings(project_dir, wings)
@@ -109,6 +163,10 @@ def _project_section(castle: "Castle", project_dir: str) -> str | None:
         overflow = len(ranked) - TOP_ROOMS
         if overflow > 0:
             lines.append(f"(+{overflow} more — use list_rooms)")
+    lines.extend(_recent_drawer_lines(castle, project_wings))
+    diary = _diary_tail_line(castle)
+    if diary:
+        lines.append(diary)
     return "\n".join(lines)
 
 

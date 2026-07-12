@@ -2,6 +2,8 @@
 
 import re
 
+import pytest
+
 from swampcastle.mcp.protocol import SERVER_INSTRUCTIONS
 from swampcastle.mcp.tools import CANONICAL_TOOL_NAMES, LEGACY_TOOL_ALIASES
 
@@ -37,6 +39,27 @@ class TestServerInstructions:
     def test_compact_enough_for_client_context(self):
         """Instructions land in every session's context — keep them lean."""
         assert len(SERVER_INSTRUCTIONS.encode("utf-8")) <= 4096
+
+
+class TestOrderingLanguageInDescriptions:
+    @pytest.fixture
+    def tools(self, tmp_path):
+        from swampcastle.castle import Castle
+        from swampcastle.mcp.tools import register_tools
+        from swampcastle.settings import CastleSettings
+        from swampcastle.storage.memory import InMemoryStorageFactory
+
+        settings = CastleSettings(castle_path=tmp_path / "castle", _env_file=None)
+        with Castle(settings, InMemoryStorageFactory()) as castle:
+            yield register_tools(castle)
+
+    def test_status_says_call_first(self, tools):
+        assert "before any task work" in tools["status"].description
+
+    def test_write_tools_point_at_their_read_step(self, tools):
+        assert "check_duplicate" in tools["add_drawer"].description
+        assert "kg_invalidate" in tools["kg_add"].description
+        assert "end" in tools["diary_write"].description.lower()
 
 
 class TestInitializeCarriesInstructions:

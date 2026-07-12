@@ -115,8 +115,9 @@ def register_tools(castle: Castle) -> dict[str, ToolDef]:
         "status": ToolDef(
             description=(
                 "Session digest: current project's memory (wings, rooms, recent "
-                "activity), castle totals, stale wings, protocol gist. Call at "
-                "session start; pass project_dir to scope it to your working directory."
+                "activity), castle totals, stale wings, protocol gist. Call status "
+                "first, before any task work; pass project_dir to scope it to your "
+                "working directory."
             ),
             input_model=StatusInput,
             handler=lambda params=None: build_digest(
@@ -172,7 +173,10 @@ def register_tools(castle: Castle) -> dict[str, ToolDef]:
             handler=lambda q: castle.search.check_duplicate(q),
         ),
         "add_drawer": ToolDef(
-            description="File verbatim content into a wing/room.",
+            description=(
+                "File verbatim content into a wing/room. Call check_duplicate "
+                "first — near-duplicates pollute search."
+            ),
             input_model=AddDrawerCommand,
             handler=lambda cmd: castle.vault.add_drawer(cmd),
         ),
@@ -191,7 +195,10 @@ def register_tools(castle: Castle) -> dict[str, ToolDef]:
             ),
         ),
         "kg_add": ToolDef(
-            description="Add a fact to the knowledge graph.",
+            description=(
+                "Add a fact to the knowledge graph. If it replaces an existing "
+                "fact, call kg_invalidate on the old one first."
+            ),
             input_model=AddTripleCommand,
             handler=lambda cmd: castle.graph.kg_add(
                 subject=cmd.subject,
@@ -237,7 +244,10 @@ def register_tools(castle: Castle) -> dict[str, ToolDef]:
             handler=lambda: castle.graph.graph_stats(),
         ),
         "diary_write": ToolDef(
-            description="Write a diary entry for an agent.",
+            description=(
+                "Write a diary entry for an agent — file one at session end "
+                "when the session produced durable learnings."
+            ),
             input_model=DiaryWriteCommand,
             handler=lambda cmd: castle.vault.diary_write(cmd),
         ),

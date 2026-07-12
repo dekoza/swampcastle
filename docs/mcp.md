@@ -225,7 +225,7 @@ The discipline the text encodes:
 
 ## Errors
 
-The JSON-RPC boundary catches `CastleError` and returns tool-level error payloads. Unexpected exceptions become generic internal errors.
+The JSON-RPC boundary catches `CastleError` and returns tool-level error payloads. Pydantic argument-validation failures likewise come back as readable `isError` content (`code: invalid_arguments`, listing each offending field), so a calling agent can fix its arguments and retry. Only genuinely unexpected exceptions become generic `-32603` internal errors.
 
 ## When to use the CLI instead
 

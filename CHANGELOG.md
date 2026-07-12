@@ -17,6 +17,10 @@ This project follows a simple versioned changelog format.
 - MCP discovery now exposes short server tool names such as `status` and `search` instead of redundant `swampcastle_*` names.
 - Legacy `swampcastle_*` MCP tool names remain callable as hidden compatibility aliases for one release and are no longer listed by discovery.
 
+### Fixed
+- Write tools (`add_drawer`, `checkpoint`) now accept wings with leading underscores, matching the names sweep/ingest derives from project paths (e.g. `_home_minder_projekty_indyq`) and unblocking the MCP write path for auto-ingested project wings.
+- Invalid tool arguments now return a readable `isError` result naming the offending fields instead of an opaque `-32603 Internal error`, so calling agents can correct their arguments and retry.
+
 ## [4.1.0] - 2026-04-15
 
 Knowledge-graph extraction, embedder hardening, and search / indexing ergonomics release.

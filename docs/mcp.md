@@ -50,7 +50,21 @@ At startup the server:
 2. routes to a storage factory via `factory_from_settings()`
 3. constructs a `Castle`
 4. registers tools from `swampcastle.mcp.tools`
-5. serves JSON-RPC over stdin/stdout
+5. kicks off a background preload of the write path (see "Deploying while servers are live")
+6. serves JSON-RPC over stdin/stdout
+
+## Deploying while servers are live
+
+The release act is `pipx reinstall swampcastle`, which **deletes and recreates the venv underneath any running MCP server**. On Linux the server keeps working for everything it has already imported (the deleted files stay mapped), but any import that resolves *after* the swap reads the mismatched new tree and throws — historically this broke `add_drawer`/`diary_write` mid-session with opaque `-32603` errors.
+
+Hardening: at startup the server eagerly resolves every lazily-imported write-path module (`WRITE_PATH_MODULES` in `swampcastle/mcp/server.py`) and warms the embedder, in a daemon thread so `initialize` is never delayed. A server that finished its preload survives a venv swap for all normal tool traffic. Preload failures are logged to `~/.swampcastle/hook_state/mcp-server.log` and never fatal.
+
+What the preload **cannot** cover:
+- code paths added by the new release (the old server still runs old code — it just won't crash)
+- a deploy landing in the first seconds of a server's life, before the preload finishes
+- subprocess re-invocations (`swampcastle` CLI from hooks) — these always run the new tree and are unaffected by design
+
+**Runbook:** after `pipx reinstall`, running sessions keep working but serve the *old* code. To pick up the new release, reconnect the MCP server (`/mcp` → reconnect in Claude Code) or restart the client session at your convenience — it's no longer urgent, just eventual.
 
 ## Tool catalog
 

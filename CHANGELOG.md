@@ -6,6 +6,9 @@ This project follows a simple versioned changelog format.
 
 ## [Unreleased]
 
+### Added
+- Session-start digest injection: `swampcastle install-hooks` now wires a Claude Code `SessionStart` hook (matcher `startup|resume|clear|compact`) and a pi `before_agent_start` message so every session opens with the `status` digest in context, scoped to the session's working directory. Digests are cached per project under `~/.swampcastle/hook_state/digest/` and refreshed by a detached `hook refresh-digest` subprocess.
+
 ### Changed
 - MCP discovery now exposes short server tool names such as `status` and `search` instead of redundant `swampcastle_*` names.
 - Legacy `swampcastle_*` MCP tool names remain callable as hidden compatibility aliases for one release and are no longer listed by discovery.

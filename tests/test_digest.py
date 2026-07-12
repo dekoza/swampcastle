@@ -80,3 +80,62 @@ class TestGlobalGist:
         digest = build_digest(castle).digest
         assert "only_wing" in digest
         assert "+0 more" not in digest
+
+
+class TestProjectSection:
+    def test_config_wing_merged_with_slug_siblings(self, castle, tmp_path):
+        project = tmp_path / "myproj"
+        project.mkdir()
+        (project / ".swampcastle.yaml").write_text("wing: myproj\n")
+        # Path-slug sibling as transcript mining names it
+        slug_wing = str(project).lower().replace("/", "_").replace("-", "_")
+
+        _fill(
+            castle,
+            [
+                ("myproj", "design", "2026-06-01T10:00:00", "doc"),
+                ("myproj", "design", "2026-06-02T10:00:00", "doc"),
+                ("myproj", "testing", "2026-06-03T10:00:00", "doc"),
+                (slug_wing, "planning", "2026-07-01T10:00:00", "doc"),
+                (slug_wing, "planning", "2026-07-02T10:00:00", "doc"),
+                ("unrelated", "ops", "2026-01-01T10:00:00", "doc"),
+            ],
+        )
+
+        digest = build_digest(castle, project_dir=str(project)).digest
+
+        assert "## Project" in digest
+        project_part = digest.split("## Project")[1].split("## Castle")[0]
+        # Merged view across config wing + slug sibling
+        assert "5 drawers" in project_part
+        assert "myproj" in project_part
+        assert slug_wing in project_part
+        assert "planning" in project_part
+        assert "design" in project_part
+        assert "unrelated" not in project_part
+
+    def test_room_overflow_capped_at_ten(self, castle, tmp_path):
+        project = tmp_path / "roomy"
+        project.mkdir()
+        (project / ".swampcastle.yaml").write_text("wing: roomy\n")
+        rows = []
+        # room_00 gets 13 drawers, room_01 12, ... room_12 1
+        for r in range(13):
+            rows.extend([("roomy", f"room_{r:02d}", "2026-06-01T10:00:00", "doc")] * (13 - r))
+        _fill(castle, rows)
+
+        digest = build_digest(castle, project_dir=str(project)).digest
+        project_part = digest.split("## Project")[1].split("## Castle")[0]
+
+        assert "room_09" in project_part
+        assert "room_10" not in project_part
+        assert "+3 more" in project_part
+        assert "list_rooms" in project_part
+
+    def test_no_project_section_without_resolution(self, castle, tmp_path):
+        _fill(castle, [("somewing", "r", "2026-05-01T10:00:00", "doc")])
+        empty_dir = tmp_path / "nothing_here"
+        empty_dir.mkdir()
+
+        digest = build_digest(castle, project_dir=str(empty_dir)).digest
+        assert "## Project" not in digest
